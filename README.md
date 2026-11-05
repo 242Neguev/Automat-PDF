@@ -72,7 +72,7 @@ Pour essayer l'application sous Windows, suivre la [fiche de test](docs/test-win
 
 ### Option 2 : GitHub Actions (rien à installer)
 
-> ⚠️ **Indisponible pour l'instant** : les compilations par GitHub Actions ne sont pas encore actives sur ce dépôt.
+Gratuit pour ce dépôt public : GitHub compile l'installateur sur l'un de ses ordinateurs Windows.
 
 1. Ouvrir le dépôt sur GitHub, onglet **Actions**, puis **Installateur Windows** et **Run workflow**.
 2. À la fin de l'exécution, télécharger les **artefacts** : l'installateur `.exe` (NSIS) et le `.msi`.
@@ -141,6 +141,8 @@ Les installateurs seront signés gratuitement par [SignPath Foundation](https://
 - Seules les versions compilées automatiquement depuis ce dépôt, par GitHub Actions, seront signées, chacune après une approbation manuelle.
 - **Auteurs et relecteurs** : Eau sèche ([@242Neguev](https://github.com/242Neguev)). Toute contribution proposée par une autre personne (pull request) est relue avant d'être acceptée.
 - **Approbation des signatures** : Eau sèche ([@242Neguev](https://github.com/242Neguev)).
+
+*In English: Windows releases of Automat-PDF will be signed for free by [SignPath.io](https://about.signpath.io), with a certificate issued to [SignPath Foundation](https://signpath.org), once the project is accepted. Only releases built automatically from this repository by GitHub Actions, each one approved manually by the maintainer ([@242Neguev](https://github.com/242Neguev)), will be signed.*
 
 ### Confidentialité (Privacy policy)
 
