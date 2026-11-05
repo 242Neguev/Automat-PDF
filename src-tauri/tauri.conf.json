@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Automat-PDF",
+  "version": "0.1.0",
+  "identifier": "com.eauseche.automatpdf",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1440",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Automat-PDF",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1024,
+        "minHeight": 680,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'",
+      "devCsp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "publisher": "Eau sèche",
+    "copyright": "© 2026 Eau sèche",
+    "shortDescription": "Fusionner, séparer, organiser et diffuser des PDF",
+    "longDescription": "Automat-PDF fusionne, sépare, organise, protège et diffuse les PDF : bulletins de paie séparés et nommés d'après une liste Excel, envoi à chacun, pages réorganisées, compressées ou converties.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "languages": ["French"],
+        "installMode": "currentUser",
+        "installerHooks": "windows/clic-droit.nsh"
+      },
+      "wix": {
+        "language": "fr-FR"
+      }
+    }
+  }
+}

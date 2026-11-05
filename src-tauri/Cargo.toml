@@ -1,0 +1,55 @@
+[package]
+name = "automat-pdf"
+version = "0.1.0"
+description = "Automat-PDF : fusionner, séparer, organiser et diffuser des PDF"
+authors = ["Eau sèche <gneguev@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/242Neguev/Automat-PDF"
+edition = "2024"
+
+[lib]
+# Le suffixe `_lib` évite un conflit de nom avec le binaire sous Windows (rust-lang/cargo#8519).
+name = "automat_pdf_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+# Une seule fenêtre : les fichiers ouverts depuis l'Explorateur (clic droit) vont à la fenêtre déjà ouverte.
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Lecture et écriture des PDF : les pages sont recopiées telles quelles, rien n'est recalculé.
+lopdf = { version = "0.46", default-features = false }
+# Rendu des pages en images (vignettes, aperçus), en Rust, polices standard du PDF incluses.
+hayro = "0.7"
+# Clé de chiffrement des PDF protégés par mot de passe (déjà utilisé par lopdf).
+getrandom = "0.4"
+# Images : photos et scans à mettre en PDF (orientation EXIF comprise), pages exportées en images.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "tiff", "bmp", "gif"] }
+# Compression sans perte des images allégées, plus rapide que celle de lopdf (déjà utilisé par lopdf).
+flate2 = "1"
+# Envoi des e-mails par la messagerie de l'utilisateur (SMTP), sans Outlook ; chiffrement par le
+# système (Schannel sous Windows, Secure Transport sous macOS) : ni OpenSSL, ni certificats à part.
+lettre = "0.11"
+# Mot de passe de la messagerie gardé par le système (Gestionnaire d'identification de Windows,
+# trousseau de macOS), jamais dans un fichier.
+keyring = { version = "3", features = ["windows-native", "apple-native"] }
+# Documents Word (.docx, archives ZIP) écrits sans Word, compressés par flate2 (déjà utilisé).
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+
+# Voir https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+# Les PDF volumineux se traitent lentement en mode debug non optimisé : on optimise les
+# dépendances même en développement.
+[profile.dev.package."*"]
+opt-level = 2

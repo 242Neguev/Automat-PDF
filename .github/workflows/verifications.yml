@@ -1,0 +1,40 @@
+# Vérifie à chaque envoi que l'interface et le cœur compilent et que les tests passent, sous Windows.
+name: Vérifications
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verifications-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Interface (TypeScript + Vite)
+        run: npm run build
+      - name: Interface (tests)
+        run: npm test
+      - name: Cœur (mise en forme)
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - name: Cœur (lints Clippy)
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - name: Cœur (tests Rust)
+        run: cargo test --manifest-path src-tauri/Cargo.toml

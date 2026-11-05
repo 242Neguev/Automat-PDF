@@ -1,0 +1,9 @@
+/* Boutons d'une page : visibles au survol, ou quand la page a le focus du clavier. */
+.carte-page .actions-page {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.carte-page:hover .actions-page,
+.carte-page:focus-within .actions-page {
+  opacity: 1;
+}

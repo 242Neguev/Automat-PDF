@@ -1,0 +1,20 @@
+# Dépendances et fichiers générés de l'application
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.log
+
+# Vrais fichiers de test (confidentiels) : jamais envoyés sur GitHub
+exemples-reels/*
+!exemples-reels/README.md
+
+# Fichiers techniques de Claude Code
+.claude/*.lock
+
+# Éditeurs et système
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

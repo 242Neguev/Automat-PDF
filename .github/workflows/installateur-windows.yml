@@ -1,0 +1,37 @@
+# Construit l'installateur Windows (.exe et .msi).
+# - Lancement manuel (onglet Actions > « Installateur Windows » > Run workflow) : les installateurs
+#   sont téléchargeables dans les artefacts de l'exécution.
+# - Envoi d'un tag vX.Y.Z : une publication GitHub (brouillon) est créée avec les installateurs.
+name: Installateur Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  installateur:
+    name: Installateur Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          uploadWorkflowArtifacts: true
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Automat-PDF {0}', github.ref_name) || '' }}
+          releaseDraft: true
