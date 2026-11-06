@@ -1,4 +1,4 @@
-import { createTheme, type MantineColorsTuple } from "@mantine/core";
+import { createTheme, type CSSVariablesResolver, type MantineColorsTuple } from "@mantine/core";
 
 /** Palette de l'éditeur, Eau sèche : Encre, Eau (couleur d'accent) et Sec. */
 export const COULEURS = {
@@ -28,3 +28,9 @@ export const theme = createTheme({
   black: COULEURS.encre,
   defaultRadius: "md",
 });
+
+/**
+ * Textes secondaires (aides, explications) plus foncés que le gris de Mantine : lisibles par tous,
+ * contraste de 5,8 contre 3,3 sur fond blanc.
+ */
+export const variables: CSSVariablesResolver = () => ({ variables: {}, light: { "--mantine-color-dimmed": "#5f666d" }, dark: {} });

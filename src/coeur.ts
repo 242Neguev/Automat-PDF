@@ -262,6 +262,12 @@ export const installerLibreoffice = () => invoke<void>("installer_libreoffice");
 /** Ouvre la page de téléchargement officielle de LibreOffice dans le navigateur. */
 export const ouvrirPageLibreoffice = () => invoke<void>("ouvrir_page_libreoffice");
 
+/** Ouvre un fichier créé par l'application (PDF, document Word, image) dans l'application habituelle, ou un dossier. */
+export const ouvrirFichier = (chemin: string) => invoke<void>("ouvrir_fichier", { chemin });
+
+/** Affiche un fichier dans son dossier (Explorateur), sélectionné ; un dossier est simplement ouvert. */
+export const montrerDansDossier = (chemin: string) => invoke<void>("montrer_dans_dossier", { chemin });
+
 /** Fichiers confiés par l'Explorateur : l'outil demandé (clic droit) et les fichiers. */
 export interface Recus {
   outil: string | null;

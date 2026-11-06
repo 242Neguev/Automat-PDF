@@ -10,6 +10,9 @@ const EXTENSIONS: Record<SorteFichier, string[]> = {
   liste: ["xlsx", "xlsm", "xls", "ods", "csv", "tsv", "txt"],
 };
 
+/** Toutes les extensions qu'un outil au moins accepte. */
+export const TOUTES_EXTENSIONS = [...new Set(Object.values(EXTENSIONS).flat())];
+
 /** Ce qu'est un fichier, d'après son extension ; un classeur Excel est à la fois document Office et liste. */
 export function sortesDe(chemin: string): SorteFichier[] {
   const extension = chemin.split(".").pop()?.toLowerCase() ?? "";

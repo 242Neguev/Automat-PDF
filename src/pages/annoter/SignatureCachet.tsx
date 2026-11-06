@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { ActionIcon, Box, Button, Group, Loader, Paper, SegmentedControl, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
-import { IconCheck, IconChevronLeft, IconChevronRight, IconFileSearch, IconPhotoSearch, IconSignature } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconPhotoSearch, IconSignature } from "@tabler/icons-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { apposerImage, lireImage, pagesPdf, type Placement } from "../../coeur";
+import { aCote, nomDe } from "../../donnees/chemins";
 import { pagesSelon, type ChoixPages } from "../../donnees/plages";
 import { textes } from "../../textes";
+import Action from "../commun/Action";
 import { dela, useFichiersRecus } from "../commun/reception";
+import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
 import Vignette from "../commun/Vignette";
 import { imagePage } from "../commun/vignettes";
+import { ZoneFichier } from "../commun/ZoneFichier";
 
 const t = textes.signature;
 const LARGEUR = 520;
@@ -154,7 +157,9 @@ export default function SignatureCachet() {
   const [choix, setChoix] = useState<ChoixPages>("cette");
   const [plages, setPlages] = useState("1");
   const [enCours, setEnCours] = useState(false);
+  const [cree, setCree] = useState<Cree | null>(null);
   const selection = pdf ? pagesSelon(choix, plages, pdf.pages, page) : null;
+  const raison = !image ? t.raisons.image : !selection || "erreur" in selection ? t.raisons.pages : null;
 
   async function choisirPdf() {
     const chemin = await open({ multiple: false, directory: false, filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
@@ -164,8 +169,9 @@ export default function SignatureCachet() {
   async function ouvrirPdf(chemin: string) {
     try {
       const pages = (await pagesPdf(chemin)).length;
-      setPdf({ chemin, nom: chemin.split(/[\\/]/).pop() ?? chemin, pages });
+      setPdf({ chemin, nom: nomDe(chemin), pages });
       setPage(pages - 1);
+      setCree(null);
     } catch (e) {
       signalerErreur(e);
     }
@@ -196,7 +202,7 @@ export default function SignatureCachet() {
       });
       setImage((precedente) => {
         if (precedente) URL.revokeObjectURL(precedente.adresse);
-        return { chemin, nom: chemin.split(/[\\/]/).pop() ?? chemin, adresse, proportion };
+        return { chemin, nom: nomDe(chemin), adresse, proportion };
       });
     } catch (e) {
       signalerErreur(e);
@@ -205,12 +211,13 @@ export default function SignatureCachet() {
 
   async function creer() {
     if (!pdf || !image || !selection || "erreur" in selection) return;
-    const sortie = await save({ defaultPath: t.nomFichier(pdf.nom.replace(/\.pdf$/i, "")), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
+    const sortie = await save({ defaultPath: aCote(pdf.chemin, t.nomFichier(pdf.nom.replace(/\.pdf$/i, ""))), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     setEnCours(true);
+    setCree(null);
     try {
       await apposerImage(pdf.chemin, image.chemin, placement, selection.pages, sortie);
-      notifications.show({ color: "teal", icon: <IconCheck size={18} />, title: t.cree, message: sortie });
+      setCree({ titre: t.cree, chemin: sortie });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -220,33 +227,29 @@ export default function SignatureCachet() {
 
   return (
     <Stack gap="md">
-      <Group>
-        <Button variant={pdf ? "light" : "filled"} leftSection={<IconFileSearch size={18} />} onClick={choisirPdf}>
-          {pdf ? t.autrePdf : t.choisirPdf}
-        </Button>
-        {pdf && (
-          <Text size="sm">
-            {pdf.nom} · {textes.pdf.pages(pdf.pages)}
-          </Text>
-        )}
-      </Group>
+      <Box maw={720}>
+        <ZoneFichier
+          fichier={pdf ? { nom: pdf.nom, details: textes.pdf.pages(pdf.pages) } : null}
+          invite={textes.depot.pdf}
+          bouton={t.choisirPdf}
+          changer={t.autrePdf}
+          onChoisir={() => void choisirPdf()}
+        />
+      </Box>
 
       {pdf && (
         <Group align="flex-start" gap="lg" wrap="nowrap">
           <Stack gap="md" maw={420} style={{ flex: 1 }}>
             <Paper withBorder p="md">
               <Stack gap="xs">
-                <Button variant={image ? "light" : "filled"} leftSection={<IconPhotoSearch size={18} />} onClick={choisirImage} w="fit-content">
+                <Title order={5}>{t.image}</Title>
+                <Button variant={image ? "light" : "filled"} leftSection={<IconPhotoSearch size={18} />} onClick={() => void choisirImage()} w="fit-content">
                   {image ? t.autreImage : t.choisirImage}
                 </Button>
-                <Text size="xs" c="dimmed">
+                <Text size="sm" c="dimmed">
                   {image ? image.nom : t.imageAide}
                 </Text>
-                {image && (
-                  <Text size="xs" c="dimmed">
-                    {t.placer}
-                  </Text>
-                )}
+                {image && <Text size="sm">{t.placer}</Text>}
               </Stack>
             </Paper>
             <Paper withBorder p="md">
@@ -258,9 +261,10 @@ export default function SignatureCachet() {
                 )}
               </Stack>
             </Paper>
-            <Button leftSection={<IconSignature size={18} />} loading={enCours} disabled={!image || !selection || "erreur" in selection} onClick={creer} w="fit-content">
+            <Action icone={IconSignature} enCours={enCours} raison={raison} onClick={() => void creer()}>
               {t.creer}
-            </Button>
+            </Action>
+            <Resultat cree={cree} onFermer={() => setCree(null)} />
           </Stack>
 
           <Stack gap="xs" align="center">

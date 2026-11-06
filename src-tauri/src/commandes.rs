@@ -333,6 +333,19 @@ pub async fn ouvrir_page_libreoffice() -> Result<(), Erreur> {
     en_arriere_plan(operations::ouvrir_page_libreoffice).await
 }
 
+/// Ouvre un fichier créé par l'application (PDF, document Word, image) dans l'application
+/// habituelle, ou un dossier.
+#[tauri::command]
+pub async fn ouvrir_fichier(chemin: String) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::ouvrir_fichier(&chemin)).await
+}
+
+/// Affiche un fichier dans son dossier (Explorateur, Finder), sélectionné.
+#[tauri::command]
+pub async fn montrer_dans_dossier(chemin: String) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::montrer_dans_dossier(&chemin)).await
+}
+
 /// Fichier des enchaînements enregistrés, dans le dossier de l'application.
 const ENCHAINEMENTS: &str = "enchainements.json";
 

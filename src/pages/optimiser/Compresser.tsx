@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { Button, Group, Paper, SegmentedControl, Stack, Text, Title } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
-import { IconArrowsMinimize, IconCheck, IconFileSearch } from "@tabler/icons-react";
+import { Paper, SegmentedControl, Stack, Text, Title } from "@mantine/core";
+import { IconArrowsMinimize } from "@tabler/icons-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { compresserPdf, tailleFichier } from "../../coeur";
+import { aCote, nomDe } from "../../donnees/chemins";
 import { formaterTaille } from "../../donnees/tailles";
 import { textes } from "../../textes";
+import Action from "../commun/Action";
 import { useFichiersRecus } from "../commun/reception";
+import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
+import { ZoneFichier } from "../commun/ZoneFichier";
 
 const t = textes.compression;
 type Niveau = "legere" | "moyenne" | "forte";
@@ -17,6 +20,7 @@ export default function Compresser() {
   const [source, setSource] = useState<{ chemin: string; nom: string; taille: number } | null>(null);
   const [niveau, setNiveau] = useState<Niveau>("moyenne");
   const [enCours, setEnCours] = useState(false);
+  const [cree, setCree] = useState<Cree | null>(null);
 
   async function choisir() {
     const chemin = await open({ multiple: false, directory: false, filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
@@ -25,7 +29,8 @@ export default function Compresser() {
 
   async function ouvrir(chemin: string) {
     try {
-      setSource({ chemin, nom: chemin.split(/[\\/]/).pop() ?? chemin, taille: await tailleFichier(chemin) });
+      setSource({ chemin, nom: nomDe(chemin), taille: await tailleFichier(chemin) });
+      setCree(null);
     } catch (e) {
       signalerErreur(e);
     }
@@ -34,18 +39,17 @@ export default function Compresser() {
 
   async function compresser() {
     if (!source) return;
-    const sortie = await save({ defaultPath: t.nomFichier(source.nom.replace(/\.pdf$/i, "")), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
+    const sortie = await save({ defaultPath: aCote(source.chemin, t.nomFichier(source.nom.replace(/\.pdf$/i, ""))), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     setEnCours(true);
+    setCree(null);
     try {
       const bilan = await compresserPdf(source.chemin, niveau, sortie);
       const gain = Math.round((1 - bilan.apres / Math.max(1, bilan.avant)) * 100);
-      notifications.show({
-        color: "teal",
-        icon: <IconCheck size={18} />,
-        title: t.cree,
-        message: bilan.apres < bilan.avant ? t.resultat(formaterTaille(bilan.avant), formaterTaille(bilan.apres), gain, bilan.images) : t.dejaCompact,
-        autoClose: 10000,
+      setCree({
+        titre: t.cree,
+        chemin: sortie,
+        details: [bilan.apres < bilan.avant ? t.resultat(formaterTaille(bilan.avant), formaterTaille(bilan.apres), gain, bilan.images) : t.dejaCompact],
       });
     } catch (e) {
       signalerErreur(e);
@@ -55,17 +59,14 @@ export default function Compresser() {
   }
 
   return (
-    <Stack gap="md" maw={640}>
-      <Group>
-        <Button variant={source ? "light" : "filled"} leftSection={<IconFileSearch size={18} />} onClick={choisir}>
-          {source ? t.autre : t.choisir}
-        </Button>
-        {source && (
-          <Text size="sm">
-            {source.nom} · {formaterTaille(source.taille)}
-          </Text>
-        )}
-      </Group>
+    <Stack gap="md" maw={720}>
+      <ZoneFichier
+        fichier={source ? { nom: source.nom, details: formaterTaille(source.taille) } : null}
+        invite={textes.depot.pdf}
+        bouton={t.choisir}
+        changer={t.autre}
+        onChoisir={() => void choisir()}
+      />
       {source && (
         <Paper withBorder p="md">
           <Stack gap="sm">
@@ -74,12 +75,13 @@ export default function Compresser() {
             <Text size="sm" c="dimmed">
               {t.niveauxAide[niveau]}
             </Text>
-            <Button leftSection={<IconArrowsMinimize size={18} />} loading={enCours} onClick={compresser} w="fit-content">
+            <Action icone={IconArrowsMinimize} enCours={enCours} onClick={() => void compresser()}>
               {t.compresser}
-            </Button>
+            </Action>
           </Stack>
         </Paper>
       )}
+      <Resultat cree={cree} onFermer={() => setCree(null)} />
     </Stack>
   );
 }

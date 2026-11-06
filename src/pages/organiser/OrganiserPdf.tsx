@@ -1,9 +1,7 @@
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Badge, Box, Button, Group, Paper, SegmentedControl, Stack, Text } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import {
   IconArrowBackUp,
-  IconCheck,
   IconClearAll,
   IconDeviceFloppy,
   IconFileExport,
@@ -17,11 +15,14 @@ import { closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, 
 import { rectSortingStrategy, SortableContext, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { enregistrerPages, pagesPdf } from "../../coeur";
+import { aCote, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
 import { useFichiersRecus } from "../commun/reception";
+import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
 import Vignette from "../commun/Vignette";
 import { oublier } from "../commun/vignettes";
+import { ZoneDepot } from "../commun/ZoneFichier";
 import ApercuPage from "./ApercuPage";
 import CartePage from "./CartePage";
 import { deplacer, pivoter, plage, type PageTravail } from "./pages";
@@ -39,8 +40,6 @@ interface Source {
   nom: string;
 }
 
-const nomDe = (chemin: string) => chemin.split(/[\\/]/).pop() ?? chemin;
-
 /** Organiser : les pages d'un ou de plusieurs PDF, à remettre dans l'ordre, pivoter, retirer, extraire. */
 export default function OrganiserPdf() {
   const [sources, setSources] = useState<Source[]>([]);
@@ -52,6 +51,7 @@ export default function OrganiserPdf() {
   const [tirees, setTirees] = useState<{ actif: string; groupe: string[] } | null>(null);
   const [apercu, setApercu] = useState<number | null>(null);
   const [enCours, setEnCours] = useState(false);
+  const [cree, setCree] = useState<Cree | null>(null);
   const compteur = useRef(0);
   const cote = TAILLES[taille];
   const largeur = Math.round(cote * Math.min(2, window.devicePixelRatio || 1));
@@ -137,16 +137,17 @@ export default function OrganiserPdf() {
   }
 
   async function enregistrer(lesquelles: PageTravail[], nom: string) {
-    const sortie = await save({ defaultPath: nom, filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
+    const sortie = await save({ defaultPath: aCote(sources[lesquelles[0]?.source]?.chemin, nom), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     setEnCours(true);
+    setCree(null);
     try {
       await enregistrerPages(
         lesquelles.map((page) => ({ chemin: sources[page.source].chemin, page: page.page, rotation: page.rotation })),
         sortie,
       );
       oublier(sortie);
-      notifications.show({ color: "teal", icon: <IconCheck size={18} />, title: t.enregistre, message: sortie });
+      setCree({ titre: t.enregistre, chemin: sortie, details: [t.pages(lesquelles.length)] });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -170,80 +171,83 @@ export default function OrganiserPdf() {
 
   return (
     <Stack gap="md" onKeyDown={clavier} tabIndex={-1} style={{ outline: "none" }} data-organiser>
-      <Group justify="space-between">
-        <Group gap="xs">
-          <Button leftSection={<IconFilePlus size={18} />} variant={pages.length > 0 ? "light" : "filled"} onClick={ajouter}>
-            {t.ajouter}
-          </Button>
-          <Button variant="default" leftSection={<IconArrowBackUp size={18} />} disabled={retours.length === 0} onClick={annuler}>
-            {t.annuler}
-          </Button>
-          <Button
-            variant="subtle"
-            color="gray"
-            leftSection={<IconClearAll size={18} />}
-            disabled={pages.length === 0}
-            onClick={() => {
-              modifier([]);
-              setSelection(new Set());
-            }}
-          >
-            {t.vider}
-          </Button>
+      {/* Tant qu'il n'y a rien à organiser (ni à rétablir), seule la zone de dépôt s'affiche. */}
+      {(pages.length > 0 || retours.length > 0) && (
+        <Group justify="space-between">
+          <Group gap="xs">
+            <Button leftSection={<IconFilePlus size={18} />} variant="light" onClick={ajouter}>
+              {t.ajouter}
+            </Button>
+            <Button variant="default" leftSection={<IconArrowBackUp size={18} />} disabled={retours.length === 0} onClick={annuler}>
+              {t.annuler}
+            </Button>
+            <Button
+              variant="subtle"
+              color="gray"
+              leftSection={<IconClearAll size={18} />}
+              disabled={pages.length === 0}
+              onClick={() => {
+                modifier([]);
+                setSelection(new Set());
+              }}
+            >
+              {t.vider}
+            </Button>
+          </Group>
+          <Group gap="sm">
+            <SegmentedControl
+              size="xs"
+              aria-label={t.taille}
+              value={taille}
+              onChange={(valeur) => setTaille(valeur as Taille)}
+              data={(Object.keys(TAILLES) as Taille[]).map((value) => ({ value, label: t.tailles[value] }))}
+            />
+            <Button size="md" leftSection={<IconDeviceFloppy size={18} />} disabled={pages.length === 0} loading={enCours} onClick={() => enregistrer(pages, t.nomFichier)}>
+              {t.enregistrer}
+            </Button>
+          </Group>
         </Group>
-        <Group gap="sm">
-          <SegmentedControl
-            size="xs"
-            aria-label={t.taille}
-            value={taille}
-            onChange={(valeur) => setTaille(valeur as Taille)}
-            data={(Object.keys(TAILLES) as Taille[]).map((value) => ({ value, label: t.tailles[value] }))}
-          />
-          <Button leftSection={<IconDeviceFloppy size={18} />} disabled={pages.length === 0} loading={enCours} onClick={() => enregistrer(pages, t.nomFichier)}>
-            {t.enregistrer}
-          </Button>
-        </Group>
-      </Group>
+      )}
+
+      <Resultat cree={cree} onFermer={() => setCree(null)} />
 
       {pages.length === 0 ? (
-        <Paper withBorder p="xl" ta="center">
-          <Text c="dimmed">{t.vide}</Text>
-        </Paper>
+        <ZoneDepot invite={textes.depot.pdfs} detail={t.deposerDetail} bouton={t.ajouter} onChoisir={() => void ajouter()} />
       ) : (
         <>
           <Paper withBorder p="sm" data-barre-organiser>
             <Group gap="xs">
-                <Badge variant="light" size="lg">
-                  {t.pages(pages.length)}
+              <Badge variant="light" size="lg">
+                {t.pages(pages.length)}
+              </Badge>
+              {selection.size > 0 && (
+                <Badge variant="outline" size="lg">
+                  {t.selection(selection.size)}
                 </Badge>
-                {selection.size > 0 && (
-                  <Badge variant="outline" size="lg">
-                    {t.selection(selection.size)}
-                  </Badge>
-                )}
-                <Button size="xs" variant="default" leftSection={<IconRotate size={16} />} disabled={selection.size === 0} onClick={() => modifier(pivoter(pages, selection, -1))}>
-                  {t.pivoterGauche}
-                </Button>
-                <Button size="xs" variant="default" leftSection={<IconRotateClockwise size={16} />} disabled={selection.size === 0} onClick={() => modifier(pivoter(pages, selection, 1))}>
-                  {t.pivoterDroite}
-                </Button>
-                <Button size="xs" variant="default" color="red" leftSection={<IconTrash size={16} />} disabled={selection.size === 0} onClick={() => supprimer(selection)}>
-                  {t.supprimer}
-                </Button>
-                <Button size="xs" variant="default" leftSection={<IconFileExport size={16} />} disabled={selection.size === 0} loading={enCours} onClick={() => enregistrer(choisies, t.nomExtrait)}>
-                  {t.extraire}
-                </Button>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  leftSection={<IconSelectAll size={16} />}
-                  onClick={() => setSelection(selection.size === pages.length ? new Set() : new Set(pages.map((page) => page.id)))}
-                >
-                  {selection.size === pages.length ? t.deselectionner : t.toutSelectionner}
-                </Button>
+              )}
+              <Button size="xs" variant="default" leftSection={<IconRotate size={16} />} disabled={selection.size === 0} onClick={() => modifier(pivoter(pages, selection, -1))}>
+                {t.pivoterGauche}
+              </Button>
+              <Button size="xs" variant="default" leftSection={<IconRotateClockwise size={16} />} disabled={selection.size === 0} onClick={() => modifier(pivoter(pages, selection, 1))}>
+                {t.pivoterDroite}
+              </Button>
+              <Button size="xs" variant="default" color="red" leftSection={<IconTrash size={16} />} disabled={selection.size === 0} onClick={() => supprimer(selection)}>
+                {t.supprimer}
+              </Button>
+              <Button size="xs" variant="default" leftSection={<IconFileExport size={16} />} disabled={selection.size === 0} loading={enCours} onClick={() => enregistrer(choisies, t.nomExtrait)}>
+                {t.extraire}
+              </Button>
+              <Button
+                size="xs"
+                variant="subtle"
+                leftSection={<IconSelectAll size={16} />}
+                onClick={() => setSelection(selection.size === pages.length ? new Set() : new Set(pages.map((page) => page.id)))}
+              >
+                {selection.size === pages.length ? t.deselectionner : t.toutSelectionner}
+              </Button>
             </Group>
           </Paper>
-          <Text size="xs" c="dimmed">
+          <Text size="sm" c="dimmed">
             {t.aide}
           </Text>
 

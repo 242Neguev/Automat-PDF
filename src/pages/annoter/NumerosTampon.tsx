@@ -3,7 +3,6 @@ import {
   ActionIcon,
   Badge,
   Box,
-  Button,
   Group,
   Loader,
   NumberInput,
@@ -20,14 +19,17 @@ import {
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
-import { IconCheck, IconChevronLeft, IconChevronRight, IconFileSearch, IconStack2 } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconStack2 } from "@tabler/icons-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { apercuMarques, marquerPdf, pagesPdf, type OptionsMarques, type OptionsNumeros, type OptionsTampon, type Position } from "../../coeur";
+import { aCote, nomDe } from "../../donnees/chemins";
 import { pagesSelon, type ChoixPages } from "../../donnees/plages";
 import { textes } from "../../textes";
+import Action from "../commun/Action";
 import { useFichiersRecus } from "../commun/reception";
+import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
+import { ZoneFichier } from "../commun/ZoneFichier";
 
 const t = textes.marques;
 const POSITIONS: Position[] = ["haut-gauche", "haut-centre", "haut-droite", "bas-gauche", "bas-centre", "bas-droite"];
@@ -71,6 +73,7 @@ export default function NumerosTampon() {
   const [page, setPage] = useState(0);
   const [apercu, setApercu] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+  const [cree, setCree] = useState<Cree | null>(null);
   const selection = source ? pagesSelon(choix, plages, source.pages, page) : null;
   const options: OptionsMarques | null = useMemo(
     () =>
@@ -108,9 +111,10 @@ export default function NumerosTampon() {
 
   async function ouvrir(chemin: string) {
     try {
-      setSource({ chemin, nom: chemin.split(/[\\/]/).pop() ?? chemin, pages: (await pagesPdf(chemin)).length });
+      setSource({ chemin, nom: nomDe(chemin), pages: (await pagesPdf(chemin)).length });
       setPage(0);
       setApercu(null);
+      setCree(null);
     } catch (e) {
       signalerErreur(e);
     }
@@ -119,12 +123,13 @@ export default function NumerosTampon() {
 
   async function creer() {
     if (!source || !options) return;
-    const sortie = await save({ defaultPath: t.nomFichier(source.nom.replace(/\.pdf$/i, "")), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
+    const sortie = await save({ defaultPath: aCote(source.chemin, t.nomFichier(source.nom.replace(/\.pdf$/i, ""))), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     setEnCours(true);
+    setCree(null);
     try {
       await marquerPdf(source.chemin, options, sortie);
-      notifications.show({ color: "teal", icon: <IconCheck size={18} />, title: t.cree, message: sortie });
+      setCree({ titre: t.cree, chemin: sortie });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -133,19 +138,19 @@ export default function NumerosTampon() {
   }
 
   const changerTampon = (modification: Partial<OptionsTampon>) => setTampon((actuel) => ({ ...actuel, ...modification }));
+  const raison = !source ? t.raisons.pdf : !avecNumeros && !avecTampon ? t.rien : !options ? t.raisons.pages : null;
 
   return (
     <Stack gap="md">
-      <Group>
-        <Button variant={source ? "light" : "filled"} leftSection={<IconFileSearch size={18} />} onClick={choisir}>
-          {source ? t.autre : t.choisir}
-        </Button>
-        {source && (
-          <Text size="sm">
-            {source.nom} · {textes.pdf.pages(source.pages)}
-          </Text>
-        )}
-      </Group>
+      <Box maw={720}>
+        <ZoneFichier
+          fichier={source ? { nom: source.nom, details: textes.pdf.pages(source.pages) } : null}
+          invite={textes.depot.pdf}
+          bouton={t.choisir}
+          changer={t.autre}
+          onChoisir={() => void choisir()}
+        />
+      </Box>
 
       <Group align="flex-start" gap="lg" wrap="nowrap">
         <Stack gap="md" style={{ flex: 1, minWidth: 0 }} maw={620}>
@@ -235,14 +240,10 @@ export default function NumerosTampon() {
             </Stack>
           </Paper>
 
-          {!avecNumeros && !avecTampon && (
-            <Text size="sm" c="dimmed">
-              {t.rien}
-            </Text>
-          )}
-          <Button leftSection={<IconStack2 size={18} />} loading={enCours} disabled={!source || !options} onClick={creer} w="fit-content">
+          <Action icone={IconStack2} enCours={enCours} raison={raison} onClick={() => void creer()}>
             {t.creer}
-          </Button>
+          </Action>
+          <Resultat cree={cree} onFermer={() => setCree(null)} />
         </Stack>
 
         {source && (

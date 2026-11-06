@@ -19,6 +19,7 @@ use crate::memoire;
 use crate::messagerie::{self, Compte};
 use crate::office::{self, Conversions};
 use crate::outlook::{self, ModeEnvoi};
+use crate::ouverture;
 use crate::pdf::{self, PageAssemblee};
 use crate::rendu::{self, FormatImage, FormatPage};
 use crate::securite::{self, OptionsProtection};
@@ -497,6 +498,17 @@ pub fn installer_libreoffice() -> Result<(), Erreur> {
 /// Ouvre la page de téléchargement officielle de LibreOffice.
 pub fn ouvrir_page_libreoffice() -> Result<(), Erreur> {
     libreoffice::ouvrir_page()
+}
+
+/// Ouvre un fichier créé par l'application (PDF, document Word, image) dans l'application
+/// habituelle, ou un dossier.
+pub fn ouvrir_fichier(chemin: &str) -> Result<(), Erreur> {
+    ouverture::ouvrir(chemin)
+}
+
+/// Affiche un fichier dans son dossier, sélectionné ; un dossier est simplement ouvert.
+pub fn montrer_dans_dossier(chemin: &str) -> Result<(), Erreur> {
+    ouverture::montrer(chemin)
 }
 
 /// Documents Word, classeurs Excel et présentations PowerPoint en PDF, dans `dossier`.

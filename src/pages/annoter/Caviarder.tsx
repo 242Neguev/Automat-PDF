@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { ActionIcon, Badge, Box, Button, Group, Loader, Paper, SegmentedControl, Stack, Text, Title, Tooltip } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
-import { IconAlertTriangle, IconCheck, IconChevronLeft, IconChevronRight, IconEraser, IconEyeOff, IconFileSearch, IconX } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconEraser, IconEyeOff, IconX } from "@tabler/icons-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { caviarderPdf, pagesPdf, type Zone } from "../../coeur";
+import { aCote, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
+import Action from "../commun/Action";
 import { useFichiersRecus } from "../commun/reception";
+import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
 import { imagePage } from "../commun/vignettes";
+import { ZoneFichier } from "../commun/ZoneFichier";
 
 const t = textes.caviardage;
 const LARGEUR = 560;
@@ -111,6 +114,7 @@ export default function Caviarder() {
   const [zones, setZones] = useState<Map<number, Zone[]>>(new Map());
   const [mode, setMode] = useState<"texte" | "image">("texte");
   const [enCours, setEnCours] = useState(false);
+  const [cree, setCree] = useState<Cree | null>(null);
   const total = [...zones.values()].reduce((somme, liste) => somme + liste.length, 0);
   const zonesPage = zones.get(page) ?? [];
 
@@ -121,9 +125,10 @@ export default function Caviarder() {
 
   async function ouvrir(chemin: string) {
     try {
-      setSource({ chemin, nom: chemin.split(/[\\/]/).pop() ?? chemin, pages: (await pagesPdf(chemin)).length });
+      setSource({ chemin, nom: nomDe(chemin), pages: (await pagesPdf(chemin)).length });
       setPage(0);
       setZones(new Map());
+      setCree(null);
     } catch (e) {
       signalerErreur(e);
     }
@@ -140,16 +145,15 @@ export default function Caviarder() {
 
   async function creer() {
     if (!source || total === 0) return;
-    const sortie = await save({ defaultPath: t.nomFichier(source.nom.replace(/\.pdf$/i, "")), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
+    const sortie = await save({ defaultPath: aCote(source.chemin, t.nomFichier(source.nom.replace(/\.pdf$/i, ""))), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     setEnCours(true);
+    setCree(null);
     try {
       const pages = [...zones.entries()].map(([numero, liste]) => ({ page: numero, zones: liste }));
       const { pagesEnImage } = await caviarderPdf(source.chemin, pages, mode, sortie);
-      notifications.show({ color: "teal", icon: <IconCheck size={18} />, title: t.cree, message: sortie });
-      if (mode === "texte" && pagesEnImage.length > 0) {
-        notifications.show({ color: "orange", icon: <IconAlertTriangle size={18} />, title: t.cree, message: t.pagesEnImage(pagesEnImage), autoClose: 12000 });
-      }
+      const enImage = mode === "texte" && pagesEnImage.length > 0;
+      setCree({ titre: t.cree, chemin: sortie, details: enImage ? [t.pagesEnImage(pagesEnImage)] : undefined, attention: enImage });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -159,16 +163,15 @@ export default function Caviarder() {
 
   return (
     <Stack gap="md">
-      <Group>
-        <Button variant={source ? "light" : "filled"} leftSection={<IconFileSearch size={18} />} onClick={choisir}>
-          {source ? t.autre : t.choisir}
-        </Button>
-        {source && (
-          <Text size="sm">
-            {source.nom} · {textes.pdf.pages(source.pages)}
-          </Text>
-        )}
-      </Group>
+      <Box maw={720}>
+        <ZoneFichier
+          fichier={source ? { nom: source.nom, details: textes.pdf.pages(source.pages) } : null}
+          invite={textes.depot.pdf}
+          bouton={t.choisir}
+          changer={t.autre}
+          onChoisir={() => void choisir()}
+        />
+      </Box>
 
       {source && (
         <Group align="flex-start" gap="lg" wrap="nowrap">
@@ -194,17 +197,18 @@ export default function Caviarder() {
                   onChange={(v) => setMode(v as typeof mode)}
                   data={(["texte", "image"] as const).map((value) => ({ value, label: t.modes[value] }))}
                 />
-                <Text size="xs" c="dimmed">
+                <Text size="sm" c="dimmed">
                   {t.modesAide[mode]}
                 </Text>
-                <Text size="xs" c="dimmed">
+                <Text size="sm" c="dimmed">
                   {t.garanties}
                 </Text>
               </Stack>
             </Paper>
-            <Button color="dark" leftSection={<IconEyeOff size={18} />} loading={enCours} disabled={total === 0} onClick={creer} w="fit-content">
+            <Action icone={IconEyeOff} couleur="dark" enCours={enCours} raison={total === 0 ? t.raison : null} onClick={() => void creer()}>
               {t.creer}
-            </Button>
+            </Action>
+            <Resultat cree={cree} onFermer={() => setCree(null)} />
           </Stack>
 
           <Stack gap="xs" align="center">

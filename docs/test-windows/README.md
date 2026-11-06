@@ -36,7 +36,7 @@ Tout ce qui ne peut pas être essayé sur Mac : la compilation et l'installateur
    - « Windows a protégé votre ordinateur » : cliquer sur **Informations complémentaires**, puis sur **Exécuter quand même**.
    - L'installation se fait pour l'utilisateur courant, sans droits d'administrateur.
 
-**Attendu** : l'application démarre. Le menu compte 15 outils en 7 groupes, de **Organiser** à **PDF en Word**, et défile si la fenêtre est petite. Le bouton ⓘ, en haut à droite, affiche Eau sèche et ses coordonnées.
+**Attendu** : l'application démarre sur l'**accueil** « Que voulez-vous faire ? » : une recherche, une zone « Glissez vos fichiers ici » et les 15 tâches en grand. Le menu compte **Accueil**, puis les 15 outils en 7 groupes, de **Organiser** à **PDF en Word**, et défile si la fenêtre est petite. Le bouton ⓘ, en haut à droite, affiche Eau sèche et ses coordonnées.
 
 À noter aussi : le temps de compilation, et si l'antivirus a réagi.
 
@@ -61,20 +61,28 @@ Sous Windows 11, le menu du clic droit est abrégé : cliquer d'abord sur **Affi
    **Attendu** : pendant le survol, un cadre en pointillés annonce « Déposez les fichiers : ils iront à « Organiser » » ; au dépôt, les 9 pages apparaissent.
 2. Afficher **Compresser**, puis y faire glisser `Liste des agents.xlsx`.
    **Attendu** : une fenêtre « Que faire de ce fichier ? » propose **Séparer**, **Séparer par personne** et **Office en PDF**.
+3. Afficher l'**Accueil**, puis y faire glisser `Scan courrier.pdf`.
+   **Attendu** : « Que faire de ce fichier ? » propose les 13 outils qui prennent un PDF, chacun avec sa description ; **Compresser** ouvre l'outil avec le fichier.
+4. Afficher l'**Accueil**, puis y faire glisser `Convocation formation.docx`.
+   **Attendu** : un seul outil convient : **Office en PDF** s'ouvre directement, avec le document.
 
 ## 4. Outils PDF, en bref
 
 Ils ont tous été essayés sur Mac ; il s'agit de vérifier qu'ils se comportent de même sous Windows, avec des chemins accentués.
 
 1. **Compresser** `Scan courrier.pdf` en **Forte**.
-   **Attendu** : « 1,8 Mo → 175 Ko » environ (−90 % au moins) ; la page compressée reste lisible.
+   **Attendu** : la fenêtre d'enregistrement s'ouvre **dans le dossier d'essai**, avec le nom « Scan courrier - compressé.pdf ». Une fois enregistré, un encadré vert « PDF compressé enregistré » donne « 1,8 Mo → 175 Ko » environ (−90 % au moins) et le dossier. **Ouvrir** affiche le PDF dans le lecteur habituel (Edge…) : la page compressée reste lisible. **Afficher dans le dossier** ouvre l'Explorateur sur le dossier d'essai, le fichier sélectionné.
 2. **Images en PDF** avec `Photo portrait.jpg` : **Créer le PDF…**.
    **Attendu** : une page en portrait, la photo droite.
 3. **Signature ou cachet** : `Bulletins octobre.pdf`, puis l'image `Cachet.png`, placée sur la dernière page.
    **Attendu** : le cachet rond, sans carré blanc autour.
 4. **Mot de passe** : protéger `Bulletins octobre.pdf`, puis ouvrir le PDF protégé dans Edge.
    **Attendu** : Edge demande le mot de passe et ouvre le fichier avec.
-5. **Organiser** : tourner une page, en déplacer une autre, puis **Enregistrer…**. Ouvrir le résultat.
+5. **Organiser** : tourner une page, en déplacer une autre, puis **Enregistrer le PDF…**. Ouvrir le résultat par le bouton **Ouvrir** de l'encadré.
+6. **Accueil** : taper « alléger » dans la recherche, puis « mot de passe », puis « zorglub ».
+   **Attendu** : seule la tâche **Compresser**, puis seule **Mot de passe** ; enfin « Rien ne correspond à « zorglub »… », avec des exemples de mots.
+7. **Fusionner**, sans aucun fichier.
+   **Attendu** : le bouton **Fusionner…** est grisé, avec « Ajoutez au moins deux PDF. » à côté ; après un seul PDF : « Ajoutez au moins un autre PDF. ».
 
 ## 5. Office en PDF
 
@@ -112,14 +120,14 @@ Ils ont tous été essayés sur Mac ; il s'agit de vérifier qu'ils se comporten
 ## 7. Bulletins de paie : séparer par personne
 
 1. Ouvrir `personnel-essai.csv` avec le Bloc-notes. *Édition > Remplacer* : remplacer `votre.adresse@entreprise.com` par **votre** adresse Outlook, puis **Remplacer tout**. Enregistrer.
-2. **Séparer par personne** : **Choisir le PDF…** `Bulletins octobre.pdf`, puis **Importer un fichier Excel ou CSV…** `personnel-essai.csv`.
-   **Attendu** : la vérification indique « 6 fichiers · 7 pages attribuées » et 2 pages à vérifier : la page 7 (sans identifiant reconnu) et la page 9 (plusieurs personnes possibles : c'est le récapitulatif).
+2. **Séparer par personne** : à l'étape 1, **Choisir le PDF…** `Bulletins octobre.pdf` ; à l'étape 2, **Importer la liste…** `personnel-essai.csv`.
+   **Attendu** : à l'étape 3, sous le nom des fichiers, « Exemple : Bulletin NKOULOU MBARGA Jean-Baptiste.pdf ». La vérification (étape 4) indique « 6 fichiers · 7 pages attribuées » et 2 pages à vérifier : la page 7 (sans identifiant reconnu) et la page 9 (plusieurs personnes possibles : c'est le récapitulatif).
 3. Activer **Une page où personne n'est reconnu suit la précédente**.
    **Attendu** : « 8 pages attribuées » ; seule la page 9 reste à vérifier.
-4. Activer **Protéger chaque fichier par un mot de passe propre à la personne**. Dans le tableau de la liste, ligne **Mot de passe**, choisir la colonne **Date de naissance**.
-   **Attendu** : la colonne « Mot de passe » de la vérification indique « défini » partout.
-5. **Créer les fichiers…** dans le dossier d'essai.
-   **Attendu** : un dossier `Bulletins octobre - par personne` avec 6 PDF et `_Pages à vérifier.pdf`. `Bulletin DIALLO Aïssatou.pdf`, ouvert dans Edge, demande un mot de passe : `03/11/1987` l'ouvre, sur une page. `Bulletin OKEMBA Grâce.pdf` (`08/09/1990`) a deux pages.
+4. Activer **Protéger chaque fichier par un mot de passe propre à la personne**, puis **Colonne du mot de passe** : **Date de naissance**.
+   **Attendu** : la colonne « Mot de passe » de la vérification indique « défini » partout ; dans le tableau de l'étape 2, la ligne **Mot de passe** est reliée à **Date de naissance**.
+5. **Créer les fichiers…** : la fenêtre s'ouvre dans le dossier d'essai ; **Sélectionner un dossier**.
+   **Attendu** : l'encadré « 7 fichiers créés » signale `_Pages à vérifier.pdf` et propose **Ouvrir le dossier**, qui ouvre dans l'Explorateur un dossier `Bulletins octobre - par personne` avec 6 PDF et `_Pages à vérifier.pdf`. `Bulletin DIALLO Aïssatou.pdf`, ouvert dans Edge, demande un mot de passe : `03/11/1987` l'ouvre, sur une page. `Bulletin OKEMBA Grâce.pdf` (`08/09/1990`) a deux pages.
 
 ## 8. Envoi par e-mail
 
@@ -162,13 +170,13 @@ Outlook classique doit être ouvert.
 
 **Nouvel Outlook** (s'il est installé à la place) : noter le message obtenu.
 
-## 9. Enchaînements
+## 9. Réglages enregistrés
 
-1. Toujours dans **Séparer par personne** : **Enregistrer les réglages…**, nom « Bulletins de paie », **Enregistrer**.
-2. Fermer l'application et la rouvrir. **Séparer par personne** → **Enchaînement** : choisir « Bulletins de paie ».
+1. Toujours dans **Séparer par personne** : **Enregistrer ces réglages…**, nom « Bulletins de paie », **Enregistrer**.
+2. Fermer l'application et la rouvrir. **Séparer par personne** → **Réglages enregistrés** : choisir « Bulletins de paie ».
    **Attendu** : les réglages reviennent, et la liste `personnel-essai.csv` est rouverte d'elle-même. Après **Choisir le PDF…** `Bulletins octobre.pdf`, les mots de passe sont « définis » sans rien rechoisir.
 3. **Supprimer**, puis confirmer.
-   **Attendu** : la liste des enchaînements est vide.
+   **Attendu** : la liste des réglages enregistrés est vide (« Aucun réglage enregistré pour l'instant »).
 
 ## 10. Désinstaller
 
@@ -189,7 +197,7 @@ Outlook classique doit être ouvert.
 | 6. PDF en Word | | |
 | 7. Séparer par personne | | |
 | 8. Envoi par e-mail (8a messagerie, 8b Outlook) | | |
-| 9. Enchaînements | | |
+| 9. Réglages enregistrés | | |
 | 10. Désinstallation | | |
 
 Les parties 1, 2, 5, 6 et 8 sont les plus importantes : ce sont celles qui n'ont jamais pu être essayées.
@@ -208,7 +216,7 @@ Sur un PC Windows 11 : 8 Go de mémoire, projet dans OneDrive, Office 2019 dont 
 | 6. PDF en Word | ✅ après correction | Word attendait une réponse au message « Word va maintenant convertir votre PDF… » : évité. DOCX en 15 à 45 s, sans fenêtre. |
 | 7. Séparer par personne | ✅ pour le cœur | L'interface reste à essayer. |
 | 8. Envoi par e-mail | partiel | **8a**, par la messagerie : essayé dans l'application, vers un serveur SMTP d'essai installé sur ce PC. Test de la connexion réussi, puis 5 messages reçus, chacun avec sa pièce jointe, identique octet pour octet au fichier créé, accents intacts ; serveur arrêté : « Impossible de joindre le serveur… », rien n'est parti. **Reste à faire** avec un vrai compte (Gmail, Yahoo, messagerie de l'organisation). **8b**, par Outlook : Outlook fermé, message attendu ; pas de compte Outlook sur ce PC, envoi non essayé. |
-| 9. Enchaînements | à faire | |
+| 9. Réglages enregistrés | à faire | |
 | 10. Désinstallation | ✅ | Programme, raccourci, inscription et les 19 sous-menus retirés. |
 
 **Essai réel avec Office**, sur un PC Windows où Office ou LibreOffice est installé : `cargo test --manifest-path src-tauri/Cargo.toml -- --ignored` convertit les fichiers d'essai (Word et Excel en PDF, PDF en Word) et vérifie les fichiers produits. Il ne couvre pas PowerPoint, faute de présentation parmi les fichiers d'essai : l'essai 5.1, avec une présentation à vous, s'en charge.
@@ -216,3 +224,5 @@ Sur un PC Windows 11 : 8 Go de mémoire, projet dans OneDrive, Office 2019 dont 
 **Installation de LibreOffice depuis l'application** (5 novembre 2026, même PC). LibreOffice 7.6 a été désinstallé, puis **Office en PDF** a affiché « LibreOffice n'est pas installé » avec **Installer LibreOffice**. Après confirmation et l'accord de l'administrateur, LibreOffice 26.8.2 s'est installé en 13 min 30 s, dont environ 5 min de téléchargement. L'avertissement a disparu, et l'essai réel a converti le classeur Excel par LibreOffice 26.8.2. Défaut trouvé et corrigé : lancée sans les droits d'administrateur, l'installation silencieuse échouait sans rien demander (Windows Installer, erreur 1730).
 
 **PDF en Word sans Word** (5 novembre 2026, même PC). Word étant installé ici, l'application s'en sert : le convertisseur d'Automat-PDF a donc été essayé hors de l'application, sur les PDF d'essai et sur ceux qu'Office tire des documents d'essai. Les documents obtenus, rouverts par Word et par LibreOffice, ont été comparés page à page aux PDF : convocation identique, tableau compris ; bulletins de paie très proches, filets et en-têtes compris, chaque ligne du récapitulatif de la page 9 sur une seule ligne ; colonnes de la liste des agents alignées ; page numérisée reprise en image. Reste à faire l'essai 6.3 dans l'application, sur un PC sans Word.
+
+**Prise en main sans formation** (6 novembre 2026, même PC). L'application, lancée en mode développement, a été pilotée par les outils de développement de WebView2 ; les fichiers sont arrivés comme par le clic droit, et les fenêtres d'enregistrement de Windows ont été validées par l'accessibilité. Conformes : l'accueil, la recherche (« je veux réduire la taille » ne donne que **Compresser**), un PDF déposé sur l'accueil (13 outils proposés) ; **Compresser** de bout en bout, la fenêtre d'enregistrement ouverte dans le dossier du PDF, le résultat enregistré à côté de l'original et **Afficher dans le dossier** qui ouvre l'Explorateur sur ce fichier, sélectionné, malgré les espaces et l'accent du nom ; essais 7.2 à 7.5, résultats attendus compris, puis **Ouvrir le dossier**. Défaut trouvé et corrigé pendant l'essai : le retour en haut de page à chaque changement d'outil faisait tomber l'interface sous WebView2, où le défilement renvoie une promesse.

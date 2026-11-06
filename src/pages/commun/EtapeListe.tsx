@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Alert, Badge, Button, Group, Paper, ScrollArea, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { IconFileSpreadsheet, IconListDetails } from "@tabler/icons-react";
 import type { Anomalie } from "../../donnees/controle";
@@ -5,6 +6,7 @@ import type { Correspondances } from "../../donnees/correspondances";
 import type { Liste } from "../../donnees/liste";
 import { textes } from "../../textes";
 import IconeGravite from "./IconeGravite";
+import { ZoneDepot } from "./ZoneFichier";
 
 const t = textes.liste;
 const LIGNES_APERCU = 8;
@@ -75,29 +77,29 @@ interface Props {
   onExemple: () => void;
   onFeuille: (feuille: string) => void;
   onCorrespondance: (balise: string, colonne: string | null) => void;
+  /** Ce qui s'affiche sous la liste importée, avant ses colonnes (le modèle de nom, par exemple). */
+  apresImport?: ReactNode;
 }
 
-export default function EtapeListe({ liste, feuilles, balises, correspondances, exemple, anomalies, onImporter, onExemple, onFeuille, onCorrespondance }: Props) {
+export default function EtapeListe({ liste, feuilles, balises, correspondances, exemple, anomalies, onImporter, onExemple, onFeuille, onCorrespondance, apresImport }: Props) {
   return (
     <Stack gap="lg">
-      <Group>
-        <Button leftSection={<IconFileSpreadsheet size={18} />} onClick={onImporter}>
-          {t.importer}
-        </Button>
-        <Button variant="light" leftSection={<IconListDetails size={18} />} onClick={onExemple}>
-          {t.exemple}
-        </Button>
-      </Group>
-
       {!liste ? (
-        <Text c="dimmed">{t.aucuneListe}</Text>
+        <Stack gap="xs" align="flex-start">
+          <div style={{ alignSelf: "stretch" }}>
+            <ZoneDepot icone={IconFileSpreadsheet} invite={t.deposer} detail={t.deposerDetail} bouton={t.importer} onChoisir={onImporter} />
+          </div>
+          <Button variant="subtle" size="sm" leftSection={<IconListDetails size={18} />} onClick={onExemple}>
+            {t.exemple}
+          </Button>
+        </Stack>
       ) : (
         <>
-          <Paper withBorder p="md">
-            <Group justify="space-between">
+          <Paper withBorder p="sm">
+            <Group justify="space-between" wrap="nowrap">
               <Group gap="sm">
                 <IconFileSpreadsheet size={22} stroke={1.5} />
-                <Text fw={500}>{liste.nomFichier}</Text>
+                <Text fw={600}>{liste.nomFichier}</Text>
                 {feuilles.length > 1 && (
                   <Select
                     size="xs"
@@ -108,12 +110,16 @@ export default function EtapeListe({ liste, feuilles, balises, correspondances, 
                     onChange={(feuille) => feuille && onFeuille(feuille)}
                   />
                 )}
+                <Badge size="lg" variant="light">
+                  {t.nbAgents(liste.lignes.length)}
+                </Badge>
               </Group>
-              <Badge size="lg" variant="light">
-                {t.nbAgents(liste.lignes.length)}
-              </Badge>
+              <Button variant="light" leftSection={<IconFileSpreadsheet size={18} />} onClick={onImporter} style={{ flexShrink: 0 }}>
+                {t.autre}
+              </Button>
             </Group>
           </Paper>
+          {apresImport}
 
           {liste.lignes.length === 0 ? (
             <Alert color="orange">{t.vide}</Alert>

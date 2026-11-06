@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { Alert, Button, Group, Paper, SimpleGrid, Stack, Switch, Text, Title } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
-import { IconCheck, IconFileSearch, IconLayersIntersect } from "@tabler/icons-react";
+import { IconFileSearch, IconLayersIntersect } from "@tabler/icons-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { enregistrerPages, pagesPdf } from "../../coeur";
+import { aCote, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
+import Action from "../commun/Action";
 import { useFichiersRecus } from "../commun/reception";
+import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
 import Vignette from "../commun/Vignette";
 import { oublier } from "../commun/vignettes";
@@ -27,6 +29,7 @@ export default function IntercalerPdf() {
   const [versos, setVersos] = useState<Fichier | null>(null);
   const [inverses, setInverses] = useState(true);
   const [enCours, setEnCours] = useState(false);
+  const [cree, setCree] = useState<Cree | null>(null);
   const ordre = useMemo(() => (rectos && versos ? intercaler(rectos.pages, versos.pages, inverses) : []), [rectos, versos, inverses]);
   const largeur = Math.round(COTE * Math.min(2, window.devicePixelRatio || 1));
 
@@ -46,7 +49,8 @@ export default function IntercalerPdf() {
 
   async function ouvrir(chemin: string, choix: (fichier: Fichier) => void) {
     try {
-      choix({ chemin, nom: chemin.split(/[\\/]/).pop() ?? chemin, pages: (await pagesPdf(chemin)).length });
+      choix({ chemin, nom: nomDe(chemin), pages: (await pagesPdf(chemin)).length });
+      setCree(null);
     } catch (e) {
       signalerErreur(e);
     }
@@ -54,16 +58,17 @@ export default function IntercalerPdf() {
 
   async function enregistrer() {
     if (!rectos || !versos) return;
-    const sortie = await save({ defaultPath: t.nomFichier, filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
+    const sortie = await save({ defaultPath: aCote(rectos.chemin, t.nomFichier), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     setEnCours(true);
+    setCree(null);
     try {
       await enregistrerPages(
         ordre.map(({ cote, page }) => ({ chemin: (cote === "recto" ? rectos : versos).chemin, page, rotation: 0 })),
         sortie,
       );
       oublier(sortie);
-      notifications.show({ color: "teal", icon: <IconCheck size={18} />, title: t.cree, message: sortie });
+      setCree({ titre: t.cree, chemin: sortie, details: [t.total(ordre.length)] });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -113,12 +118,13 @@ export default function IntercalerPdf() {
                 </Stack>
               ))}
             </Group>
-            <Button leftSection={<IconLayersIntersect size={18} />} loading={enCours} onClick={enregistrer} w="fit-content">
+            <Action icone={IconLayersIntersect} enCours={enCours} onClick={() => void enregistrer()}>
               {t.intercaler}
-            </Button>
+            </Action>
           </Stack>
         </Paper>
       )}
+      <Resultat cree={cree} onFermer={() => setCree(null)} />
     </Stack>
   );
 }

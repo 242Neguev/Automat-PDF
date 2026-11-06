@@ -18,7 +18,7 @@ export default function OfficeEnPdf() {
   return (
     <Stack gap="md" maw={720}>
       <LibreOffice convertisseurs={convertisseurs} onVerifier={verifier} />
-      <ConversionFichiers outil="officeEnPdf" filtre={{ nom: t.filtre, extensions: EXTENSIONS }} vide={t.vide} aide={t.aide} convertir={officeEnPdf} />
+      <ConversionFichiers outil="officeEnPdf" filtre={{ nom: t.filtre, extensions: EXTENSIONS }} deposer={t.deposer} deposerDetail={t.deposerDetail} aide={t.aide} convertir={officeEnPdf} />
     </Stack>
   );
 }

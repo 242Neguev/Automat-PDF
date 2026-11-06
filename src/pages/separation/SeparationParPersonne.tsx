@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Group, List, Modal, Paper, Progress, SegmentedControl, Select, Stack, Switch, Table, Text, Textarea, TextInput, Title } from "@mantine/core";
+import { Alert, Badge, Button, Group, List, Modal, Paper, Progress, SegmentedControl, Select, Stack, Switch, Table, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconAlertTriangle, IconCheck, IconDeviceFloppy, IconFileSearch, IconMail, IconSend, IconSettings, IconTrash, IconUsers } from "@tabler/icons-react";
+import { IconAlertTriangle, IconCheck, IconDeviceFloppy, IconMail, IconSend, IconSettings, IconTrash, IconUsers } from "@tabler/icons-react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
@@ -17,16 +17,22 @@ import {
   type FichierPersonne,
   type Message,
 } from "../../coeur";
+import { dossierDe, nomDe } from "../../donnees/chemins";
 import { avecEnchainement, lireEnchainements, reglagesDe, REGLAGES_PAR_DEFAUT, sansEnchainement, type Enchainement, type Reglages, type ReglagesEnvoi } from "../../donnees/enchainements";
 import { lireReglagesMessagerie, manqueAuCompte, REGLAGES_MESSAGERIE_PAR_DEFAUT, type MoyenEnvoi, type ReglagesMessagerie } from "../../donnees/messagerie";
 import { nomsUniques } from "../../donnees/noms";
 import { attribuerParListe, attribuerParRepere, pagesAVerifier, pagesParPersonne, valeurApres, type EtatPage, type PositionValeur } from "../../donnees/reperage";
 import { balisesDe, remplir, remplirTexte, transformationsParDefaut, valeursDeLigne } from "../../donnees/valeurs";
 import { textes } from "../../textes";
+import Action from "../commun/Action";
+import ChampModele from "../commun/ChampModele";
+import Etape from "../commun/Etape";
 import EtapeListe from "../commun/EtapeListe";
 import { dela, useFichiersRecus } from "../commun/reception";
+import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
 import { useListe } from "../commun/useListe";
+import { ZoneFichier } from "../commun/ZoneFichier";
 import FenetreMessagerie from "./ReglagesMessagerie";
 
 const t = textes.parPersonne;
@@ -40,7 +46,7 @@ function numeros(pages: number[]): string {
 
 const quelques = (noms: string[]) => (noms.length > 3 ? `${noms.slice(0, 3).join(", ")}…` : noms.join(", "));
 
-/** Une action à confirmer : supprimer un enchaînement, envoyer des e-mails. */
+/** Une action à confirmer : supprimer des réglages enregistrés, envoyer des e-mails. */
 interface Confirmation {
   titre: string;
   texte: string;
@@ -49,7 +55,10 @@ interface Confirmation {
   action: () => void;
 }
 
-/** Séparer par personne : un PDF par personne, d'après le matricule ou le nom imprimé sur chaque page. */
+/**
+ * Séparer par personne : un PDF par personne, d'après le matricule ou le nom imprimé sur chaque
+ * page, en cinq étapes numérotées (le PDF, les personnes, les fichiers, la vérification, l'envoi).
+ */
 export default function SeparationParPersonne() {
   const [source, setSource] = useState<{ chemin: string; nom: string; textes: string[] } | null>(null);
   const [lecture, setLecture] = useState(false);
@@ -58,6 +67,7 @@ export default function SeparationParPersonne() {
   const reglerEnvoi = (partiel: Partial<ReglagesEnvoi>) => setReglages((actuels) => ({ ...actuels, envoi: { ...actuels.envoi, ...partiel } }));
   const { mode, envoi } = reglages;
   const [enCours, setEnCours] = useState(false);
+  const [cree, setCree] = useState<Cree | null>(null);
   const [enchainements, setEnchainements] = useState<Enchainement[]>([]);
   const [choisi, setChoisi] = useState<string | null>(null);
   const [nomEnregistrement, setNomEnregistrement] = useState<string | null>(null);
@@ -68,7 +78,7 @@ export default function SeparationParPersonne() {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [progression, setProgression] = useState<[number, number] | null>(null);
   const [echecs, setEchecs] = useState<string[]>([]);
-  /** Moyen d'envoi et compte de la messagerie, propres à ce PC (hors enchaînements). */
+  /** Moyen d'envoi et compte de la messagerie, propres à ce PC (hors réglages enregistrés). */
   const [messagerie, setMessagerie] = useState<ReglagesMessagerie>(REGLAGES_MESSAGERIE_PAR_DEFAUT);
   const [motDePasseGarde, setMotDePasseGarde] = useState(false);
   const [reglageMessagerie, setReglageMessagerie] = useState(false);
@@ -105,6 +115,8 @@ export default function SeparationParPersonne() {
   );
   const donnees = useListe(balises);
   const { liste, correspondances } = donnees;
+  const colonnes = liste?.colonnes ?? [];
+  const balisesMotDePasse = balisesDe(reglages.modeleMotDePasse);
   // Mises en forme courantes pour les noms et les adresses ; le mot de passe, lui, est pris tel quel.
   const miseEnForme = useMemo(() => ({ transformations: transformationsParDefaut(balises) }), [balises]);
 
@@ -155,7 +167,10 @@ export default function SeparationParPersonne() {
   }, [reperage, base, protection]);
   // Les fichiers créés ne valent que pour la séparation qui les a produits.
   const signature = JSON.stringify([source?.chemin, fichiers.map(({ personne, nom, pages, motDePasse }) => [personne, nom, pages, motDePasse])]);
-  useEffect(() => setCreation(null), [signature]);
+  useEffect(() => {
+    setCreation(null);
+    setCree(null);
+  }, [signature]);
 
   const aVerifier = useMemo(() => (reperage ? pagesAVerifier(reperage.etats) : []), [reperage]);
   const problemes = useMemo(() => {
@@ -179,6 +194,7 @@ export default function SeparationParPersonne() {
   }, [reperage, fichiers, mode]);
   const sansMotDePasse = protection ? fichiers.filter((fichier) => !fichier.motDePasse) : [];
   const pagesAttribuees = fichiers.reduce((total, fichier) => total + fichier.pages.length, 0);
+  const raisonCreer = fichiers.length === 0 ? t.raisons.aucune : sansMotDePasse.length > 0 ? t.raisons.motDePasse : null;
 
   /** Message de chaque fichier créé ; les fichiers sans adresse sont mis à part. */
   const envois = useMemo(() => {
@@ -193,6 +209,8 @@ export default function SeparationParPersonne() {
     }
     return { messages, sansAdresse };
   }, [creation, liste, avecEnvoi, miseEnForme, correspondances, envoi.destinataire, envoi.objet, envoi.message]);
+  const raisonEnvoi = !pretAEnvoyer ? t.envoi.raisons.regler : envois.messages.length === 0 ? t.envoi.raisons.aucun : null;
+  const raisonEssai = raisonEnvoi ?? (adresseEssaiEffective.includes("@") ? null : t.envoi.raisons.essai);
 
   async function choisir() {
     const chemin = await open({ multiple: false, directory: false, filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
@@ -213,7 +231,7 @@ export default function SeparationParPersonne() {
   async function ouvrir(chemin: string) {
     setLecture(true);
     try {
-      setSource({ chemin, nom: chemin.split(/[\\/]/).pop() ?? chemin, textes: await textesPdf(chemin) });
+      setSource({ chemin, nom: nomDe(chemin), textes: await textesPdf(chemin) });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -223,16 +241,23 @@ export default function SeparationParPersonne() {
 
   async function creer() {
     if (!source || fichiers.length === 0) return;
-    const dossier = await open({ directory: true, multiple: false, title: t.choisirDossier });
+    const dossier = await open({ directory: true, multiple: false, title: t.choisirDossier, defaultPath: dossierDe(source.chemin) || undefined });
     if (typeof dossier !== "string") return;
     setEnCours(true);
+    setCree(null);
     try {
       const personnes: FichierPersonne[] = fichiers.map(({ nom, pages, motDePasse }) => ({ nom, pages, motDePasse }));
       if (aVerifier.length > 0) personnes.push({ nom: t.nomAVerifier, pages: aVerifier });
       const separation = await separerParPersonne(source.chemin, personnes, dossier, t.nomDossier(base));
       setCreation(fichiers.map(({ personne, nom }, i) => ({ personne, nom, chemin: separation.fichiers[i] })));
       setEchecs([]);
-      notifications.show({ color: "teal", icon: <IconCheck size={18} />, title: t.cree, message: t.creeMessage(personnes.length, separation.dossier), autoClose: 10000 });
+      setCree({
+        titre: t.cree(personnes.length),
+        chemin: separation.dossier,
+        dossier: true,
+        details: aVerifier.length > 0 ? [t.aVerifierCree(aVerifier.length)] : undefined,
+        attention: aVerifier.length > 0,
+      });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -260,7 +285,7 @@ export default function SeparationParPersonne() {
         icon: <IconCheck size={18} />,
         title: t.envoi.resultat[modeEnvoi](bilan.reussis),
         message: bilan.echecs.length > 0 ? t.envoi.echecs(bilan.echecs.length) : "",
-        autoClose: 10000,
+        autoClose: 15000,
       });
     } catch (e) {
       signalerErreur(e);
@@ -337,8 +362,8 @@ export default function SeparationParPersonne() {
   const nomExistant = nomEnregistrement !== null && enchainements.some((existant) => existant.nom.trim().toLocaleLowerCase("fr") === nomEnregistrement.trim().toLocaleLowerCase("fr"));
 
   return (
-    <Stack gap="md">
-      <Paper withBorder p="md" maw={720} data-enchainements>
+    <Stack gap="md" maw={900}>
+      <Paper withBorder p="md" bg="var(--mantine-color-gray-0)" data-enchainements>
         <Stack gap={6}>
           <Group align="flex-end" gap="sm">
             <Select
@@ -359,139 +384,139 @@ export default function SeparationParPersonne() {
               </Button>
             )}
           </Group>
-          <Text size="xs" c="dimmed">
+          <Text size="sm" c="dimmed">
             {t.enchainement.aide}
           </Text>
         </Stack>
       </Paper>
 
-      <Group>
-        <Button variant={source ? "light" : "filled"} leftSection={<IconFileSearch size={18} />} loading={lecture} onClick={choisir}>
-          {source ? t.autre : t.choisir}
-        </Button>
-        {source && (
-          <Text size="sm">
-            {source.nom} · {t.lu(source.textes.length, avecTexte)}
+      <Etape numero={1} titre={t.etapes.pdf} aide={t.etapes.pdfAide}>
+        <ZoneFichier
+          fichier={source ? { nom: source.nom, details: t.lu(source.textes.length, avecTexte) } : null}
+          invite={textes.depot.pdf}
+          bouton={t.choisir}
+          changer={t.autre}
+          enCours={lecture}
+          onChoisir={() => void choisir()}
+        />
+        {lecture && (
+          <Text size="sm" c="dimmed">
+            {t.lecture}
           </Text>
         )}
-      </Group>
-      {source && avecTexte === 0 && (
-        <Alert color="orange" maw={720}>
-          {t.sansTexte}
-        </Alert>
-      )}
+        {source && avecTexte === 0 && <Alert color="orange">{t.sansTexte}</Alert>}
+      </Etape>
 
       {source && avecTexte > 0 && (
         <>
-          <Paper withBorder p="md" maw={720}>
-            <Stack gap="sm">
-              <Title order={5}>{t.reperage}</Title>
-              <SegmentedControl value={mode} onChange={(v) => regler({ mode: v as Reglages["mode"] })} data={(["liste", "repere"] as const).map((value) => ({ value, label: t.modes[value] }))} />
-              {mode === "liste" ? (
-                <TextInput label={t.identifiant} description={t.identifiantAide} value={reglages.identifiant} onChange={(e) => regler({ identifiant: e.currentTarget.value })} />
-              ) : (
-                <>
-                  <TextInput label={t.repere} description={t.repereAide} value={reglages.repere} onChange={(e) => regler({ repere: e.currentTarget.value })} />
-                  <SegmentedControl
-                    value={reglages.position}
-                    onChange={(v) => regler({ position: v as PositionValeur })}
-                    data={(["droite", "dessous"] as const).map((value) => ({ value, label: t.positions[value] }))}
+          <Etape numero={2} titre={t.etapes.personnes} aide={t.etapes.personnesAide}>
+            <SegmentedControl value={mode} onChange={(v) => regler({ mode: v as Reglages["mode"] })} data={(["liste", "repere"] as const).map((value) => ({ value, label: t.modes[value] }))} />
+            {mode === "liste" ? (
+              <>
+                <EtapeListe
+                  liste={liste}
+                  feuilles={donnees.feuilles}
+                  balises={balises}
+                  correspondances={correspondances}
+                  exemple={liste?.lignes[0] ? valeursDeLigne(miseEnForme, liste.lignes[0], correspondances) : {}}
+                  anomalies={donnees.anomalies}
+                  onImporter={donnees.importer}
+                  onExemple={donnees.utiliserExemple}
+                  onFeuille={donnees.setFeuille}
+                  onCorrespondance={donnees.relier}
+                />
+                {liste && (
+                  <ChampModele
+                    label={t.identifiant}
+                    description={t.identifiantAide}
+                    valeur={reglages.identifiant}
+                    onValeur={(identifiant) => regler({ identifiant })}
+                    colonnes={colonnes}
                   />
-                  <div data-valeurs-lues>
-                    <Text size="sm" fw={500}>
-                      {t.valeursLues}
+                )}
+              </>
+            ) : (
+              <>
+                <TextInput label={t.repere} description={t.repereAide} value={reglages.repere} onChange={(e) => regler({ repere: e.currentTarget.value })} />
+                <SegmentedControl
+                  value={reglages.position}
+                  onChange={(v) => regler({ position: v as PositionValeur })}
+                  data={(["droite", "dessous"] as const).map((value) => ({ value, label: t.positions[value] }))}
+                />
+                <div data-valeurs-lues>
+                  <Text size="sm" fw={500}>
+                    {t.valeursLues}
+                  </Text>
+                  {source.textes.slice(0, 3).map((texte, page) => (
+                    <Text key={page} size="sm" c="dimmed">
+                      {t.pageValeur(page + 1, valeurApres(texte, reglages.repere, reglages.position))}
                     </Text>
-                    {source.textes.slice(0, 3).map((texte, page) => (
-                      <Text key={page} size="sm" c="dimmed">
-                        {t.pageValeur(page + 1, valeurApres(texte, reglages.repere, reglages.position))}
-                      </Text>
-                    ))}
-                  </div>
-                </>
-              )}
-              <Switch label={t.suite} description={t.suiteAide} checked={reglages.suite} onChange={(e) => regler({ suite: e.currentTarget.checked })} />
-            </Stack>
-          </Paper>
+                  ))}
+                </div>
+              </>
+            )}
+            <Switch label={t.suite} description={t.suiteAide} checked={reglages.suite} onChange={(e) => regler({ suite: e.currentTarget.checked })} />
+          </Etape>
 
-          <Paper withBorder p="md" maw={720}>
-            <Stack gap="sm">
-              <Title order={5}>{t.fichiers}</Title>
-              {mode === "liste" ? (
-                <TextInput label={t.modeleNom} description={t.modeleNomAide} value={reglages.modeleNom} onChange={(e) => regler({ modeleNom: e.currentTarget.value })} />
-              ) : (
-                <TextInput label={t.modeleNom} description={t.modeleNomRepereAide} value={reglages.modeleNomRepere} onChange={(e) => regler({ modeleNomRepere: e.currentTarget.value })} />
-              )}
-              {mode === "liste" && (
-                <>
-                  <Switch label={t.proteger} checked={reglages.proteger} onChange={(e) => regler({ proteger: e.currentTarget.checked })} />
-                  {reglages.proteger && (
-                    <TextInput label={t.motDePasse} description={t.motDePasseAide} value={reglages.modeleMotDePasse} onChange={(e) => regler({ modeleMotDePasse: e.currentTarget.value })} />
-                  )}
-                  <Switch label={t.envoi.activer} description={t.envoi.aide} checked={envoi.actif} onChange={(e) => reglerEnvoi({ actif: e.currentTarget.checked })} />
-                  {envoi.actif && (
-                    <Stack gap="xs" data-message>
-                      <TextInput label={t.envoi.destinataire} description={t.envoi.destinataireAide} value={envoi.destinataire} onChange={(e) => reglerEnvoi({ destinataire: e.currentTarget.value })} />
-                      <TextInput label={t.envoi.objet} value={envoi.objet} onChange={(e) => reglerEnvoi({ objet: e.currentTarget.value })} />
-                      <Textarea label={t.envoi.message} description={t.envoi.messageAide} autosize minRows={4} value={envoi.message} onChange={(e) => reglerEnvoi({ message: e.currentTarget.value })} />
-                      <div data-moyen-envoi>
-                        <Text size="sm" fw={500} mb={4}>
-                          {t.envoi.moyen}
-                        </Text>
-                        <SegmentedControl value={messagerie.moyen} onChange={(v) => choisirMoyen(v as MoyenEnvoi)} data={(["messagerie", "outlook"] as const).map((value) => ({ value, label: t.envoi.moyens[value] }))} />
-                      </div>
-                      {parMessagerie ? (
-                        <>
-                          <Group gap="sm" justify="space-between" wrap="nowrap">
-                            <Text size="sm" c={compteMessagerie ? undefined : "orange"}>
-                              {compteMessagerie ? t.envoi.depuis(compteMessagerie.adresse, compteMessagerie.serveur) : t.envoi.aRegler}
-                            </Text>
-                            <Button variant="light" size="xs" leftSection={<IconSettings size={16} />} onClick={() => setReglageMessagerie(true)} style={{ flexShrink: 0 }}>
-                              {t.envoi.regler}
-                            </Button>
-                          </Group>
-                          <Text size="xs" c="dimmed">
-                            {t.envoi.messagerieAide}
-                          </Text>
-                        </>
-                      ) : (
-                        <>
-                          <SegmentedControl
-                            value={envoi.mode}
-                            onChange={(v) => reglerEnvoi({ mode: v as ReglagesEnvoi["mode"] })}
-                            data={(["brouillons", "direct"] as const).map((value) => ({ value, label: t.envoi.modes[value] }))}
-                          />
-                          <Text size="xs" c="dimmed">
-                            {t.envoi.outlookAide} {t.envoi.modesAide[envoi.mode]}
-                          </Text>
-                        </>
-                      )}
-                    </Stack>
-                  )}
-                </>
-              )}
-            </Stack>
-          </Paper>
+          <Etape numero={3} titre={t.etapes.fichiers}>
+            {mode === "liste" ? (
+              <ChampModele
+                label={t.modeleNom}
+                description={t.modeleNomAide}
+                valeur={reglages.modeleNom}
+                onValeur={(modeleNom) => regler({ modeleNom })}
+                colonnes={colonnes}
+                exemple={fichiers[0] ? `${fichiers[0].nom}.pdf` : undefined}
+              />
+            ) : (
+              <ChampModele
+                label={t.modeleNom}
+                description={t.modeleNomRepereAide}
+                valeur={reglages.modeleNomRepere}
+                onValeur={(modeleNomRepere) => regler({ modeleNomRepere })}
+                colonnes={[]}
+                exemple={fichiers[0] ? `${fichiers[0].nom}.pdf` : undefined}
+              />
+            )}
+            {mode === "liste" && (
+              <>
+                <Switch label={t.proteger} checked={reglages.proteger} onChange={(e) => regler({ proteger: e.currentTarget.checked })} />
+                {reglages.proteger &&
+                  // Une seule information (le cas courant) : on choisit sa colonne, sans balise à écrire.
+                  (balisesMotDePasse.length === 1 ? (
+                    <Select
+                      label={t.motDePasse}
+                      description={t.motDePasseAide}
+                      placeholder={textes.liste.choisir}
+                      data={colonnes}
+                      value={correspondances[balisesMotDePasse[0]] ?? null}
+                      onChange={(colonne) => donnees.relier(balisesMotDePasse[0], colonne)}
+                      searchable
+                      clearable
+                      maw={420}
+                      data-colonne-mot-de-passe
+                    />
+                  ) : (
+                    <ChampModele
+                      label={t.motDePasse}
+                      description={t.motDePasseModeleAide}
+                      valeur={reglages.modeleMotDePasse}
+                      onValeur={(modeleMotDePasse) => regler({ modeleMotDePasse })}
+                      colonnes={colonnes}
+                    />
+                  ))}
+              </>
+            )}
+          </Etape>
 
-          {mode === "liste" && (
-            <EtapeListe
-              liste={liste}
-              feuilles={donnees.feuilles}
-              balises={balises}
-              correspondances={correspondances}
-              exemple={liste?.lignes[0] ? valeursDeLigne(miseEnForme, liste.lignes[0], correspondances) : {}}
-              anomalies={donnees.anomalies}
-              onImporter={donnees.importer}
-              onExemple={donnees.utiliserExemple}
-              onFeuille={donnees.setFeuille}
-              onCorrespondance={donnees.relier}
-            />
-          )}
-
-          {reperage && (
-            <Paper withBorder p="md" maw={720} data-verification>
-              <Stack gap="sm">
-                <Group justify="space-between">
-                  <Title order={5}>{t.verification}</Title>
+          <Etape numero={4} titre={t.etapes.verifier}>
+            {!reperage ? (
+              <Text size="sm" c="dimmed">
+                {t.attente[mode]}
+              </Text>
+            ) : (
+              <Stack gap="sm" data-verification>
+                <Group>
                   <Badge size="lg" variant="light" style={{ textTransform: "none" }}>
                     {t.resume(fichiers.length, pagesAttribuees)}
                   </Badge>
@@ -525,7 +550,7 @@ export default function SeparationParPersonne() {
                   </Table>
                 )}
                 {fichiers.length > APERCU && (
-                  <Text size="xs" c="dimmed">
+                  <Text size="sm" c="dimmed">
                     {t.autres(fichiers.length - APERCU)}
                   </Text>
                 )}
@@ -537,7 +562,7 @@ export default function SeparationParPersonne() {
                       ))}
                     </List>
                     {problemes.length > 8 && (
-                      <Text size="xs" c="dimmed" mt={4}>
+                      <Text size="sm" c="dimmed" mt={4}>
                         {t.autres(problemes.length - 8)}
                       </Text>
                     )}
@@ -549,83 +574,122 @@ export default function SeparationParPersonne() {
                   </Text>
                 )}
                 {sansMotDePasse.length > 0 && <Alert color="red">{t.motDePasseVide(quelques(sansMotDePasse.map((fichier) => fichier.nom)))}</Alert>}
-                <Button leftSection={<IconUsers size={18} />} loading={enCours} disabled={fichiers.length === 0 || sansMotDePasse.length > 0} onClick={creer} w="fit-content">
+                <Action icone={IconUsers} enCours={enCours} raison={raisonCreer} onClick={() => void creer()}>
                   {t.creer}
-                </Button>
+                </Action>
+                <Resultat cree={cree} onFermer={() => setCree(null)} />
               </Stack>
-            </Paper>
-          )}
+            )}
+          </Etape>
 
-          {avecEnvoi && reperage && fichiers.length > 0 && (
-            <Paper withBorder p="md" maw={720} data-envoi>
-              <Stack gap="sm">
-                <Group justify="space-between">
-                  <Title order={5}>{t.envoi.titre}</Title>
-                  {creation && (
-                    <Badge size="lg" variant="light" style={{ textTransform: "none" }}>
-                      {t.envoi.pret(envois.messages.length)}
-                    </Badge>
+          {mode === "liste" && (
+            <Etape numero={5} titre={t.etapes.envoyer}>
+              <Switch label={t.envoi.activer} description={t.envoi.aide} checked={envoi.actif} onChange={(e) => reglerEnvoi({ actif: e.currentTarget.checked })} />
+              {envoi.actif && (
+                <Stack gap="sm" data-message>
+                  <ChampModele
+                    label={t.envoi.destinataire}
+                    description={t.envoi.destinataireAide}
+                    valeur={envoi.destinataire}
+                    onValeur={(destinataire) => reglerEnvoi({ destinataire })}
+                    colonnes={colonnes}
+                  />
+                  <ChampModele label={t.envoi.objet} valeur={envoi.objet} onValeur={(objet) => reglerEnvoi({ objet })} colonnes={colonnes} />
+                  <ChampModele
+                    label={t.envoi.message}
+                    description={t.envoi.messageAide}
+                    valeur={envoi.message}
+                    onValeur={(message) => reglerEnvoi({ message })}
+                    colonnes={colonnes}
+                    multiligne
+                  />
+                  <div data-moyen-envoi>
+                    <Text size="sm" fw={500} mb={4}>
+                      {t.envoi.moyen}
+                    </Text>
+                    <SegmentedControl value={messagerie.moyen} onChange={(v) => choisirMoyen(v as MoyenEnvoi)} data={(["messagerie", "outlook"] as const).map((value) => ({ value, label: t.envoi.moyens[value] }))} />
+                  </div>
+                  {parMessagerie ? (
+                    <>
+                      <Group gap="sm" justify="space-between" wrap="nowrap">
+                        <Text size="sm" c={compteMessagerie ? undefined : "orange"}>
+                          {compteMessagerie ? t.envoi.depuis(compteMessagerie.adresse, compteMessagerie.serveur) : t.envoi.aRegler}
+                        </Text>
+                        <Button variant="light" size="xs" leftSection={<IconSettings size={16} />} onClick={() => setReglageMessagerie(true)} style={{ flexShrink: 0 }}>
+                          {t.envoi.regler}
+                        </Button>
+                      </Group>
+                      <Text size="sm" c="dimmed">
+                        {t.envoi.messagerieAide}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <SegmentedControl
+                        value={envoi.mode}
+                        onChange={(v) => reglerEnvoi({ mode: v as ReglagesEnvoi["mode"] })}
+                        data={(["brouillons", "direct"] as const).map((value) => ({ value, label: t.envoi.modes[value] }))}
+                      />
+                      <Text size="sm" c="dimmed">
+                        {t.envoi.outlookAide} {t.envoi.modesAide[envoi.mode]}
+                      </Text>
+                    </>
                   )}
-                </Group>
-                {!creation ? (
-                  <Text size="sm" c="dimmed">
-                    {t.envoi.creerAvant}
-                  </Text>
-                ) : (
-                  <>
-                    {envois.sansAdresse.length > 0 && <Alert color="orange">{t.envoi.sansAdresse(envois.sansAdresse.length, quelques(envois.sansAdresse))}</Alert>}
-                    {!pretAEnvoyer && (
-                      <Alert color="orange">
-                        <Group gap="sm" justify="space-between" wrap="nowrap">
-                          <Text size="sm">{t.envoi.aRegler}</Text>
-                          <Button variant="light" size="xs" leftSection={<IconSettings size={16} />} onClick={() => setReglageMessagerie(true)} style={{ flexShrink: 0 }}>
-                            {t.envoi.regler}
-                          </Button>
-                        </Group>
-                      </Alert>
-                    )}
-                    <Group align="flex-end" gap="sm">
+
+                  {!creation ? (
+                    <Alert color="blue" variant="light">
+                      {t.envoi.creerAvant}
+                    </Alert>
+                  ) : (
+                    <Stack gap="sm" data-envoi>
+                      <Group>
+                        <Badge size="lg" variant="light" style={{ textTransform: "none" }}>
+                          {t.envoi.pret(envois.messages.length)}
+                        </Badge>
+                      </Group>
+                      {envois.sansAdresse.length > 0 && <Alert color="orange">{t.envoi.sansAdresse(envois.sansAdresse.length, quelques(envois.sansAdresse))}</Alert>}
                       <TextInput
                         label={t.envoi.essai}
                         description={t.envoi.essaiAide}
                         placeholder={compteMessagerie && parMessagerie ? compteMessagerie.adresse : undefined}
                         value={adresseEssai}
                         onChange={(e) => setAdresseEssai(e.currentTarget.value)}
-                        style={{ flex: 1 }}
                       />
-                      <Button
-                        variant="light"
-                        leftSection={<IconMail size={18} />}
-                        disabled={!adresseEssaiEffective.includes("@") || envois.messages.length === 0 || envoiEnCours || !pretAEnvoyer}
+                      <Action
+                        icone={IconMail}
+                        variante="light"
+                        taille="sm"
+                        raison={raisonEssai}
+                        desactive={envoiEnCours}
                         onClick={() => void envoyer([{ ...envois.messages[0], message: { ...envois.messages[0].message, a: adresseEssaiEffective } }])}
                       >
                         {t.envoi.essayer[modeEnvoi]}
-                      </Button>
-                    </Group>
-                    <Button leftSection={<IconSend size={18} />} loading={envoiEnCours} disabled={envois.messages.length === 0 || !pretAEnvoyer} onClick={envoyerTout} w="fit-content">
-                      {t.envoi.envoyer[modeEnvoi](envois.messages.length)}
-                    </Button>
-                    {envoiEnCours && progression && (
-                      <div>
-                        <Progress value={(100 * progression[0]) / Math.max(1, progression[1])} />
-                        <Text size="xs" c="dimmed" mt={4}>
-                          {t.envoi.progression(progression[0], progression[1])}
-                        </Text>
-                      </div>
-                    )}
-                    {echecs.length > 0 && (
-                      <Alert color="red" title={t.envoi.echecs(echecs.length)}>
-                        <List size="sm" spacing={2}>
-                          {echecs.slice(0, 8).map((ligne) => (
-                            <List.Item key={ligne}>{ligne}</List.Item>
-                          ))}
-                        </List>
-                      </Alert>
-                    )}
-                  </>
-                )}
-              </Stack>
-            </Paper>
+                      </Action>
+                      <Action icone={IconSend} enCours={envoiEnCours} raison={raisonEnvoi} onClick={envoyerTout}>
+                        {t.envoi.envoyer[modeEnvoi](envois.messages.length)}
+                      </Action>
+                      {envoiEnCours && progression && (
+                        <div>
+                          <Progress value={(100 * progression[0]) / Math.max(1, progression[1])} />
+                          <Text size="sm" c="dimmed" mt={4}>
+                            {t.envoi.progression(progression[0], progression[1])}
+                          </Text>
+                        </div>
+                      )}
+                      {echecs.length > 0 && (
+                        <Alert color="red" title={t.envoi.echecs(echecs.length)}>
+                          <List size="sm" spacing={2}>
+                            {echecs.slice(0, 8).map((ligne) => (
+                              <List.Item key={ligne}>{ligne}</List.Item>
+                            ))}
+                          </List>
+                        </Alert>
+                      )}
+                    </Stack>
+                  )}
+                </Stack>
+              )}
+            </Etape>
           )}
         </>
       )}

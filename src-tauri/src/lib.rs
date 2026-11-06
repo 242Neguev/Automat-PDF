@@ -18,6 +18,7 @@ mod messagerie;
 mod office;
 pub mod operations;
 mod outlook;
+mod ouverture;
 mod pdf;
 mod pdf_en_word;
 mod pixels;
@@ -92,6 +93,8 @@ pub fn run() {
             commandes::convertisseurs_office,
             commandes::installer_libreoffice,
             commandes::ouvrir_page_libreoffice,
+            commandes::ouvrir_fichier,
+            commandes::montrer_dans_dossier,
             commandes::recus_au_lancement,
             commandes::lire_enchainements,
             commandes::enregistrer_enchainements,

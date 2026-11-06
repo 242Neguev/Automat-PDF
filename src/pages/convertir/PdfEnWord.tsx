@@ -20,7 +20,7 @@ export default function PdfEnWord() {
           {t.sansWord}
         </Alert>
       )}
-      <ConversionFichiers outil="pdfEnWord" filtre={{ nom: textes.pdf.filtre, extensions: ["pdf"] }} vide={t.vide} aide={t.aide} convertir={pdfEnWord} />
+      <ConversionFichiers outil="pdfEnWord" filtre={{ nom: textes.pdf.filtre, extensions: ["pdf"] }} deposer={t.deposer} deposerDetail={t.deposerDetail} aide={t.aide} convertir={pdfEnWord} />
     </Stack>
   );
 }

@@ -31,6 +31,8 @@ L'installateur Windows de la dernière version se trouve sur la page [**Releases
 | **PDF-9a** | **Envoi sans Outlook** : chaque PDF part de la messagerie de l'utilisateur (SMTP : Gmail, Yahoo, messagerie de l'organisation…), sous Windows comme sous macOS ; connexion chiffrée par le système (STARTTLS ou SSL/TLS), mot de passe gardé par le Gestionnaire d'identification de Windows ou le trousseau de macOS, jamais dans un fichier ; réglages des messageries courantes proposés d'après l'adresse, test de la connexion, essai à sa propre adresse ; destinataire refusé signalé sans arrêter les autres, message renvoyé quand le serveur demande d'attendre, messages non partis signalés si la connexion se perd ; Outlook reste au choix | ✅ |
 | **PDF-9b** | **Office en PDF sans Office** : LibreOffice trouvé où qu'il soit installé (registre, dossiers des programmes) ; s'il manque, la page le dit avant toute conversion et propose de l'installer par son installateur officiel (winget : téléchargement, accord de l'administrateur demandé par Windows, suivi de l'installation), ou ouvre sa page de téléchargement ; **PDF en Word** prévient d'emblée quand Word manque | ✅ |
 | **PDF-10** | **PDF en Word sans Word** : quand Word manque ou ne répond pas, Automat-PDF convertit lui-même, sans rien installer. Chaque page du PDF devient une page du document, au même format ; texte modifiable en paragraphes (police, taille, gras, italique, couleur, alignement, retraits, interlignes), lignes coupées par la largeur de la page remises ensemble ; colonnes d'un tableau alignées par des tabulations, cellules serrées ou tronquées d'Excel comprises, sans couper un mot ni un montant ; images reprises à leur place, filets et dessins gardés derrière le texte ; page faite seulement de dessins, ou scan sans texte reconnu, reprise en image. Documents relus par Word et LibreOffice | ✅ |
+| **PDF-11** | **Édition libre** : licence MIT, dépôt public, version 0.1.0 publiée (installateur pas encore signé, demande déposée auprès de SignPath Foundation) | ✅ |
+| **PDF-12** | **Prise en main sans formation** : **accueil** « Que voulez-vous faire ? » (tâches en grand ; recherche avec les mots de tous les jours : « signer », « alléger », « réunir », « bulletins de paie »… ; fichiers déposés ou choisis sur l'accueil, et l'application propose les outils qui conviennent) ; sur chaque outil, une grande zone « Glissez votre PDF ici » ; nouveau fichier proposé **à côté de l'original** ; une fois le travail fait, un encadré **Ouvrir** / **Afficher dans le dossier** (seuls les PDF, documents Word et images que l'application crée s'ouvrent ainsi) ; bouton grisé accompagné de ce qu'il manque (« Ajoutez au moins deux PDF. ») ; **Séparer** et **Séparer par personne** en étapes numérotées, colonnes de la liste ajoutées d'un clic dans les noms de fichiers et les messages, colonne du mot de passe choisie dans une liste ; vocabulaire simplifié (« Masquer des passages », « Rectos et versos », « Réglages enregistrés » ; ni AES-256, ni CMJN, ni ppp à l'écran) ; textes d'aide plus contrastés, erreurs affichées 15 secondes | ✅ |
 
 ## Développer (Mac ou Windows)
 
@@ -83,16 +85,21 @@ Pour publier une version, il suffit d'envoyer un tag : `git tag v0.1.0 && git pu
 
 ```
 src/                     Interface React + TypeScript (Mantine)
+  Accueil.tsx            Accueil : « Que voulez-vous faire ? », recherche d'une tâche, zone de dépôt
+  outils.tsx             Les outils, rangés par groupes : menu, accueil, fichiers reçus
   textes.ts              Tous les textes de l'interface (traduction future)
   coeur.ts               Accès typé aux commandes du cœur
   donnees/               Listes Excel/CSV, correspondances, contrôle des données, noms de fichiers,
                          repérage des personnes dans le texte des pages, enchaînements enregistrés,
                          réglages de la messagerie (messageries courantes reconnues d'après l'adresse),
-                         ce qui manque pour convertir (Office, LibreOffice)
+                         ce qui manque pour convertir (Office, LibreOffice), recherche d'une tâche
+                         avec les mots de tous les jours, chemins (fichier proposé à côté de l'original)
   pages/commun/reception.ts  Fichiers reçus de l'Explorateur (clic droit, glisser-déposer), confiés aux outils
   pages/                 Un dossier par outil (organiser/, mise-en-page/, fusion/, intercaler/, images/,
-                         separation/, annoter/, securite/, optimiser/, convertir/), et commun/ : étape
-                         Liste et vignettes, partagées
+                         separation/, annoter/, securite/, optimiser/, convertir/), et commun/, partagé :
+                         zone de dépôt, étapes numérotées, bouton d'action qui dit ce qu'il manque,
+                         encadré du résultat (Ouvrir, Afficher dans le dossier), modèles à balises,
+                         étape Liste et vignettes
 src-tauri/               Cœur Rust (Tauri)
   src/operations.rs      Ce que fait chaque commande, sans dépendre de Tauri (testé de bout en bout)
   src/commandes.rs       Commandes appelées par l'interface, exécutées hors du fil principal
@@ -121,6 +128,7 @@ src-tauri/               Cœur Rust (Tauri)
   src/police.rs          Helvetica standard en codage WinAnsi (accents), largeurs pour aligner
   src/memoire.rs         Derniers PDF ouverts gardés en mémoire pour les vignettes
   src/fichiers.rs        Lecture contrôlée des fichiers choisis, écriture des dossiers de résultats
+  src/ouverture.rs       Fichier créé ouvert dans l'application habituelle, ou affiché dans son dossier
   scripts/               Scripts PowerShell intégrés au programme (Outlook, Office), en ASCII
   windows/clic-droit.nsh Sous-menu du clic droit, posé et retiré par l'installateur NSIS (pas par le MSI)
 scripts/                 Compilation de l'installateur Windows sur un PC

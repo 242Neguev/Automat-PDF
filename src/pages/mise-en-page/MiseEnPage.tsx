@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { Box, Button, Group, Paper, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
-import { IconCheck, IconFileSearch, IconLayoutColumns } from "@tabler/icons-react";
+import { Box, Group, Paper, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
+import { IconLayoutColumns } from "@tabler/icons-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { imposerPdf, pagesPdf, type Disposition } from "../../coeur";
+import { aCote, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
+import Action from "../commun/Action";
 import { useFichiersRecus } from "../commun/reception";
+import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
+import { ZoneFichier } from "../commun/ZoneFichier";
 
 const t = textes.miseEnPage;
 const DISPOSITIONS: Disposition[] = ["deux-par-feuille", "quatre-par-feuille", "livret", "format-a4"];
@@ -84,6 +87,7 @@ export default function MiseEnPage() {
   const [source, setSource] = useState<{ chemin: string; nom: string; pages: number } | null>(null);
   const [disposition, setDisposition] = useState<Disposition>("deux-par-feuille");
   const [enCours, setEnCours] = useState(false);
+  const [cree, setCree] = useState<Cree | null>(null);
   const produites = source ? pagesProduites(disposition, source.pages) : 0;
 
   async function choisir() {
@@ -93,7 +97,8 @@ export default function MiseEnPage() {
 
   async function ouvrir(chemin: string) {
     try {
-      setSource({ chemin, nom: chemin.split(/[\\/]/).pop() ?? chemin, pages: (await pagesPdf(chemin)).length });
+      setSource({ chemin, nom: nomDe(chemin), pages: (await pagesPdf(chemin)).length });
+      setCree(null);
     } catch (e) {
       signalerErreur(e);
     }
@@ -103,12 +108,13 @@ export default function MiseEnPage() {
   async function creer() {
     if (!source) return;
     const base = source.nom.replace(/\.pdf$/i, "");
-    const sortie = await save({ defaultPath: t.nomFichier(base, t.dispositions[disposition].titre), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
+    const sortie = await save({ defaultPath: aCote(source.chemin, t.nomFichier(base, t.dispositions[disposition].titre)), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     setEnCours(true);
+    setCree(null);
     try {
       await imposerPdf(source.chemin, disposition, sortie);
-      notifications.show({ color: "teal", icon: <IconCheck size={18} />, title: t.cree, message: sortie });
+      setCree({ titre: t.cree, chemin: sortie, details: [disposition === "livret" ? t.livret(produites / 2) : t.resultat(produites)] });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -118,16 +124,13 @@ export default function MiseEnPage() {
 
   return (
     <Stack gap="md" maw={980}>
-      <Group>
-        <Button variant={source ? "light" : "filled"} leftSection={<IconFileSearch size={18} />} onClick={choisir}>
-          {source ? t.autre : t.choisir}
-        </Button>
-        {source && (
-          <Text size="sm">
-            {source.nom} · {textes.pdf.pages(source.pages)}
-          </Text>
-        )}
-      </Group>
+      <ZoneFichier
+        fichier={source ? { nom: source.nom, details: textes.pdf.pages(source.pages) } : null}
+        invite={textes.depot.pdf}
+        bouton={t.choisir}
+        changer={t.autre}
+        onChoisir={() => void choisir()}
+      />
 
       <Title order={5}>{t.disposition}</Title>
       <SimpleGrid cols={{ base: 2, md: 4 }} spacing="sm">
@@ -161,16 +164,17 @@ export default function MiseEnPage() {
         })}
       </SimpleGrid>
 
-      {source && (
-        <Group>
-          <Button leftSection={<IconLayoutColumns size={18} />} loading={enCours} onClick={creer}>
-            {t.creer}
-          </Button>
+      <Group>
+        <Action icone={IconLayoutColumns} enCours={enCours} raison={source ? null : t.raison} onClick={() => void creer()}>
+          {t.creer}
+        </Action>
+        {source && (
           <Text size="sm" c="dimmed">
             {disposition === "livret" ? t.livret(produites / 2) : t.resultat(produites)}
           </Text>
-        </Group>
-      )}
+        )}
+      </Group>
+      <Resultat cree={cree} onFermer={() => setCree(null)} />
     </Stack>
   );
 }

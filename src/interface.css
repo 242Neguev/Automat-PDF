@@ -1,0 +1,31 @@
+/* Zone où glisser ses fichiers : pointillés, et couleur d'accent au survol (elle se clique aussi). */
+.zone-depot {
+  border: 2px dashed var(--mantine-color-gray-4);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+.zone-depot:hover {
+  border-color: var(--mantine-color-eau-5);
+  background-color: var(--mantine-color-eau-0);
+}
+
+/* Tâches de l'accueil : la tuile survolée ou atteinte au clavier se distingue. */
+.tuile-outil {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--mantine-radius-md);
+}
+.tuile-outil > .mantine-Paper-root {
+  height: 100%;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+.tuile-outil:hover > .mantine-Paper-root,
+.tuile-outil:focus-visible > .mantine-Paper-root {
+  border-color: var(--mantine-color-eau-6);
+  background-color: var(--mantine-color-eau-0);
+}

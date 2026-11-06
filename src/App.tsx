@@ -1,120 +1,62 @@
-import { Fragment, useEffect, useRef, useState, type ComponentType } from "react";
-import { ActionIcon, AppShell, Box, Button, Group, Modal, NavLink, ScrollArea, Stack, Text, ThemeIcon, Title, Tooltip } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { ActionIcon, AppShell, Box, Group, Modal, NavLink, ScrollArea, SimpleGrid, Stack, Text, ThemeIcon, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconArrowsMinimize, IconEyeOff, IconFiles, IconFileTypeDocx, IconFileTypePdf, IconInfoCircle, IconLock, IconLayersIntersect, IconLayoutColumns, IconLayoutGrid, IconNumbers, IconPhoto, IconPhotoPlus, IconScissors, IconSignature, IconUsers } from "@tabler/icons-react";
+import { useDisclosure } from "@mantine/hooks";
+import { IconHome, IconInfoCircle } from "@tabler/icons-react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import Accueil, { TuileOutil } from "./Accueil";
 import APropos from "./APropos";
 import { recusAuLancement, type Recus } from "./coeur";
-import { sortesDe, transmettre, type SorteFichier } from "./pages/commun/reception";
-import OfficeEnPdf from "./pages/convertir/OfficeEnPdf";
-import PdfEnWord from "./pages/convertir/PdfEnWord";
-import Compresser from "./pages/optimiser/Compresser";
-import MotDePasse from "./pages/securite/MotDePasse";
-import Caviarder from "./pages/annoter/Caviarder";
-import NumerosTampon from "./pages/annoter/NumerosTampon";
-import SignatureCachet from "./pages/annoter/SignatureCachet";
-import FusionPdf from "./pages/fusion/FusionPdf";
-import ImagesEnPdf from "./pages/images/ImagesEnPdf";
-import PdfEnImages from "./pages/images/PdfEnImages";
-import IntercalerPdf from "./pages/intercaler/IntercalerPdf";
-import MiseEnPage from "./pages/mise-en-page/MiseEnPage";
-import OrganiserPdf from "./pages/organiser/OrganiserPdf";
-import SeparationParPersonne from "./pages/separation/SeparationParPersonne";
-import SeparationPdf from "./pages/separation/SeparationPdf";
+import { nomDe } from "./donnees/chemins";
+import { GROUPES, OUTILS, type DefinitionOutil, type Outil } from "./outils";
+import { sortesDe, transmettre } from "./pages/commun/reception";
 import { textes } from "./textes";
 import { COULEURS } from "./theme";
 
-type Outil = keyof typeof textes.outils;
+/** Ce qui est affiché : l'accueil, ou un outil. */
+type Vue = Outil | "accueil";
 
-interface DefinitionOutil {
-  cle: Outil;
-  icone: typeof IconFiles;
-  page: ComponentType;
-  /** Fichiers qu'il prend de l'Explorateur (clic droit, glisser-déposer). */
-  accepte: SorteFichier[];
-}
-
-const GROUPES: { cle: keyof typeof textes.groupes; outils: DefinitionOutil[] }[] = [
-  {
-    cle: "pages",
-    outils: [
-      { cle: "organiser", icone: IconLayoutGrid, page: OrganiserPdf, accepte: ["pdf"] },
-      { cle: "miseEnPage", icone: IconLayoutColumns, page: MiseEnPage, accepte: ["pdf"] },
-    ],
-  },
-  {
-    cle: "assembler",
-    outils: [
-      { cle: "fusionner", icone: IconFiles, page: FusionPdf, accepte: ["pdf"] },
-      { cle: "intercaler", icone: IconLayersIntersect, page: IntercalerPdf, accepte: ["pdf"] },
-      { cle: "images", icone: IconPhotoPlus, page: ImagesEnPdf, accepte: ["image"] },
-    ],
-  },
-  {
-    cle: "decouper",
-    outils: [
-      { cle: "separer", icone: IconScissors, page: SeparationPdf, accepte: ["pdf", "liste"] },
-      { cle: "parPersonne", icone: IconUsers, page: SeparationParPersonne, accepte: ["pdf", "liste"] },
-    ],
-  },
-  {
-    cle: "annoter",
-    outils: [
-      { cle: "marques", icone: IconNumbers, page: NumerosTampon, accepte: ["pdf"] },
-      { cle: "signature", icone: IconSignature, page: SignatureCachet, accepte: ["pdf", "image"] },
-    ],
-  },
-  {
-    cle: "securite",
-    outils: [
-      { cle: "motDePasse", icone: IconLock, page: MotDePasse, accepte: ["pdf"] },
-      { cle: "caviarder", icone: IconEyeOff, page: Caviarder, accepte: ["pdf"] },
-    ],
-  },
-  { cle: "optimiser", outils: [{ cle: "compresser", icone: IconArrowsMinimize, page: Compresser, accepte: ["pdf"] }] },
-  {
-    cle: "convertir",
-    outils: [
-      { cle: "enImages", icone: IconPhoto, page: PdfEnImages, accepte: ["pdf"] },
-      { cle: "officeEnPdf", icone: IconFileTypePdf, page: OfficeEnPdf, accepte: ["office"] },
-      { cle: "pdfEnWord", icone: IconFileTypeDocx, page: PdfEnWord, accepte: ["pdf"] },
-    ],
-  },
-];
-const OUTILS = GROUPES.flatMap((groupe) => groupe.outils);
 const tr = textes.reception;
 const prend = (definition: DefinitionOutil, fichier: string) => sortesDe(fichier).some((sorte) => definition.accepte.includes(sorte));
-const nomDe = (chemin: string) => chemin.split(/[\\/]/).pop() ?? chemin;
 
 export default function App() {
   const [aProposOuvert, aPropos] = useDisclosure(false);
-  const [outil, setOutil] = useState<Outil>("organiser");
+  const [vue, setVue] = useState<Vue>("accueil");
   const [survol, setSurvol] = useState(false);
-  const [choix, setChoix] = useState<{ fichiers: string[]; outils: DefinitionOutil[] } | null>(null);
-  const outilAffiche = useRef(outil);
-  outilAffiche.current = outil;
+  const [choix, setChoix] = useState<{ fichiers: string[]; outils: DefinitionOutil[]; depuisAccueil: boolean } | null>(null);
+  const vueAffichee = useRef(vue);
+  vueAffichee.current = vue;
+  // Chaque écran s'ouvre par son haut : son titre et ce qu'il faut faire d'abord. (WebView2 renvoie
+  // une promesse de `scrollTo` : l'effet ne doit rien renvoyer.)
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [vue]);
 
   /** Confie à l'outil les fichiers qu'il prend ; les autres sont signalés. */
   function confier(definition: DefinitionOutil, fichiers: string[]) {
     const laisses = fichiers.filter((fichier) => !prend(definition, fichier));
-    setOutil(definition.cle);
+    setVue(definition.cle);
     transmettre(
       definition.cle,
       fichiers.filter((fichier) => prend(definition, fichier)),
     );
-    if (laisses.length > 0) notifications.show({ color: "orange", title: tr.ignores(laisses.length), message: laisses.map(nomDe).join(", ") });
+    if (laisses.length > 0) notifications.show({ color: "orange", title: tr.ignores(laisses.length), message: laisses.map(nomDe).join(", "), autoClose: 10000 });
   }
 
-  /** Fichiers arrivés : à l'outil demandé (clic droit), sinon à l'outil affiché ; s'il n'en prend aucun, on demande. */
+  /**
+   * Fichiers arrivés : à l'outil demandé (clic droit), sinon à l'outil affiché. Depuis l'accueil, ou
+   * si l'outil affiché n'en prend aucun, on demande quoi en faire (sauf s'il n'y a qu'une possibilité).
+   */
   const recevoir = useRef<(fichiers: string[], demande: string | null) => void>(() => {});
   recevoir.current = (fichiers, demande) => {
-    const cible = OUTILS.find((definition) => definition.cle === demande) ?? OUTILS.find((definition) => definition.cle === outilAffiche.current);
+    const cible = OUTILS.find((definition) => definition.cle === demande) ?? OUTILS.find((definition) => definition.cle === vueAffichee.current);
     if (cible && fichiers.some((fichier) => prend(cible, fichier))) return confier(cible, fichiers);
     const possibles = OUTILS.filter((definition) => fichiers.some((fichier) => prend(definition, fichier)));
-    if (possibles.length > 0) setChoix({ fichiers, outils: possibles });
-    else notifications.show({ color: "orange", title: tr.inconnus, message: tr.inconnusAide });
+    const depuisAccueil = vueAffichee.current === "accueil";
+    if (possibles.length === 1 && depuisAccueil) return confier(possibles[0], fichiers);
+    if (possibles.length > 0) setChoix({ fichiers, outils: possibles, depuisAccueil });
+    else notifications.show({ color: "orange", title: tr.inconnus, message: tr.inconnusAide, autoClose: 10000 });
   };
 
   useEffect(() => {
@@ -152,14 +94,16 @@ export default function App() {
     <AppShell header={{ height: 56 }} navbar={{ width: 280, breakpoint: 0 }} padding="lg">
       <AppShell.Header>
         <Group h="100%" px="lg" justify="space-between">
-          <Group gap="sm">
-            <ThemeIcon size="lg" radius="md" color={COULEURS.encre}>
-              <Text fw={800} size="xs" c={COULEURS.sec}>
-                PDF
-              </Text>
-            </ThemeIcon>
-            <Title order={4}>{textes.application}</Title>
-          </Group>
+          <UnstyledButton onClick={() => setVue("accueil")} aria-label={textes.accueil.titre}>
+            <Group gap="sm">
+              <ThemeIcon size="lg" radius="md" color={COULEURS.encre}>
+                <Text fw={800} size="xs" c={COULEURS.sec}>
+                  PDF
+                </Text>
+              </ThemeIcon>
+              <Title order={4}>{textes.application}</Title>
+            </Group>
+          </UnstyledButton>
           <Group gap="xs">
             <Text size="sm" c="dimmed">
               {textes.parEditeur}
@@ -177,6 +121,7 @@ export default function App() {
         {/* Le menu défile quand la fenêtre est trop basse pour tout montrer (écrans de portable). */}
         <AppShell.Section grow component={ScrollArea}>
           <Stack gap={4}>
+            <NavLink label={textes.accueil.titre} leftSection={<IconHome size={20} stroke={1.6} />} active={vue === "accueil"} onClick={() => setVue("accueil")} />
             {GROUPES.map((groupe) => (
               <Fragment key={groupe.cle}>
                 <Text size="xs" fw={700} c="dimmed" tt="uppercase" px="sm" pt="sm" pb={2}>
@@ -188,8 +133,8 @@ export default function App() {
                     label={textes.outils[cle].titre}
                     description={textes.outils[cle].description}
                     leftSection={<Icone size={20} stroke={1.6} />}
-                    active={cle === outil}
-                    onClick={() => setOutil(cle)}
+                    active={cle === vue}
+                    onClick={() => setVue(cle)}
                   />
                 ))}
               </Fragment>
@@ -200,8 +145,11 @@ export default function App() {
 
       {/* Les outils restent montés : on retrouve son travail en changeant d'outil. */}
       <AppShell.Main>
+        <Box display={vue === "accueil" ? undefined : "none"}>
+          <Accueil groupes={GROUPES} onOutil={setVue} onFichiers={(fichiers) => recevoir.current(fichiers, null)} />
+        </Box>
         {OUTILS.map(({ cle, page: Page }) => (
-          <Box key={cle} display={cle === outil ? undefined : "none"}>
+          <Box key={cle} display={cle === vue ? undefined : "none"}>
             <Stack gap="lg" maw={1240}>
               <div>
                 <Title order={2}>{textes.outils[cle].titre}</Title>
@@ -217,38 +165,33 @@ export default function App() {
         <Box
           pos="fixed"
           inset={12}
-          style={{ zIndex: 300, pointerEvents: "none", border: "3px dashed var(--mantine-color-eau-6)", borderRadius: 12, background: "rgba(255, 255, 255, 0.8)" }}
+          style={{ zIndex: 300, pointerEvents: "none", border: "3px dashed var(--mantine-color-eau-6)", borderRadius: 12, background: "rgba(255, 255, 255, 0.85)" }}
           data-survol
         >
           <Stack h="100%" justify="center" align="center">
-            <Title order={3}>{tr.deposer(textes.outils[outil].titre)}</Title>
+            <Title order={3}>{vue === "accueil" ? tr.deposerAccueil : tr.deposer(textes.outils[vue].titre)}</Title>
           </Stack>
         </Box>
       )}
 
-      <Modal opened={choix !== null} onClose={() => setChoix(null)} title={choix ? tr.choisir(choix.fichiers.length) : ""}>
+      <Modal opened={choix !== null} onClose={() => setChoix(null)} title={choix ? tr.choisir(choix.fichiers.length) : ""} size="lg">
         {choix && (
-          <Stack gap="xs" data-choix-outil>
+          <Stack gap="sm" data-choix-outil>
             <Text size="sm" c="dimmed">
-              {tr.aide}
+              {choix.depuisAccueil ? tr.aideAccueil : tr.aide}
             </Text>
-            {choix.outils.map((definition) => {
-              const Icone = definition.icone;
-              return (
-                <Button
+            <SimpleGrid cols={choix.outils.length > 3 ? 2 : 1} spacing="xs" verticalSpacing="xs">
+              {choix.outils.map((definition) => (
+                <TuileOutil
                   key={definition.cle}
-                  variant="default"
-                  justify="flex-start"
-                  leftSection={<Icone size={18} stroke={1.6} />}
+                  definition={definition}
                   onClick={() => {
                     confier(definition, choix.fichiers);
                     setChoix(null);
                   }}
-                >
-                  {textes.outils[definition.cle].titre}
-                </Button>
-              );
-            })}
+                />
+              ))}
+            </SimpleGrid>
           </Stack>
         )}
       </Modal>
