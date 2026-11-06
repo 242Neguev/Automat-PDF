@@ -138,9 +138,11 @@ La licence porte sur le code et les fichiers du projet. Elle ne donne pas le dro
 
 Les installateurs seront signés gratuitement par [SignPath Foundation](https://signpath.org), qui signe les logiciels libres, dès que le projet aura été accepté. D'ici là, ils ne sont pas signés.
 
+*Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).*
+
 - Seules les versions compilées automatiquement depuis ce dépôt, par GitHub Actions, seront signées, chacune après une approbation manuelle.
-- **Auteurs et relecteurs** : Eau sèche ([@242Neguev](https://github.com/242Neguev)). Toute contribution proposée par une autre personne (pull request) est relue avant d'être acceptée.
-- **Approbation des signatures** : Eau sèche ([@242Neguev](https://github.com/242Neguev)).
+- **Auteurs et relecteurs** (*committers and reviewers*) : Eau sèche ([@242Neguev](https://github.com/242Neguev)). Toute contribution proposée par une autre personne (pull request) est relue avant d'être acceptée.
+- **Approbation des signatures** (*approvers*) : Eau sèche ([@242Neguev](https://github.com/242Neguev)).
 
 *In English: Windows releases of Automat-PDF will be signed for free by [SignPath.io](https://about.signpath.io), with a certificate issued to [SignPath Foundation](https://signpath.org), once the project is accepted. Only releases built automatically from this repository by GitHub Actions, each one approved manually by the maintainer ([@242Neguev](https://github.com/242Neguev)), will be signed.*
 
