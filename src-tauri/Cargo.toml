@@ -1,6 +1,6 @@
 [package]
 name = "automat-pdf"
-version = "0.1.0"
+version = "0.2.0"
 description = "Automat-PDF : fusionner, séparer, organiser et diffuser des PDF"
 authors = ["Eau sèche <gneguev@gmail.com>"]
 license = "MIT"

@@ -79,7 +79,7 @@ Gratuit pour ce dépôt public : GitHub compile l'installateur sur l'un de ses o
 1. Ouvrir le dépôt sur GitHub, onglet **Actions**, puis **Installateur Windows** et **Run workflow**.
 2. À la fin de l'exécution, télécharger les **artefacts** : l'installateur `.exe` (NSIS) et le `.msi`.
 
-Pour publier une version, il suffit d'envoyer un tag : `git tag v0.1.0 && git push origin v0.1.0`. Une **publication GitHub en brouillon** est alors créée avec les installateurs attachés.
+Pour publier une version, il suffit d'envoyer un tag : `git tag v0.2.0 && git push origin v0.2.0`. Une **publication GitHub en brouillon** est alors créée avec les installateurs attachés.
 
 ## Organisation du code
 
