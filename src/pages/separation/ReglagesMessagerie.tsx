@@ -80,7 +80,17 @@ export default function ReglagesMessagerie({ ouvert, compte, motDePasseGarde, on
         <Text size="sm" c="dimmed">
           {t.intro}
         </Text>
-        <TextInput label={t.adresse} placeholder="rh@exemple.com" value={brouillon.adresse} onChange={(e) => setBrouillon((actuel) => avecAdresse(actuel, e.currentTarget.value))} data-autofocus />
+        <TextInput
+          label={t.adresse}
+          placeholder="rh@exemple.com"
+          value={brouillon.adresse}
+          onChange={(e) => {
+            // Lue tout de suite : React peut appliquer la mise à jour plus tard, quand l'événement est vidé.
+            const adresse = e.currentTarget.value;
+            setBrouillon((actuel) => avecAdresse(actuel, adresse));
+          }}
+          data-autofocus
+        />
         <TextInput label={t.nom} description={t.nomAide} value={brouillon.nom} onChange={(e) => regler({ nom: e.currentTarget.value })} />
         <Group align="flex-start" gap="sm" grow>
           <TextInput label={t.serveur} placeholder="smtp.exemple.com" value={brouillon.serveur} onChange={(e) => regler({ serveur: e.currentTarget.value })} style={{ flexGrow: 3 }} />
