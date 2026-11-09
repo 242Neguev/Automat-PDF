@@ -80,7 +80,7 @@ Gratuit pour ce dépôt public : GitHub compile l'installateur sur l'un de ses o
 1. Ouvrir le dépôt sur GitHub, onglet **Actions**, puis **Installateur Windows** et **Run workflow**.
 2. À la fin de l'exécution, télécharger les **artefacts** : l'installateur `.exe` (NSIS) et le `.msi`.
 
-Pour publier une version, il suffit d'envoyer un tag : `git tag v0.2.0 && git push origin v0.2.0`. Une **publication GitHub en brouillon** est alors créée avec les installateurs attachés, et `latest.json`, que lisent les Automat-PDF installés : dès que la publication n'est plus un brouillon, ils proposent la mise à jour.
+Pour publier une version, il suffit d'envoyer un tag : `git tag v0.2.1 && git push origin v0.2.1`. Une **publication GitHub en brouillon** est alors créée avec les installateurs attachés, et `latest.json`, que lisent les Automat-PDF installés : dès que la publication n'est plus un brouillon, ils proposent la mise à jour.
 
 ### Signature des mises à jour
 
