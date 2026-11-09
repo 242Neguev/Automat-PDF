@@ -2,12 +2,14 @@
 //! bout appellent exactement le même code.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 
 use crate::caviardage::{self, ModeCaviardage, PageACaviarder, Rapport};
 use crate::compression::{self, Bilan, Niveau};
+use crate::confidentialite::{self, Confidentialite};
 use crate::envoi::{BilanEnvoi, Message};
 use crate::erreur::Erreur;
 use crate::fichiers::{self, FichierAEcrire, Nature};
@@ -511,6 +513,92 @@ pub fn montrer_dans_dossier(chemin: &str) -> Result<(), Erreur> {
     ouverture::montrer(chemin)
 }
 
+/// Page de la dernière version publiée : la mise à jour s'y télécharge à la main quand
+/// l'application n'a pas pu l'installer elle-même.
+const PAGE_DES_VERSIONS: &str = "https://github.com/242Neguev/Automat-PDF/releases/latest";
+
+/// Ouvre la page de la dernière version publiée dans le navigateur.
+pub fn ouvrir_page_des_versions() -> Result<(), Erreur> {
+    ouverture::ouvrir_page(PAGE_DES_VERSIONS)
+}
+
+/// Fichier des réglages de confidentialité : recherche des mises à jour, statistiques anonymes.
+const CONFIDENTIALITE: &str = "confidentialite.json";
+
+fn reglages_de_confidentialite(dossier: &Path) -> Result<confidentialite::Reglages, Erreur> {
+    lire_reglages(dossier, CONFIDENTIALITE).map(|contenu| confidentialite::Reglages::lire(&contenu))
+}
+
+/// Réglages de confidentialité, tels que l'interface les présente.
+pub fn confidentialite(dossier: &Path) -> Result<Confidentialite, Erreur> {
+    Ok(reglages_de_confidentialite(dossier)?.etat(confidentialite::adresse().is_some()))
+}
+
+/// Relit les réglages de confidentialité, les modifie et les enregistre s'ils ont changé, un
+/// appel à la fois : un signal qui aboutit pendant qu'on change un réglage ne l'efface pas.
+fn modifier_confidentialite(
+    dossier: &Path,
+    modifier: impl FnOnce(&mut confidentialite::Reglages) -> Result<(), Erreur>,
+) -> Result<confidentialite::Reglages, Erreur> {
+    static ECRITURE: Mutex<()> = Mutex::new(());
+    let _une_a_la_fois = ECRITURE.lock().unwrap_or_else(PoisonError::into_inner);
+    let lus = reglages_de_confidentialite(dossier)?;
+    let mut reglages = lus.clone();
+    modifier(&mut reglages)?;
+    if reglages != lus {
+        enregistrer_reglages(dossier, CONFIDENTIALITE, &reglages.texte())?;
+    }
+    Ok(reglages)
+}
+
+/// Change les réglages de confidentialité donnés ; les autres restent tels quels.
+pub fn regler_confidentialite(
+    dossier: &Path,
+    mises_a_jour: Option<bool>,
+    statistiques: Option<bool>,
+) -> Result<Confidentialite, Erreur> {
+    let reglages = modifier_confidentialite(dossier, |reglages| {
+        reglages.regler(mises_a_jour, statistiques)
+    })?;
+    Ok(reglages.etat(confidentialite::adresse().is_some()))
+}
+
+/// Envoie le signal d'ouverture si l'utilisateur a accepté les statistiques anonymes, une seule
+/// fois par lancement, même si l'interface se recharge ; `true` si un signal est parti.
+pub fn signaler_ouverture(dossier: &Path, langue: &str) -> Result<bool, Erreur> {
+    static ENVOYE: AtomicBool = AtomicBool::new(false);
+    let Some(adresse) = confidentialite::adresse() else {
+        return Ok(false);
+    };
+    if reglages_de_confidentialite(dossier)?.statistiques != Some(true)
+        || ENVOYE.swap(true, Ordering::SeqCst)
+    {
+        return Ok(false);
+    }
+    signaler(adresse, dossier, langue, &confidentialite::systeme())
+}
+
+/// Envoie le signal à `adresse` : le premier reçu annonce l'installation, les suivants des
+/// ouvertures ; s'il n'arrive pas, l'installation sera annoncée au prochain lancement.
+fn signaler(adresse: &str, dossier: &Path, langue: &str, systeme: &str) -> Result<bool, Erreur> {
+    // Numéro écarté (fichier modifié à la main) : un nouveau est tiré.
+    let reglages = modifier_confidentialite(dossier, |reglages| reglages.regler(None, None))?;
+    let Some(signal) = reglages.signal(langue, systeme) else {
+        return Ok(false);
+    };
+    confidentialite::envoyer(adresse, &signal)?;
+    if signal.evenement == "installation" {
+        // Relu après l'envoi : un réglage changé entre-temps est gardé.
+        modifier_confidentialite(dossier, |reglages| {
+            if reglages.installation.as_deref() == Some(signal.installation.as_str()) {
+                reglages.installation_signalee = true;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(true)
+}
+
 /// Documents Word, classeurs Excel et présentations PowerPoint en PDF, dans `dossier`.
 pub fn office_en_pdf(
     fichiers: &[String],
@@ -616,7 +704,7 @@ pub fn enregistrer_reglages(dossier: &Path, nom: &str, contenu: &str) -> Result<
 mod tests {
     use super::*;
 
-    use crate::essais::{fichier_temporaire, pdf_herite};
+    use crate::essais::{fichier_temporaire, pdf_herite, serveur_local};
 
     #[test]
     fn enregistre_les_pages_choisies_de_plusieurs_pdf() {
@@ -726,6 +814,106 @@ mod tests {
             r#"[{"nom":"Paie mensuelle"}]"#
         );
         assert!(!dossier.join("enchainements.json.tmp").exists());
+    }
+
+    /// Événement de chaque signal reçu par le serveur local.
+    fn evenements(requetes: &[crate::essais::RequeteRecue]) -> Vec<String> {
+        requetes
+            .iter()
+            .map(|(_, _, corps)| {
+                let signal: serde_json::Value = serde_json::from_str(corps).unwrap();
+                signal["evenement"].as_str().unwrap().to_string()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn n_envoie_les_statistiques_qu_apres_un_oui() {
+        let dossier = std::env::temp_dir()
+            .join("automat-pdf-tests")
+            .join("confidentialite");
+        let _ = std::fs::remove_dir_all(&dossier);
+        let serveur = serveur_local(|_, _| (200, "", r#"{"ok":true}"#.to_string()));
+        let signaler_ici = || signaler(&serveur.adresse, &dossier, "fr-FR", "Windows 11").unwrap();
+
+        // Premier lancement : la question n'a pas encore reçu de réponse, rien ne part.
+        let neuf = confidentialite(&dossier).unwrap();
+        assert_eq!(neuf.statistiques, None);
+        assert!(neuf.mises_a_jour);
+        assert!(!signaler_ici());
+        // « Non merci » : rien ne part, et aucun numéro n'est tiré.
+        regler_confidentialite(&dossier, Some(true), Some(false)).unwrap();
+        assert!(!signaler_ici());
+        assert!(serveur.requetes().is_empty());
+        let fichier = lire_reglages(&dossier, CONFIDENTIALITE).unwrap();
+        assert!(fichier.contains(r#""installation": null"#), "{fichier}");
+
+        // « Oui » : le premier signal annonce l'installation, les suivants des ouvertures.
+        let accepte = regler_confidentialite(&dossier, None, Some(true)).unwrap();
+        assert_eq!(accepte.statistiques, Some(true));
+        assert!(accepte.mises_a_jour, "réglage des mises à jour gardé");
+        assert!(signaler_ici());
+        assert!(signaler_ici());
+        let requetes = serveur.requetes();
+        assert_eq!(evenements(&requetes), ["installation", "ouverture"]);
+        let numero = |rang: usize| {
+            let signal: serde_json::Value = serde_json::from_str(&requetes[rang].2).unwrap();
+            signal["installation"].as_str().unwrap().to_string()
+        };
+        assert_eq!(numero(0), numero(1), "même installation");
+
+        // Les mises à jour se coupent sans toucher aux statistiques.
+        let coupees = regler_confidentialite(&dossier, Some(false), None).unwrap();
+        assert!(!coupees.mises_a_jour);
+        assert_eq!(coupees.statistiques, Some(true));
+        std::fs::remove_dir_all(&dossier).unwrap();
+    }
+
+    #[test]
+    fn garde_un_reglage_change_pendant_l_envoi() {
+        let dossier = std::env::temp_dir()
+            .join("automat-pdf-tests")
+            .join("confidentialite-pendant");
+        let _ = std::fs::remove_dir_all(&dossier);
+        regler_confidentialite(&dossier, None, Some(true)).unwrap();
+        // Le service répond lentement ; pendant ce temps, la recherche des mises à jour est coupée.
+        let lent = serveur_local(|_, _| {
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            (200, "", r#"{"ok":true}"#.to_string())
+        });
+        std::thread::scope(|fils| {
+            let envoi = fils.spawn(|| signaler(&lent.adresse, &dossier, "fr", "Windows 11"));
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            regler_confidentialite(&dossier, Some(false), None).unwrap();
+            assert!(envoi.join().unwrap().unwrap());
+        });
+        let apres = reglages_de_confidentialite(&dossier).unwrap();
+        assert!(
+            !apres.mises_a_jour,
+            "le réglage changé pendant l'envoi est gardé"
+        );
+        assert!(apres.installation_signalee);
+        std::fs::remove_dir_all(&dossier).unwrap();
+    }
+
+    #[test]
+    fn annonce_l_installation_tant_qu_elle_n_est_pas_arrivee() {
+        let dossier = std::env::temp_dir()
+            .join("automat-pdf-tests")
+            .join("confidentialite-panne");
+        let _ = std::fs::remove_dir_all(&dossier);
+        regler_confidentialite(&dossier, None, Some(true)).unwrap();
+        let en_panne = serveur_local(|_, _| (500, "", String::new()));
+        let erreur = signaler(&en_panne.adresse, &dossier, "fr", "Windows 10").unwrap_err();
+        assert!(erreur.message.contains("500"), "{}", erreur.message);
+        let repare = serveur_local(|_, _| (200, "", r#"{"ok":true}"#.to_string()));
+        assert!(signaler(&repare.adresse, &dossier, "fr", "Windows 10").unwrap());
+        assert!(signaler(&repare.adresse, &dossier, "fr", "Windows 10").unwrap());
+        assert_eq!(
+            evenements(&repare.requetes()),
+            ["installation", "ouverture"]
+        );
+        std::fs::remove_dir_all(&dossier).unwrap();
     }
 
     #[test]

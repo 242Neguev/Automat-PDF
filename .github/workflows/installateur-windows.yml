@@ -1,7 +1,16 @@
 # Construit l'installateur Windows (.exe et .msi).
 # - Lancement manuel (onglet Actions > « Installateur Windows » > Run workflow) : les installateurs
 #   sont téléchargeables dans les artefacts de l'exécution.
-# - Envoi d'un tag vX.Y.Z : une publication GitHub (brouillon) est créée avec les installateurs.
+# - Envoi d'un tag vX.Y.Z : une publication GitHub (brouillon) est créée avec les installateurs et
+#   latest.json. Une fois la publication publiée, les Automat-PDF installés proposent la mise à jour.
+#
+# Secrets du dépôt (Settings > Secrets and variables > Actions) :
+# - TAURI_SIGNING_PRIVATE_KEY et TAURI_SIGNING_PRIVATE_KEY_PASSWORD (obligatoires) : clé qui signe
+#   les mises à jour ; l'application installée refuse une mise à jour dont la signature ne
+#   correspond pas à la clé publique de tauri.conf.json.
+# - AUTOMAT_PDF_STATISTIQUES (facultatif) : adresse du service qui reçoit les statistiques
+#   anonymes, envoyées seulement avec l'accord de l'utilisateur (voir statistiques/README.md).
+#   Sans ce secret, l'application ne pose pas la question et n'envoie rien.
 name: Installateur Windows
 
 on:
@@ -30,7 +39,15 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          AUTOMAT_PDF_STATISTIQUES: ${{ secrets.AUTOMAT_PDF_STATISTIQUES }}
         with:
+          # Fichiers de mise à jour signés (.sig) en plus des installateurs : seulement ici, pour que
+          # la compilation sur un PC (sans la clé privée) reste possible.
+          args: --config src-tauri/tauri.publication.conf.json
+          # latest.json désigne l'installateur .exe (le .msi est retiré des publications).
+          updaterJsonPreferNsis: true
           uploadWorkflowArtifacts: true
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Automat-PDF {0}', github.ref_name) || '' }}

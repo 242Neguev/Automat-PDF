@@ -40,6 +40,12 @@ lettre = "0.11"
 keyring = { version = "3", features = ["windows-native", "apple-native"] }
 # Documents Word (.docx, archives ZIP) écrits sans Word, compressés par flate2 (déjà utilisé).
 zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+# Mises à jour : nouvelle version cherchée sur GitHub, téléchargée, signature vérifiée, installée.
+# Chiffrement par le système (Schannel), comme la messagerie ; proxy de Windows respecté.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls", "system-proxy"] }
+# Statistiques anonymes (seulement avec l'accord de l'utilisateur) : le même client HTTP que les
+# mises à jour.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls", "system-proxy"] }
 
 # Voir https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

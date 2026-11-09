@@ -268,6 +268,29 @@ export const ouvrirFichier = (chemin: string) => invoke<void>("ouvrir_fichier", 
 /** Affiche un fichier dans son dossier (Explorateur), sélectionné ; un dossier est simplement ouvert. */
 export const montrerDansDossier = (chemin: string) => invoke<void>("montrer_dans_dossier", { chemin });
 
+/** Réglages de confidentialité : recherche des mises à jour, statistiques anonymes. */
+export interface Confidentialite {
+  /** Chercher les nouvelles versions au démarrage, puis chaque jour. */
+  misesAJour: boolean;
+  /** Statistiques anonymes acceptées ; null tant que la question n'a pas reçu de réponse. */
+  statistiques: boolean | null;
+  /** Cette copie d'Automat-PDF peut envoyer des statistiques ; sinon, la question n'est pas posée. */
+  statistiquesPossibles: boolean;
+}
+
+/** Réglages de confidentialité. */
+export const lireConfidentialite = () => invoke<Confidentialite>("lire_confidentialite");
+
+/** Change les réglages donnés (les autres restent tels quels) ; renvoie les réglages à jour. */
+export const reglerConfidentialite = (reglage: { misesAJour?: boolean; statistiques?: boolean }) =>
+  invoke<Confidentialite>("regler_confidentialite", { misesAJour: reglage.misesAJour ?? null, statistiques: reglage.statistiques ?? null });
+
+/** Envoie le signal d'ouverture si l'utilisateur a accepté les statistiques (une fois par lancement) ; true s'il est parti. */
+export const signalerOuverture = (langue: string) => invoke<boolean>("signaler_ouverture", { langue });
+
+/** Ouvre la page de la dernière version publiée dans le navigateur. */
+export const ouvrirPageDesVersions = () => invoke<void>("ouvrir_page_des_versions");
+
 /** Fichiers confiés par l'Explorateur : l'outil demandé (clic droit) et les fichiers. */
 export interface Recus {
   outil: string | null;

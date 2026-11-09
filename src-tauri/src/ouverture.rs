@@ -49,6 +49,20 @@ pub fn montrer(chemin: &str) -> Result<(), Erreur> {
     lancer(commande_montrer(chemin), chemin)
 }
 
+/// Ouvre dans le navigateur une page choisie par l'application, jamais une adresse reçue.
+pub fn ouvrir_page(page: &'static str) -> Result<(), Erreur> {
+    let programme = if cfg!(windows) {
+        "explorer.exe"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let mut commande = Command::new(programme);
+    commande.arg(page);
+    lancer(commande, page)
+}
+
 /// Lance la commande sans l'attendre ; elle est récupérée à sa fin, sans bloquer l'application.
 fn lancer(mut commande: Command, chemin: &str) -> Result<(), Erreur> {
     let mut lancee = commande.spawn().map_err(|erreur| {

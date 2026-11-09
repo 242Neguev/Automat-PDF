@@ -33,6 +33,7 @@ L'installateur Windows de la dernière version se trouve sur la page [**Releases
 | **PDF-10** | **PDF en Word sans Word** : quand Word manque ou ne répond pas, Automat-PDF convertit lui-même, sans rien installer. Chaque page du PDF devient une page du document, au même format ; texte modifiable en paragraphes (police, taille, gras, italique, couleur, alignement, retraits, interlignes), lignes coupées par la largeur de la page remises ensemble ; colonnes d'un tableau alignées par des tabulations, cellules serrées ou tronquées d'Excel comprises, sans couper un mot ni un montant ; images reprises à leur place, filets et dessins gardés derrière le texte ; page faite seulement de dessins, ou scan sans texte reconnu, reprise en image. Documents relus par Word et LibreOffice | ✅ |
 | **PDF-11** | **Édition libre** : licence MIT, dépôt public, version 0.1.0 publiée (installateur pas encore signé, demande déposée auprès de SignPath Foundation) | ✅ |
 | **PDF-12** | **Prise en main sans formation** : **accueil** « Que voulez-vous faire ? » (tâches en grand ; recherche avec les mots de tous les jours : « signer », « alléger », « réunir », « bulletins de paie »… ; fichiers déposés ou choisis sur l'accueil, et l'application propose les outils qui conviennent) ; sur chaque outil, une grande zone « Glissez votre PDF ici » ; nouveau fichier proposé **à côté de l'original** ; une fois le travail fait, un encadré **Ouvrir** / **Afficher dans le dossier** (seuls les PDF, documents Word et images que l'application crée s'ouvrent ainsi) ; bouton grisé accompagné de ce qu'il manque (« Ajoutez au moins deux PDF. ») ; **Séparer** et **Séparer par personne** en étapes numérotées, colonnes de la liste ajoutées d'un clic dans les noms de fichiers et les messages, colonne du mot de passe choisie dans une liste ; vocabulaire simplifié (« Masquer des passages », « Rectos et versos », « Réglages enregistrés » ; ni AES-256, ni CMJN, ni ppp à l'écran) ; textes d'aide plus contrastés, erreurs affichées 15 secondes | ✅ |
+| **PDF-13** | **Mises à jour et statistiques** : au démarrage puis chaque jour, Automat-PDF regarde sur GitHub si une nouvelle version est publiée ; un bandeau la propose, et **Mettre à jour** la télécharge, vérifie sa signature, l'installe puis rouvre l'application (recherche désactivable dans « À propos ») ; **statistiques anonymes** envoyées seulement après un « Oui » à la question posée au premier lancement (un signal par ouverture : numéro tiré au hasard, version, Windows, langue), reçues par un script Google Apps Script gratuit ([statistiques/](statistiques/README.md)) : e-mail à chaque nouvelle installation, résumé chaque semaine avec les téléchargements comptés par GitHub | ✅ |
 
 ## Développer (Mac ou Windows)
 
@@ -79,7 +80,13 @@ Gratuit pour ce dépôt public : GitHub compile l'installateur sur l'un de ses o
 1. Ouvrir le dépôt sur GitHub, onglet **Actions**, puis **Installateur Windows** et **Run workflow**.
 2. À la fin de l'exécution, télécharger les **artefacts** : l'installateur `.exe` (NSIS) et le `.msi`.
 
-Pour publier une version, il suffit d'envoyer un tag : `git tag v0.2.0 && git push origin v0.2.0`. Une **publication GitHub en brouillon** est alors créée avec les installateurs attachés.
+Pour publier une version, il suffit d'envoyer un tag : `git tag v0.2.0 && git push origin v0.2.0`. Une **publication GitHub en brouillon** est alors créée avec les installateurs attachés, et `latest.json`, que lisent les Automat-PDF installés : dès que la publication n'est plus un brouillon, ils proposent la mise à jour.
+
+### Signature des mises à jour
+
+Chaque mise à jour est signée par une clé propre au projet : avant d'installer une nouvelle version, Automat-PDF vérifie sa signature avec la clé publique écrite dans `src-tauri/tauri.conf.json`. La clé privée et son mot de passe sont rangés dans les secrets du dépôt (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) et, en lieu sûr, chez le mainteneur : perdue, elle obligerait chaque utilisateur à réinstaller Automat-PDF à la main. Seul GitHub Actions produit les fichiers de mise à jour (`src-tauri/tauri.publication.conf.json`) : une compilation sur un PC n'a pas besoin de la clé. Chaque signature porte le numéro de la version : une ancienne version ne peut pas être resservie comme une nouvelle (`requireSignedVersion`).
+
+Quand SignPath signera l'installateur, cette signature le modifiera : il faudra refaire ensuite sa signature de mise à jour (`tauri signer sign --app-version X.Y.Z`) et la reporter dans `latest.json`, sinon les Automat-PDF installés refuseront la mise à jour.
 
 ## Organisation du code
 
@@ -89,6 +96,8 @@ src/                     Interface React + TypeScript (Mantine)
   outils.tsx             Les outils, rangés par groupes : menu, accueil, fichiers reçus
   textes.ts              Tous les textes de l'interface (traduction future)
   coeur.ts               Accès typé aux commandes du cœur
+  MiseAJour.tsx          Mises à jour : recherche au démarrage puis chaque jour, bandeau, téléchargement et installation
+  Confidentialite.tsx    Question du premier lancement (statistiques anonymes), réglages dans « À propos »
   donnees/               Listes Excel/CSV, correspondances, contrôle des données, noms de fichiers,
                          repérage des personnes dans le texte des pages, enchaînements enregistrés,
                          réglages de la messagerie (messageries courantes reconnues d'après l'adresse),
@@ -129,9 +138,11 @@ src-tauri/               Cœur Rust (Tauri)
   src/memoire.rs         Derniers PDF ouverts gardés en mémoire pour les vignettes
   src/fichiers.rs        Lecture contrôlée des fichiers choisis, écriture des dossiers de résultats
   src/ouverture.rs       Fichier créé ouvert dans l'application habituelle, ou affiché dans son dossier
+  src/confidentialite.rs Réglages de confidentialité ; signal d'ouverture des statistiques anonymes, avec l'accord de l'utilisateur
   scripts/               Scripts PowerShell intégrés au programme (Outlook, Office), en ASCII
   windows/clic-droit.nsh Sous-menu du clic droit, posé et retiré par l'installateur NSIS (pas par le MSI)
 scripts/                 Compilation de l'installateur Windows sur un PC
+statistiques/            Service gratuit qui reçoit les statistiques anonymes (Google Apps Script), et sa mise en place
 ```
 
 ## Licence
@@ -156,12 +167,14 @@ Les installateurs seront signés gratuitement par [SignPath Foundation](https://
 
 ### Confidentialité (Privacy policy)
 
-Automat-PDF ne transmet aucune information à d'autres systèmes en réseau, sauf à la demande expresse de l'utilisateur ou de la personne qui l'installe ou l'utilise.
-*This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.*
+Automat-PDF ne transmet aucune information à d'autres systèmes en réseau, sauf à la demande expresse de l'utilisateur ou de la personne qui l'installe ou l'utilise, avec une seule exception : la recherche des mises à jour, qui n'envoie rien sur l'utilisateur ni sur ses fichiers et se désactive dans « À propos ».
+*This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it, with one exception: the update check, which sends no data about the user or their files and can be turned off in "About". Anonymous usage statistics are sent only if the user opts in when asked at first launch, and can be turned off at any time in "About".*
 
 En pratique :
 
-- les PDF, les listes et les documents sont traités sur l'ordinateur, sans compte, sans publicité ni statistiques d'utilisation ;
+- les PDF, les listes et les documents sont traités sur l'ordinateur, sans compte ni publicité ;
+- **recherche des mises à jour** (activée d'emblée, rappelée au premier lancement, désactivable dans « À propos ») : au démarrage puis une fois par jour, Automat-PDF lit sur GitHub le fichier `latest.json` de la dernière version publiée. Comme pour toute page web, GitHub voit l'adresse IP de l'ordinateur ([déclaration de confidentialité de GitHub](https://docs.github.com/fr/site-policy/privacy-policies/github-general-privacy-statement)) ; rien d'autre n'est envoyé. Une nouvelle version n'est téléchargée et installée que si l'utilisateur clique sur **Mettre à jour**, et seulement si elle porte la signature du projet ;
+- **statistiques anonymes** (rien n'est envoyé tant que l'utilisateur n'a pas répondu « Oui » à la question posée au premier lancement ; réponse modifiable à tout moment dans « À propos ») : à chaque ouverture, un signal part vers un script Google Apps Script d'Eau sèche, qui le range dans un classeur Google Sheets. Il contient un numéro tiré au hasard pour l'installation, la version d'Automat-PDF, celle de Windows, la langue et l'édition ; jamais un fichier, un nom ni une adresse. Google ne transmet pas l'adresse IP au script ([règles de confidentialité de Google](https://policies.google.com/privacy)). Eau sèche s'en sert seulement pour savoir combien de personnes utilisent Automat-PDF, et à quelle fréquence ; ces données ne sont ni vendues ni partagées. Détails : [statistiques/](statistiques/README.md) ;
 - un e-mail ne part que lorsque l'utilisateur le demande, par sa propre messagerie (le serveur qu'il a réglé) ou par Outlook ; le mot de passe de la messagerie reste dans le coffre du système (Gestionnaire d'identification de Windows, trousseau de macOS) ;
 - LibreOffice n'est téléchargé, par winget, que lorsque l'utilisateur clique sur « Installer LibreOffice » et donne l'accord de l'administrateur ;
 - les conversions par Microsoft Office ou LibreOffice se font sur l'ordinateur, par ces logiciels.

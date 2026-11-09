@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::caviardage::{ModeCaviardage, PageACaviarder, Rapport};
 use crate::compression::{Bilan, Niveau};
+use crate::confidentialite::Confidentialite;
 use crate::envoi::{BilanEnvoi, Message};
 use crate::erreur::Erreur;
 use crate::images::OptionsImages;
@@ -387,6 +388,41 @@ pub async fn lire_messagerie(app: AppHandle) -> Result<String, Erreur> {
 pub async fn enregistrer_messagerie(app: AppHandle, contenu: String) -> Result<(), Erreur> {
     let dossier = dossier_reglages(&app)?;
     en_arriere_plan(move || operations::enregistrer_reglages(&dossier, MESSAGERIE, &contenu)).await
+}
+
+/// Réglages de confidentialité : recherche des mises à jour, statistiques anonymes.
+#[tauri::command]
+pub async fn lire_confidentialite(app: AppHandle) -> Result<Confidentialite, Erreur> {
+    let dossier = dossier_reglages(&app)?;
+    en_arriere_plan(move || operations::confidentialite(&dossier)).await
+}
+
+/// Change les réglages de confidentialité donnés ; les autres restent tels quels.
+#[tauri::command]
+pub async fn regler_confidentialite(
+    app: AppHandle,
+    mises_a_jour: Option<bool>,
+    statistiques: Option<bool>,
+) -> Result<Confidentialite, Erreur> {
+    let dossier = dossier_reglages(&app)?;
+    en_arriere_plan(move || {
+        operations::regler_confidentialite(&dossier, mises_a_jour, statistiques)
+    })
+    .await
+}
+
+/// Envoie le signal d'ouverture si l'utilisateur a accepté les statistiques anonymes ; `true` si
+/// un signal est parti.
+#[tauri::command]
+pub async fn signaler_ouverture(app: AppHandle, langue: String) -> Result<bool, Erreur> {
+    let dossier = dossier_reglages(&app)?;
+    en_arriere_plan(move || operations::signaler_ouverture(&dossier, &langue)).await
+}
+
+/// Ouvre la page de la dernière version publiée dans le navigateur.
+#[tauri::command]
+pub async fn ouvrir_page_des_versions() -> Result<(), Erreur> {
+    en_arriere_plan(operations::ouvrir_page_des_versions).await
 }
 
 /// Fichiers confiés par l'Explorateur (clic droit), gardés jusqu'à ce que l'interface les prenne.

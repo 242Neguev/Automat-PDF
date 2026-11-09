@@ -1,6 +1,7 @@
 mod caviardage;
 mod commandes;
 mod compression;
+mod confidentialite;
 mod contenu;
 mod docx;
 mod envoi;
@@ -57,6 +58,10 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
+        // Mises à jour : la version publiée sur GitHub est comparée à celle-ci ; une nouvelle
+        // version n'est installée qu'après vérification de sa signature (clé publique dans
+        // tauri.conf.json).
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(commandes::Lancement(std::sync::Mutex::new(
             operations::Reception::new(au_lancement),
         )))
@@ -100,6 +105,10 @@ pub fn run() {
             commandes::enregistrer_enchainements,
             commandes::lire_messagerie,
             commandes::enregistrer_messagerie,
+            commandes::lire_confidentialite,
+            commandes::regler_confidentialite,
+            commandes::signaler_ouverture,
+            commandes::ouvrir_page_des_versions,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au lancement d'Automat-PDF");

@@ -5,10 +5,13 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconHome, IconInfoCircle } from "@tabler/icons-react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { version } from "../package.json";
 import Accueil, { TuileOutil } from "./Accueil";
 import APropos from "./APropos";
-import { recusAuLancement, type Recus } from "./coeur";
+import { enErreur, lireConfidentialite, recusAuLancement, reglerConfidentialite, signalerOuverture, type Confidentialite, type Recus } from "./coeur";
+import { QuestionStatistiques, type Reglage } from "./Confidentialite";
 import { nomDe } from "./donnees/chemins";
+import { BandeauMiseAJour, useMiseAJour } from "./MiseAJour";
 import { GROUPES, OUTILS, type DefinitionOutil, type Outil } from "./outils";
 import { sortesDe, transmettre } from "./pages/commun/reception";
 import { textes } from "./textes";
@@ -20,6 +23,9 @@ type Vue = Outil | "accueil";
 const tr = textes.reception;
 const prend = (definition: DefinitionOutil, fichier: string) => sortesDe(fichier).some((sorte) => definition.accepte.includes(sorte));
 
+/** Signal d'ouverture des statistiques anonymes : le cœur ne l'envoie qu'avec l'accord enregistré. */
+const signaler = () => void signalerOuverture(navigator.language).catch((erreur) => console.warn("Statistiques :", enErreur(erreur).message));
+
 export default function App() {
   const [aProposOuvert, aPropos] = useDisclosure(false);
   const [vue, setVue] = useState<Vue>("accueil");
@@ -27,6 +33,37 @@ export default function App() {
   const [choix, setChoix] = useState<{ fichiers: string[]; outils: DefinitionOutil[]; depuisAccueil: boolean } | null>(null);
   const vueAffichee = useRef(vue);
   vueAffichee.current = vue;
+  // Réglages de confidentialité : null tant qu'ils ne sont pas lus (ni question, ni recherche).
+  const [confidentialite, setConfidentialite] = useState<Confidentialite | null>(null);
+  // La question du premier lancement propose aussi de couper la recherche des mises à jour : rien
+  // n'est cherché avant la réponse.
+  const questionEnAttente = confidentialite?.statistiquesPossibles === true && confidentialite.statistiques === null;
+  const miseAJour = useMiseAJour(confidentialite?.misesAJour === true && !questionEnAttente);
+
+  useEffect(() => {
+    lireConfidentialite().then(
+      (lus) => {
+        setConfidentialite(lus);
+        if (lus.statistiques === true) signaler();
+      },
+      (erreur) => {
+        console.warn("Réglages de confidentialité :", enErreur(erreur).message);
+        setConfidentialite({ misesAJour: true, statistiques: null, statistiquesPossibles: false });
+      },
+    );
+  }, []);
+
+  /** Enregistre un réglage de confidentialité ; au premier « Oui », le signal part aussitôt. */
+  async function regler(reglage: Reglage) {
+    try {
+      setConfidentialite(await reglerConfidentialite(reglage));
+      if (reglage.statistiques === true) signaler();
+    } catch (erreur) {
+      // Le choix vaut au moins pour cette fois : la question ne bloque pas la fenêtre.
+      setConfidentialite((avant) => avant && { ...avant, ...reglage });
+      notifications.show({ color: "red", title: textes.confidentialite.nonEnregistre, message: enErreur(erreur).message, autoClose: 15000 });
+    }
+  }
   // Chaque écran s'ouvre par son haut : son titre et ce qu'il faut faire d'abord. (WebView2 renvoie
   // une promesse de `scrollTo` : l'effet ne doit rien renvoyer.)
   useEffect(() => {
@@ -145,6 +182,7 @@ export default function App() {
 
       {/* Les outils restent montés : on retrouve son travail en changeant d'outil. */}
       <AppShell.Main>
+        <BandeauMiseAJour miseAJour={miseAJour} versionActuelle={version} />
         <Box display={vue === "accueil" ? undefined : "none"}>
           <Accueil groupes={GROUPES} onOutil={setVue} onFichiers={(fichiers) => recevoir.current(fichiers, null)} />
         </Box>
@@ -196,7 +234,8 @@ export default function App() {
         )}
       </Modal>
 
-      <APropos ouvert={aProposOuvert} fermer={aPropos.close} />
+      <APropos ouvert={aProposOuvert} fermer={aPropos.close} confidentialite={confidentialite} regler={(reglage) => void regler(reglage)} miseAJour={miseAJour} />
+      <QuestionStatistiques ouverte={questionEnAttente} repondre={(reponse) => void regler(reponse)} />
     </AppShell>
   );
 }

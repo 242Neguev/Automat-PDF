@@ -3,6 +3,9 @@ import { IconBrandGithub, IconCheck, IconCopy, IconMail, IconPhone } from "@tabl
 import nomEauSeche from "./assets/eau-seche/nom.png";
 import symboleEauSeche from "./assets/eau-seche/symbole.png";
 import { version } from "../package.json";
+import type { Confidentialite } from "./coeur";
+import { ReglagesConfidentialite, type Reglage } from "./Confidentialite";
+import type { MiseAJour } from "./MiseAJour";
 import { textes } from "./textes";
 
 const t = textes.aPropos;
@@ -26,9 +29,18 @@ function Coordonnee({ icone: Icone, valeur }: { icone: typeof IconPhone; valeur:
   );
 }
 
-export default function APropos({ ouvert, fermer }: { ouvert: boolean; fermer: () => void }) {
+interface Props {
+  ouvert: boolean;
+  fermer: () => void;
+  /** null tant que les réglages ne sont pas lus. */
+  confidentialite: Confidentialite | null;
+  regler: (reglage: Reglage) => void;
+  miseAJour: MiseAJour;
+}
+
+export default function APropos({ ouvert, fermer, confidentialite, regler, miseAJour }: Props) {
   return (
-    <Modal opened={ouvert} onClose={fermer} title={t.titre} centered size="md">
+    <Modal opened={ouvert} onClose={fermer} title={t.titre} centered size="lg">
       <Stack gap="md">
         <div>
           <Title order={3}>{textes.application}</Title>
@@ -37,6 +49,12 @@ export default function APropos({ ouvert, fermer }: { ouvert: boolean; fermer: (
           </Text>
           <Text mt="xs">{t.description}</Text>
         </div>
+        {confidentialite && (
+          <>
+            <Divider label={textes.confidentialite.titre} labelPosition="left" />
+            <ReglagesConfidentialite confidentialite={confidentialite} regler={regler} miseAJour={miseAJour} />
+          </>
+        )}
         <Divider label={t.editeur} labelPosition="left" />
         {/* La charte Eau sèche impose une zone de protection autour du symbole : on le laisse respirer. */}
         <Group gap="xl" py="sm" justify="center">

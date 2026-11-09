@@ -178,7 +178,20 @@ Outlook classique doit être ouvert.
 3. **Supprimer**, puis confirmer.
    **Attendu** : la liste des réglages enregistrés est vide (« Aucun réglage enregistré pour l'instant »).
 
-## 10. Désinstaller
+## 10. Mises à jour et statistiques
+
+À faire avec un installateur compilé par GitHub (étiquette `vX.Y.Z`) : seul celui-là peut envoyer des statistiques.
+
+1. Premier lancement après l'installation.
+   **Attendu** : la question « Aider Eau sèche à améliorer Automat-PDF ? », avec « Me prévenir quand une nouvelle version est disponible » coché ; rien d'autre ne s'affiche tant qu'on n'a pas répondu. Choisir **Oui, j'accepte**.
+2. Quelques minutes plus tard, dans le classeur des statistiques ([statistiques/README.md](../../statistiques/README.md)).
+   **Attendu** : une ligne dans « Installations », un e-mail « nouvelle installation ». Fermer puis rouvrir Automat-PDF : la colonne « Ouvertures » passe à 2, sans nouvel e-mail.
+3. **À propos** (en haut à droite) : **Rechercher une mise à jour**.
+   **Attendu** : « Vous avez la dernière version. » Désactiver **Envoyer des statistiques anonymes**, fermer puis rouvrir Automat-PDF : aucune ouverture de plus dans le classeur.
+4. Quand une version plus récente est publiée sur GitHub (publication qui n'est plus un brouillon) : lancer l'ancienne.
+   **Attendu** : au bout de quelques secondes, le bandeau « Une nouvelle version d'Automat-PDF est disponible ». **Mettre à jour** : barre de téléchargement, puis une petite fenêtre d'installation sans question, puis Automat-PDF se rouvre, avec la nouvelle version dans **À propos**. Les réglages enregistrés et le clic droit sont toujours là.
+
+## 11. Désinstaller
 
 1. *Paramètres > Applications* : désinstaller Automat-PDF.
 2. Rouvrir une fenêtre de l'Explorateur et faire un clic droit sur un PDF, une image et un document Word.
@@ -198,7 +211,8 @@ Outlook classique doit être ouvert.
 | 7. Séparer par personne | | |
 | 8. Envoi par e-mail (8a messagerie, 8b Outlook) | | |
 | 9. Réglages enregistrés | | |
-| 10. Désinstallation | | |
+| 10. Mises à jour et statistiques | | |
+| 11. Désinstallation | | |
 
 Les parties 1, 2, 5, 6 et 8 sont les plus importantes : ce sont celles qui n'ont jamais pu être essayées.
 

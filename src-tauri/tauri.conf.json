@@ -50,5 +50,15 @@
         "language": "fr-FR"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU2M0ZCNjMwNDQ1NjUyODgKUldTSVVsWkVNTFkvVmlvWXZWMm5yUzFTbzBGLzdUbzJyQUFOQXdlUEgyOWg3YXo1SWhqOTZHVUoK",
+      "endpoints": ["https://github.com/242Neguev/Automat-PDF/releases/latest/download/latest.json"],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
