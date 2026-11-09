@@ -8,9 +8,10 @@
 # - TAURI_SIGNING_PRIVATE_KEY et TAURI_SIGNING_PRIVATE_KEY_PASSWORD (obligatoires) : clé qui signe
 #   les mises à jour ; l'application installée refuse une mise à jour dont la signature ne
 #   correspond pas à la clé publique de tauri.conf.json.
-# - AUTOMAT_PDF_STATISTIQUES (facultatif) : adresse du service qui reçoit les statistiques
-#   anonymes, envoyées seulement avec l'accord de l'utilisateur (voir statistiques/README.md).
-#   Sans ce secret, l'application ne pose pas la question et n'envoie rien.
+# - AUTOMAT_PDF_STATISTIQUES (facultatif) : adresse qui reçoit les statistiques anonymes (site de
+#   SI-Tech Global Consulting, pour Eau sèche), envoyées seulement avec l'accord de l'utilisateur
+#   (voir « Confidentialité » dans README.md). Sans ce secret, l'application ne pose pas la
+#   question et n'envoie rien.
 name: Installateur Windows
 
 on:

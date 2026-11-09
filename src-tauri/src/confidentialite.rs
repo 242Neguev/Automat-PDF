@@ -10,8 +10,9 @@
 //!   ni une adresse.
 //!
 //! L'adresse qui reçoit les statistiques est fixée à la compilation (`AUTOMAT_PDF_STATISTIQUES`,
-//! secret de GitHub Actions). Sans elle, comme dans les copies compilées par d'autres, la question
-//! n'est pas posée et rien n'est envoyé.
+//! secret de GitHub Actions) : celle du site de SI-Tech Global Consulting, qui les reçoit pour
+//! Eau sèche. Sans elle, comme dans les copies compilées par d'autres, la question n'est pas posée
+//! et rien n'est envoyé.
 
 use std::time::Duration;
 
@@ -32,8 +33,14 @@ fn adresse_valable(adresse: &str) -> bool {
         || (cfg!(debug_assertions) && adresse.starts_with("http://127.0.0.1:"))
 }
 
-/// Édition d'Automat-PDF, pour distinguer plus tard l'édition libre de l'édition payante.
-const EDITION: &str = "libre";
+/// Édition d'Automat-PDF, pour distinguer plus tard l'édition libre de l'édition payante. Les
+/// compilations de développement envoient « essai » : le site enregistre ces signaux sans jamais
+/// les compter, et les efface au bout de 7 jours.
+const EDITION: &str = if cfg!(debug_assertions) {
+    "essai"
+} else {
+    "libre"
+};
 
 /// Ce qui est enregistré dans le fichier des réglages de confidentialité.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -277,8 +284,8 @@ pub fn systeme() -> String {
     }
 }
 
-/// Envoie le signal. Le service qui le reçoit répond `{"ok":true}` : toute autre réponse (une page
-/// de connexion de Google, par exemple, si le service est mal déployé) est un échec.
+/// Envoie le signal. Le site qui le reçoit répond `{"ok":true}` : toute autre réponse (la page
+/// anti-DDoS de l'hébergeur, par exemple) est un échec.
 pub fn envoyer(adresse: &str, signal: &Signal) -> Result<(), Erreur> {
     let echec = |raison: String| {
         Erreur::simple(format!(
@@ -291,7 +298,8 @@ pub fn envoyer(adresse: &str, signal: &Signal) -> Result<(), Erreur> {
         .user_agent(concat!("Automat-PDF/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|erreur| echec(erreur.to_string()))?;
-    // Google Apps Script répond à l'envoi par une redirection, suivie avec une simple lecture.
+    // Le site répond directement. Une redirection 307 ou 308 (adresse déplacée) garde l'envoi ;
+    // une 301, 302 ou 303 le change en simple lecture, que le site refuse : le signal est perdu.
     let reponse = client
         .post(adresse)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -403,7 +411,15 @@ mod tests {
         assert_eq!(premier.version, env!("CARGO_PKG_VERSION"));
         assert_eq!(premier.systeme, "Windows 11 24H2 (26100)");
         assert_eq!(premier.langue, "fr-FR");
-        assert_eq!(premier.edition, "libre");
+        // Ces tests sont compilés en mode développement : leurs signaux ne sont jamais comptés.
+        assert_eq!(
+            premier.edition,
+            if cfg!(debug_assertions) {
+                "essai"
+            } else {
+                "libre"
+            }
+        );
         let json = serde_json::to_value(&premier).unwrap();
         let mut champs: Vec<&str> = json
             .as_object()
@@ -467,7 +483,7 @@ mod tests {
     #[test]
     fn n_accepte_qu_une_adresse_chiffree() {
         assert!(adresse_valable(
-            "https://script.google.com/macros/s/AKfycb/exec"
+            "https://www.sitech-global.com/api/logiciels/v1/automat-pdf/signaux"
         ));
         assert!(!adresse_valable("http://exemple.com/statistiques"));
         assert!(!adresse_valable("ftp://exemple.com"));
@@ -478,39 +494,73 @@ mod tests {
         }
     }
 
-    #[test]
-    fn envoie_le_signal_et_suit_la_redirection() {
-        // Comme Google Apps Script : l'envoi est redirigé vers la réponse, lue par un GET.
-        let serveur = serveur_local(|methode, chemin| match (methode, chemin) {
-            ("POST", "/statistiques") => (302, "Location: /reponse\r\n", String::new()),
-            ("GET", "/reponse") => (200, "", r#"{"ok":true}"#.to_string()),
-            _ => (404, "", String::new()),
-        });
+    /// Signal d'essai, avec un numéro tiré au hasard.
+    fn signal_d_essai() -> (Reglages, Signal) {
         let mut reglages = Reglages::default();
         reglages.regler(None, Some(true)).unwrap();
         let signal = reglages.signal("fr-FR", "Windows 11 24H2 (26100)").unwrap();
-        envoyer(&format!("{}/statistiques", serveur.adresse), &signal).unwrap();
+        (reglages, signal)
+    }
+
+    #[test]
+    fn envoie_le_signal_au_site() {
+        // Comme le site de Sitech : un POST, et la réponse directe, sans redirection.
+        let serveur = serveur_local(|methode, chemin| match (methode, chemin) {
+            ("POST", "/api/logiciels/v1/automat-pdf/signaux") => (
+                200,
+                "Content-Type: application/json\r\n",
+                r#"{"ok":true}"#.to_string(),
+            ),
+            _ => (405, "", String::new()),
+        });
+        let (reglages, signal) = signal_d_essai();
+        envoyer(
+            &format!("{}/api/logiciels/v1/automat-pdf/signaux", serveur.adresse),
+            &signal,
+        )
+        .unwrap();
         let requetes = serveur.requetes();
-        assert_eq!(requetes.len(), 2, "{requetes:?}");
-        let (methode, chemin, corps) = &requetes[0];
-        assert_eq!(
-            (methode.as_str(), chemin.as_str()),
-            ("POST", "/statistiques")
-        );
-        let recu: serde_json::Value = serde_json::from_str(corps).unwrap();
+        assert_eq!(requetes.len(), 1, "{requetes:?}");
+        let recu: serde_json::Value = serde_json::from_str(&requetes[0].2).unwrap();
         assert_eq!(
             recu["installation"],
             reglages.installation.unwrap().as_str()
         );
         assert_eq!(recu["evenement"], "installation");
         assert_eq!(recu["langue"], "fr-FR");
-        assert_eq!(requetes[1].0, "GET");
+        assert_eq!(recu["edition"], EDITION);
+    }
+
+    #[test]
+    fn garde_l_envoi_seulement_sur_une_redirection_307_ou_308() {
+        // Si l'adresse du site devait changer, il redirigerait en 308 : l'envoi est refait.
+        let deplace = serveur_local(|methode, chemin| match (methode, chemin) {
+            ("POST", "/ancienne") => (308, "Location: /nouvelle\r\n", String::new()),
+            ("POST", "/nouvelle") => (200, "", r#"{"ok":true}"#.to_string()),
+            _ => (405, "", String::new()),
+        });
+        let (_, signal) = signal_d_essai();
+        envoyer(&format!("{}/ancienne", deplace.adresse), &signal).unwrap();
+        let requetes = deplace.requetes();
+        assert_eq!(requetes.len(), 2, "{requetes:?}");
+        assert_eq!(requetes[1].0, "POST");
+        assert_eq!(requetes[1].2, requetes[0].2, "le même signal");
+
+        // Une 301 change l'envoi en simple lecture : le site la refuse, le signal est perdu.
+        let mal_redirige = serveur_local(|methode, _| match methode {
+            "POST" => (301, "Location: /ailleurs\r\n", String::new()),
+            _ => (405, "", String::new()),
+        });
+        let erreur = envoyer(&mal_redirige.adresse, &signal).unwrap_err();
+        assert!(erreur.message.contains("405"), "{}", erreur.message);
+        assert_eq!(mal_redirige.requetes()[1].0, "GET");
     }
 
     #[test]
     fn refuse_une_reponse_inattendue() {
-        // Service mal déployé : Google renvoie sa page de connexion, avec le statut 200.
-        let serveur = serveur_local(|_, _| (200, "", "<html>Connexion</html>".to_string()));
+        // La page anti-DDoS de l'hébergeur arrive avec le statut 200 : ce n'est pas un accord.
+        let serveur =
+            serveur_local(|_, _| (200, "", "<html>LWS Protection DDoS</html>".to_string()));
         let mut reglages = Reglages::default();
         reglages.regler(None, Some(true)).unwrap();
         let signal = reglages.signal("fr", "Windows").unwrap();
