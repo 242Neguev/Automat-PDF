@@ -7,6 +7,7 @@ import { dossierDe, nomDe } from "../../donnees/chemins";
 import { lirePlages } from "../../donnees/plages";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -107,9 +108,11 @@ export default function PdfEnImages() {
               <Text size="sm" fw={500}>
                 {t.resume(nombre)}
               </Text>
-              <Action icone={IconPhoto} enCours={enCours} raison={nombre === 0 ? t.raison : null} onClick={() => void creer()}>
-                {t.creer}
-              </Action>
+              <BarreAction>
+                <Action icone={IconPhoto} enCours={enCours} raison={nombre === 0 ? t.raison : null} onClick={() => void creer()}>
+                  {t.creer}
+                </Action>
+              </BarreAction>
             </Stack>
           </Group>
         </Paper>

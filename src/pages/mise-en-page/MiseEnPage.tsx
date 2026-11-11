@@ -6,6 +6,7 @@ import { imposerPdf, pagesPdf, type Disposition } from "../../coeur";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -164,16 +165,18 @@ export default function MiseEnPage() {
         })}
       </SimpleGrid>
 
-      <Group>
-        <Action icone={IconLayoutColumns} enCours={enCours} raison={source ? null : t.raison} onClick={() => void creer()}>
-          {t.creer}
-        </Action>
-        {source && (
-          <Text size="sm" c="dimmed">
-            {disposition === "livret" ? t.livret(produites / 2) : t.resultat(produites)}
-          </Text>
-        )}
-      </Group>
+      <BarreAction>
+        <Group>
+          <Action icone={IconLayoutColumns} enCours={enCours} raison={source ? null : t.raison} onClick={() => void creer()}>
+            {t.creer}
+          </Action>
+          {source && (
+            <Text size="sm" c="dimmed">
+              {disposition === "livret" ? t.livret(produites / 2) : t.resultat(produites)}
+            </Text>
+          )}
+        </Group>
+      </BarreAction>
       <Resultat cree={cree} onFermer={() => setCree(null)} />
     </Stack>
   );

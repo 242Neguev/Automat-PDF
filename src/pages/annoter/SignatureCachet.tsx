@@ -7,6 +7,7 @@ import { aCote, nomDe } from "../../donnees/chemins";
 import { pagesSelon, type ChoixPages } from "../../donnees/plages";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { dela, useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -238,8 +239,9 @@ export default function SignatureCachet() {
       </Box>
 
       {pdf && (
-        <Group align="flex-start" gap="lg" wrap="nowrap">
-          <Stack gap="md" maw={420} style={{ flex: 1 }}>
+        // Fenêtre étroite (portable) : la page passe sous les réglages au lieu de déborder.
+        <Group align="flex-start" gap="lg">
+          <Stack gap="md" maw={420} style={{ flex: "1 1 340px" }}>
             <Paper withBorder p="md">
               <Stack gap="xs">
                 <Title order={5}>{t.image}</Title>
@@ -261,9 +263,11 @@ export default function SignatureCachet() {
                 )}
               </Stack>
             </Paper>
-            <Action icone={IconSignature} enCours={enCours} raison={raison} onClick={() => void creer()}>
-              {t.creer}
-            </Action>
+            <BarreAction>
+              <Action icone={IconSignature} enCours={enCours} raison={raison} onClick={() => void creer()}>
+                {t.creer}
+              </Action>
+            </BarreAction>
             <Resultat cree={cree} onFermer={() => setCree(null)} />
           </Stack>
 

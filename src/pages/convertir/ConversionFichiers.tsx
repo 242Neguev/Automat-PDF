@@ -8,6 +8,7 @@ import type { Conversions } from "../../coeur";
 import { dossierDe, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -116,9 +117,11 @@ export default function ConversionFichiers({ outil, filtre, deposer, deposerDeta
       <Text size="sm" c="dimmed">
         {aide}
       </Text>
-      <Action icone={IconTransform} enCours={enCours} raison={fichiers.length === 0 && !enCours ? t.raison : null} onClick={() => void lancer()}>
-        {t.convertir}
-      </Action>
+      <BarreAction>
+        <Action icone={IconTransform} enCours={enCours} raison={fichiers.length === 0 && !enCours ? t.raison : null} onClick={() => void lancer()}>
+          {t.convertir}
+        </Action>
+      </BarreAction>
       {enCours && progression && (
         <div>
           <Progress value={(100 * progression[0]) / Math.max(1, progression[1])} />

@@ -6,6 +6,7 @@ import { caviarderPdf, pagesPdf, type Zone } from "../../coeur";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -174,8 +175,9 @@ export default function Caviarder() {
       </Box>
 
       {source && (
-        <Group align="flex-start" gap="lg" wrap="nowrap">
-          <Stack gap="md" maw={400} style={{ flex: 1 }}>
+        // Fenêtre étroite (portable) : la page passe sous les réglages au lieu de déborder.
+        <Group align="flex-start" gap="lg">
+          <Stack gap="md" maw={400} style={{ flex: "1 1 300px" }}>
             <Paper withBorder p="md">
               <Stack gap="xs">
                 <Text size="sm">{t.aide}</Text>
@@ -205,9 +207,11 @@ export default function Caviarder() {
                 </Text>
               </Stack>
             </Paper>
-            <Action icone={IconEyeOff} couleur="dark" enCours={enCours} raison={total === 0 ? t.raison : null} onClick={() => void creer()}>
-              {t.creer}
-            </Action>
+            <BarreAction>
+              <Action icone={IconEyeOff} couleur="dark" enCours={enCours} raison={total === 0 ? t.raison : null} onClick={() => void creer()}>
+                {t.creer}
+              </Action>
+            </BarreAction>
             <Resultat cree={cree} onFermer={() => setCree(null)} />
           </Stack>
 

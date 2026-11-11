@@ -25,6 +25,7 @@ import { attribuerParListe, attribuerParRepere, pagesAVerifier, pagesParPersonne
 import { balisesDe, remplir, remplirTexte, transformationsParDefaut, valeursDeLigne } from "../../donnees/valeurs";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import ChampModele from "../commun/ChampModele";
 import Etape from "../commun/Etape";
 import EtapeListe from "../commun/EtapeListe";
@@ -574,9 +575,11 @@ export default function SeparationParPersonne() {
                   </Text>
                 )}
                 {sansMotDePasse.length > 0 && <Alert color="red">{t.motDePasseVide(quelques(sansMotDePasse.map((fichier) => fichier.nom)))}</Alert>}
-                <Action icone={IconUsers} enCours={enCours} raison={raisonCreer} onClick={() => void creer()}>
-                  {t.creer}
-                </Action>
+                <BarreAction>
+                  <Action icone={IconUsers} enCours={enCours} raison={raisonCreer} onClick={() => void creer()}>
+                    {t.creer}
+                  </Action>
+                </BarreAction>
                 <Resultat cree={cree} onFermer={() => setCree(null)} />
               </Stack>
             )}

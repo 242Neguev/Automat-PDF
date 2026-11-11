@@ -7,6 +7,7 @@ import { aCote, nomDe } from "../../donnees/chemins";
 import { formaterTaille } from "../../donnees/tailles";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -75,9 +76,11 @@ export default function Compresser() {
             <Text size="sm" c="dimmed">
               {t.niveauxAide[niveau]}
             </Text>
-            <Action icone={IconArrowsMinimize} enCours={enCours} onClick={() => void compresser()}>
-              {t.compresser}
-            </Action>
+            <BarreAction>
+              <Action icone={IconArrowsMinimize} enCours={enCours} onClick={() => void compresser()}>
+                {t.compresser}
+              </Action>
+            </BarreAction>
           </Stack>
         </Paper>
       )}

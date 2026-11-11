@@ -6,6 +6,7 @@ import { fusionnerPdf, infosPdf } from "../../coeur";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -121,9 +122,11 @@ export default function FusionPdf() {
           </Group>
         </>
       )}
-      <Action icone={IconFiles} enCours={enCours} raison={raison} onClick={() => void fusionner()}>
-        {t.fusion.fusionner}
-      </Action>
+      <BarreAction>
+        <Action icone={IconFiles} enCours={enCours} raison={raison} onClick={() => void fusionner()}>
+          {t.fusion.fusionner}
+        </Action>
+      </BarreAction>
       <Resultat cree={cree} onFermer={() => setCree(null)} />
     </Stack>
   );

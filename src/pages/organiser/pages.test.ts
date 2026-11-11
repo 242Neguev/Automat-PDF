@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { intercaler } from "../intercaler/ordre";
-import { deplacer, pivoter, plage, type PageTravail } from "./pages";
+import { COTE_APERCU, coteApercu, deplacer, pivoter, plage, type PageTravail } from "./pages";
 
 const doc = (n: number): PageTravail[] => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, source: 0, page: i, rotation: 0 }));
 const ids = (pages: PageTravail[]) => pages.map((page) => page.id).join(" ");
@@ -25,6 +25,18 @@ describe("organisation des pages", () => {
   it("sélectionne une plage dans les deux sens", () => {
     expect(plage(doc(5), "p4", "p2")).toEqual(["p2", "p3", "p4"]);
     expect(plage(doc(5), "inconnue", "p2")).toEqual(["p2"]);
+  });
+
+  it("réduit l'aperçu en grand pour qu'il tienne dans la fenêtre", () => {
+    // Grand écran : la taille pleine.
+    expect(coteApercu(1920, 1009)).toBe(COTE_APERCU);
+    // Portable 1920 × 1080 à 150 %, fenêtre agrandie : 1280 × 649 pixels.
+    expect(coteApercu(1280, 649)).toBe(464);
+    // Plus petite fenêtre permise (900 × 460) : la hauteur décide.
+    expect(coteApercu(900, 460)).toBe(294);
+    // Fenêtre étroite : la largeur décide.
+    expect(coteApercu(700, 1000)).toBe(490);
+    expect(coteApercu(300, 200)).toBe(200);
   });
 });
 

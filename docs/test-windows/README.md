@@ -193,7 +193,22 @@ Outlook classique doit être ouvert.
 
 **En mode développement** (`npm run tauri dev`), l'application n'envoie des statistiques que si la variable `AUTOMAT_PDF_STATISTIQUES` contient l'adresse du site au moment de la compilation. Ses signaux portent alors l'édition « essai » : le site les enregistre sans jamais les compter (« Dernier signal d'essai » dans la vue d'ensemble) et les efface au bout de 7 jours. Après un tel essai, supprimer `%APPDATA%\com.eauseche.automatpdf\confidentialite.json` : ce fichier est partagé avec l'application installée, qui sinon ne poserait pas la question et reprendrait le numéro de l'essai.
 
-## 11. Désinstaller
+## 11. Petit écran
+
+Pour reproduire l'écran d'un portable : *Paramètres > Système > Écran*, **Échelle** à 150 % (ou 175 %), sur un écran de 1920 × 1080. Remettre la valeur d'origine à la fin.
+
+1. Lancer Automat-PDF.
+   **Attendu** : la fenêtre s'ouvre entière ; son bas ne passe pas sous la barre des tâches.
+2. Agrandir la fenêtre (bouton carré en haut à droite, ou double-clic sur la barre de titre).
+   **Attendu** : le bas de la fenêtre s'arrête au-dessus de la barre des tâches ; le menu de gauche défile jusqu'à sa dernière entrée.
+3. **Mot de passe**, un PDF choisi, **Protéger**.
+   **Attendu** : le bouton **Protéger le PDF…** reste visible en bas de la fenêtre, détaché par une ombre, tant que le bas de la page n'est pas affiché ; en descendant jusqu'en bas, il reprend sa place sous les réglages. Une fois le PDF enregistré, l'encadré vert vient à l'écran.
+4. **Organiser**, un PDF ajouté : double-cliquer sur une page.
+   **Attendu** : l'aperçu en grand tient entier dans la fenêtre : page, flèches et légende, sans rien faire défiler.
+5. Rétrécir la fenêtre en tirant son coin, le plus possible.
+   **Attendu** : elle s'arrête à 900 × 460 environ ; chaque page défile. Dans **Signature ou cachet**, un PDF choisi, la page passe sous les réglages au lieu de déborder.
+
+## 12. Désinstaller
 
 1. *Paramètres > Applications* : désinstaller Automat-PDF.
 2. Rouvrir une fenêtre de l'Explorateur et faire un clic droit sur un PDF, une image et un document Word.
@@ -214,7 +229,8 @@ Outlook classique doit être ouvert.
 | 8. Envoi par e-mail (8a messagerie, 8b Outlook) | | |
 | 9. Réglages enregistrés | | |
 | 10. Mises à jour et statistiques | | |
-| 11. Désinstallation | | |
+| 11. Petit écran | | |
+| 12. Désinstallation | | |
 
 Les parties 1, 2, 5, 6 et 8 sont les plus importantes : ce sont celles qui n'ont jamais pu être essayées.
 
@@ -244,3 +260,5 @@ Sur un PC Windows 11 : 8 Go de mémoire, projet dans OneDrive, Office 2019 dont 
 **Prise en main sans formation** (6 novembre 2026, même PC). L'application, lancée en mode développement, a été pilotée par les outils de développement de WebView2 ; les fichiers sont arrivés comme par le clic droit, et les fenêtres d'enregistrement de Windows ont été validées par l'accessibilité. Conformes : l'accueil, la recherche (« je veux réduire la taille » ne donne que **Compresser**), un PDF déposé sur l'accueil (13 outils proposés) ; **Compresser** de bout en bout, la fenêtre d'enregistrement ouverte dans le dossier du PDF, le résultat enregistré à côté de l'original et **Afficher dans le dossier** qui ouvre l'Explorateur sur ce fichier, sélectionné, malgré les espaces et l'accent du nom ; essais 7.2 à 7.5, résultats attendus compris, puis **Ouvrir le dossier**. Défaut trouvé et corrigé pendant l'essai : le retour en haut de page à chaque changement d'outil faisait tomber l'interface sous WebView2, où le défilement renvoie une promesse.
 
 **Mises à jour et statistiques** (9 novembre 2026, même PC). L'application, lancée en mode développement et pilotée de la même façon, a d'abord été essayée avec un faux serveur de statistiques et un faux installateur signé. Conformes : la question au premier lancement, sans aucun envoi avant la réponse ; « Non merci », qui ne tire aucun numéro et n'envoie rien ; les statistiques activées ensuite dans « À propos » ; le signal « installation », puis « ouverture » avec le même numéro au lancement suivant ; le bandeau de mise à jour et « Plus tard » ; une signature falsifiée et une ancienne version resservie, refusées sans lancer l'installateur ; la bonne version téléchargée, l'installateur lancé, puis l'application fermée. Ensuite, vers la vraie adresse du site de Sitech, avec des signaux d'essai : après « Oui, j'accepte », le site a accepté le signal « installation » en 2 secondes ; au lancement suivant, le signal « ouverture » est parti sans erreur. Tant qu'aucune version publiée n'a de `latest.json` (la 0.2.0 n'en a pas), la recherche des mises à jour échoue sans rien afficher. Reste à faire avec l'installateur de la 0.2.1 : la partie 10 en entier, dont l'e-mail « nouvelle installation » et le remplacement de la 0.2.0.
+
+**Petits écrans** (11 novembre 2026, même PC, écran 1920 × 1080 à 125 %). Un utilisateur avait signalé des boutons cachés sous la barre des tâches, fenêtre agrandie. Cause reproduite avec une fenêtre Windows d'essai : quand sa taille minimale dépasse la place utile, Windows l'agrandit à cette taille minimale, plus haute que l'écran (880 pixels pour 816 utiles). Or Automat-PDF exigeait 680 pixels de contenu : sur un écran 1920 × 1080 à 150 %, la fenêtre agrandie débordait de 46 pixels sous la barre des tâches (234 à 175 %, 421 à 200 %) ; elle en exige maintenant 460, et tient dans ces trois cas. Vraie fenêtre de la compilation de développement : elle annonce à Windows un minimum de 900 × 460 ; à l'ouverture, son contenu (1280 × 786) s'arrête au pixel près au-dessus de la barre des tâches, alors qu'avec 820 de haut il passait 43 pixels dessous ; agrandie, de même. L'interface a ensuite été essayée dans Edge sans fenêtre (le moteur de WebView2), cœur simulé, aux tailles de 1280 × 649 (150 %, fenêtre agrandie), 1097 × 546 (175 %), 960 × 469 (200 %) et 900 × 460 : 22 vérifications conformes. Les boutons de la question du premier lancement restent visibles, même quand son texte doit défiler ; **Protéger le PDF…** et **Fusionner…** (14 PDF) restent en bas de la fenêtre, puis reprennent leur place une fois la page descendue ; l'encadré du résultat vient à l'écran ; l'aperçu en grand d'**Organiser** tient entier ; **Signature ou cachet**, **Masquer des passages** et **Numéros et tampon** passent la page sous les réglages sous 1280 de large, sans rien faire déborder ; aucun des 16 écrans ne déborde à droite à 900 de large. Reste à faire sur un portable réglé à 150 % : la partie 11.

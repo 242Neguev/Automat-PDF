@@ -3,6 +3,7 @@ import { Button, Checkbox, Divider, Group, List, Modal, Stack, Switch, Text } fr
 import { IconDownload, IconRefresh } from "@tabler/icons-react";
 import type { Confidentialite } from "./coeur";
 import { etatEnClair, type MiseAJour } from "./MiseAJour";
+import BarreAction from "./pages/commun/BarreAction";
 import { textes } from "./textes";
 
 const t = textes.confidentialite;
@@ -53,14 +54,17 @@ export function QuestionStatistiques({ ouverte, repondre }: { ouverte: boolean; 
           label={t.misesAJour}
           description={t.misesAJourDetail}
         />
-        <Group grow>
-          <Button variant="default" size="md" onClick={() => repondre({ statistiques: false, misesAJour })}>
-            {t.non}
-          </Button>
-          <Button variant="default" size="md" onClick={() => repondre({ statistiques: true, misesAJour })}>
-            {t.oui}
-          </Button>
-        </Group>
+        {/* La réponse reste à l'écran, même sur un portable où le texte ne tient pas en entier. */}
+        <BarreAction pied>
+          <Group grow>
+            <Button variant="default" size="md" onClick={() => repondre({ statistiques: false, misesAJour })}>
+              {t.non}
+            </Button>
+            <Button variant="default" size="md" onClick={() => repondre({ statistiques: true, misesAJour })}>
+              {t.oui}
+            </Button>
+          </Group>
+        </BarreAction>
       </Stack>
     </Modal>
   );

@@ -5,6 +5,7 @@ import { IconCheck, IconInfoCircle, IconPlugConnected } from "@tabler/icons-reac
 import { enregistrerMotDePasseMessagerie, testerMessagerie, type CompteMessagerie } from "../../coeur";
 import { avecAdresse, avecChiffrement, COMPTE_VIDE, manqueAuCompte, suggestion, type Chiffrement } from "../../donnees/messagerie";
 import { textes } from "../../textes";
+import BarreAction from "../commun/BarreAction";
 import { signalerErreur } from "../commun/signalerErreur";
 
 const t = textes.messagerie;
@@ -136,19 +137,21 @@ export default function ReglagesMessagerie({ ouvert, compte, motDePasseGarde, on
             {t.manque[manque]}
           </Text>
         )}
-        <Group justify="space-between" mt="xs">
-          <Button variant="light" leftSection={<IconPlugConnected size={18} />} loading={test} disabled={manque !== null || enregistrement} onClick={() => void tester()}>
-            {t.tester}
-          </Button>
-          <Group gap="sm">
-            <Button variant="default" onClick={onFermer}>
-              {t.annuler}
+        <BarreAction pied>
+          <Group justify="space-between" mt="xs">
+            <Button variant="light" leftSection={<IconPlugConnected size={18} />} loading={test} disabled={manque !== null || enregistrement} onClick={() => void tester()}>
+              {t.tester}
             </Button>
-            <Button loading={enregistrement} disabled={manque !== null || test} onClick={() => void enregistrer()}>
-              {t.enregistrer}
-            </Button>
+            <Group gap="sm">
+              <Button variant="default" onClick={onFermer}>
+                {t.annuler}
+              </Button>
+              <Button loading={enregistrement} disabled={manque !== null || test} onClick={() => void enregistrer()}>
+                {t.enregistrer}
+              </Button>
+            </Group>
           </Group>
-        </Group>
+        </BarreAction>
       </Stack>
     </Modal>
   );

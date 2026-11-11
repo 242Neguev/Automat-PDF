@@ -6,6 +6,7 @@ import { enregistrerPages, pagesPdf } from "../../coeur";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -118,9 +119,11 @@ export default function IntercalerPdf() {
                 </Stack>
               ))}
             </Group>
-            <Action icone={IconLayersIntersect} enCours={enCours} onClick={() => void enregistrer()}>
-              {t.intercaler}
-            </Action>
+            <BarreAction>
+              <Action icone={IconLayersIntersect} enCours={enCours} onClick={() => void enregistrer()}>
+                {t.intercaler}
+              </Action>
+            </BarreAction>
           </Stack>
         </Paper>
       )}

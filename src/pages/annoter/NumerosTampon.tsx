@@ -26,6 +26,7 @@ import { aCote, nomDe } from "../../donnees/chemins";
 import { pagesSelon, type ChoixPages } from "../../donnees/plages";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -152,8 +153,9 @@ export default function NumerosTampon() {
         />
       </Box>
 
-      <Group align="flex-start" gap="lg" wrap="nowrap">
-        <Stack gap="md" style={{ flex: 1, minWidth: 0 }} maw={620}>
+      {/* Fenêtre étroite (portable) : l'aperçu passe sous les réglages au lieu de les écraser. */}
+      <Group align="flex-start" gap="lg">
+        <Stack gap="md" style={{ flex: "1 1 340px", minWidth: 0 }} maw={620}>
           <Paper withBorder p="md">
             <Stack gap="sm">
               <Switch label={<Title order={5}>{t.numeros}</Title>} checked={avecNumeros} onChange={(e) => setAvecNumeros(e.currentTarget.checked)} />
@@ -240,9 +242,11 @@ export default function NumerosTampon() {
             </Stack>
           </Paper>
 
-          <Action icone={IconStack2} enCours={enCours} raison={raison} onClick={() => void creer()}>
-            {t.creer}
-          </Action>
+          <BarreAction>
+            <Action icone={IconStack2} enCours={enCours} raison={raison} onClick={() => void creer()}>
+              {t.creer}
+            </Action>
+          </BarreAction>
           <Resultat cree={cree} onFermer={() => setCree(null)} />
         </Stack>
 

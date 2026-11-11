@@ -15,9 +15,10 @@
         "title": "Automat-PDF",
         "width": 1280,
         "height": 820,
-        "minWidth": 1024,
-        "minHeight": 680,
-        "center": true
+        "minWidth": 900,
+        "minHeight": 460,
+        "center": true,
+        "preventOverflow": true
       }
     ],
     "security": {

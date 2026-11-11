@@ -30,6 +30,18 @@ export function pivoter<T extends { id: string; rotation: number }>(pages: T[], 
   return pages.map((page) => (ids.has(page.id) ? { ...page, rotation: (page.rotation + 90 * sens + 360) % 360 } : page));
 }
 
+/** Côté le plus grand de l'aperçu en grand, en pixels. */
+export const COTE_APERCU = 720;
+
+/**
+ * Côté du carré où s'inscrit l'aperçu en grand d'une fenêtre de `largeur` × `hauteur` pixels :
+ * 720 au plus, moins sur un petit écran, pour que la fenêtre d'aperçu (titre, flèches, légende)
+ * tienne entière, marges comprises (5 % de chaque côté).
+ */
+export function coteApercu(largeur: number, hauteur: number): number {
+  return Math.max(200, Math.floor(Math.min(COTE_APERCU, hauteur * 0.9 - 120, largeur * 0.9 - 140)));
+}
+
 /** Pages comprises entre deux pages (incluses), dans l'ordre du document. */
 export function plage(pages: PageTravail[], de: string, a: string): string[] {
   const debut = pages.findIndex((page) => page.id === de);

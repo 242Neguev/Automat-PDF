@@ -8,6 +8,7 @@ import { nomsUniques } from "../../donnees/noms";
 import { balisesDe, remplir, transformationsParDefaut, valeursDeLigne } from "../../donnees/valeurs";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import ChampModele from "../commun/ChampModele";
 import Etape from "../commun/Etape";
 import EtapeListe from "../commun/EtapeListe";
@@ -171,9 +172,11 @@ export default function SeparationPdf() {
                 </List.Item>
               ))}
             </List>
-            <Action icone={IconScissors} enCours={enCours} onClick={() => void separer()}>
-              {ts.separer}
-            </Action>
+            <BarreAction>
+              <Action icone={IconScissors} enCours={enCours} onClick={() => void separer()}>
+                {ts.separer}
+              </Action>
+            </BarreAction>
             <Resultat cree={cree} onFermer={() => setCree(null)} />
           </Etape>
         </>

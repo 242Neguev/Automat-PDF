@@ -11,6 +11,29 @@
   background-color: var(--mantine-color-eau-0);
 }
 
+/*
+ * Barre du bouton principal (BarreAction) : collée au bas de ce qui défile quand la page, ou la
+ * fenêtre de dialogue, est plus haute que la fenêtre. Une fois collée, elle dépasse d'un pixel :
+ * c'est ainsi que l'interface le sait, et ajoute l'ombre qui la détache du contenu.
+ */
+.barre-action {
+  position: sticky;
+  bottom: -1px;
+  z-index: 3;
+  margin-block: calc(var(--mantine-spacing-xs) * -1);
+  padding-block: var(--mantine-spacing-xs);
+  background-color: var(--mantine-color-body);
+  transition: box-shadow 120ms ease;
+}
+.barre-action[data-collee] {
+  box-shadow: 0 -10px 12px -10px rgba(34, 37, 42, 0.4);
+}
+/* Dans une fenêtre de dialogue, la barre descend jusqu'à son bord. */
+.pied-fenetre {
+  margin-bottom: calc(var(--mb-padding, var(--mantine-spacing-md)) * -1);
+  padding-bottom: var(--mb-padding, var(--mantine-spacing-md));
+}
+
 /* Tâches de l'accueil : la tuile survolée ou atteinte au clavier se distingue. */
 .tuile-outil {
   display: block;

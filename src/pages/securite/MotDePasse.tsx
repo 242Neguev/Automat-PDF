@@ -6,6 +6,7 @@ import { deverrouillerPdf, protegerPdf } from "../../coeur";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
+import BarreAction from "../commun/BarreAction";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -72,14 +73,16 @@ export default function MotDePasse() {
             <Switch label={t.copie} checked={droits.copie} onChange={(e) => setDroits({ ...droits, copie: e.currentTarget.checked })} />
             <Switch label={t.modification} checked={droits.modification} onChange={(e) => setDroits({ ...droits, modification: e.currentTarget.checked })} />
             <PasswordInput label={t.proprietaire} description={t.proprietaireAide} value={proprietaire} onChange={(e) => setProprietaire(e.currentTarget.value)} mt="xs" />
-            <Action
-              icone={IconLock}
-              enCours={enCours}
-              raison={raison}
-              onClick={() => void enregistrer(t.nomProtege(base), (sortie) => protegerPdf(source.chemin, { motDePasse, proprietaire, ...droits }, sortie), t.protege)}
-            >
-              {t.proteger}
-            </Action>
+            <BarreAction>
+              <Action
+                icone={IconLock}
+                enCours={enCours}
+                raison={raison}
+                onClick={() => void enregistrer(t.nomProtege(base), (sortie) => protegerPdf(source.chemin, { motDePasse, proprietaire, ...droits }, sortie), t.protege)}
+              >
+                {t.proteger}
+              </Action>
+            </BarreAction>
           </Stack>
         </Paper>
       )}
@@ -91,9 +94,11 @@ export default function MotDePasse() {
             <Text size="sm" c="dimmed">
               {t.retirerAide}
             </Text>
-            <Action icone={IconLockOpen} enCours={enCours} onClick={() => void enregistrer(t.nomLibre(base), (sortie) => deverrouillerPdf(source.chemin, actuel, sortie), t.libere)}>
-              {t.retirer}
-            </Action>
+            <BarreAction>
+              <Action icone={IconLockOpen} enCours={enCours} onClick={() => void enregistrer(t.nomLibre(base), (sortie) => deverrouillerPdf(source.chemin, actuel, sortie), t.libere)}>
+                {t.retirer}
+              </Action>
+            </BarreAction>
           </Stack>
         </Paper>
       )}

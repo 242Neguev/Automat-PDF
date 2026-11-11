@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Alert, Button, Group, Stack, Text } from "@mantine/core";
 import { IconCircleCheck, IconExternalLink, IconFolder, IconFolderOpen } from "@tabler/icons-react";
 import { montrerDansDossier, ouvrirFichier } from "../../coeur";
@@ -24,11 +25,20 @@ export interface Cree {
  * dossier. L'encadré reste jusqu'au travail suivant : on ne perd pas son fichier.
  */
 export default function Resultat({ cree, onFermer }: { cree: Cree | null; onFermer: () => void }) {
+  const encadre = useRef<HTMLDivElement>(null);
+  // L'encadré paraît sous le bouton, souvent hors de l'écran sur un portable : on l'y amène.
+  // (Sous WebView2, le défilement peut renvoyer une promesse : l'effet ne doit rien renvoyer.)
+  useEffect(() => {
+    if (cree) encadre.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [cree]);
   if (!cree) return null;
   const ouvrir = () => void ouvrirFichier(cree.chemin).catch(signalerErreur);
   const montrer = () => void montrerDansDossier(cree.chemin).catch(signalerErreur);
   return (
     <Alert
+      ref={encadre}
+      // Ni sous l'en-tête de la fenêtre, ni collé à son bord.
+      style={{ scrollMarginTop: "calc(var(--app-shell-header-offset, 0rem) + var(--mantine-spacing-md))", scrollMarginBottom: "var(--mantine-spacing-md)" }}
       color={cree.attention ? "orange" : "teal"}
       icon={<IconCircleCheck size={22} />}
       title={cree.titre}
