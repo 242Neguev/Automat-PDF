@@ -1,7 +1,7 @@
 {
   "name": "automat-pdf",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Automat-PDF : fusionner, séparer, organiser et diffuser des PDF",
   "license": "MIT",
   "type": "module",
