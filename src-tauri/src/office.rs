@@ -1,25 +1,42 @@
-//! Conversions avec Microsoft Office, piloté sans l'afficher par `scripts/office.ps1` (Windows) :
-//! documents Word, classeurs Excel et présentations PowerPoint en PDF, LibreOffice prenant le
-//! relais s'il est installé et qu'Office manque ; PDF en document Word modifiable (Word seulement).
+//! Conversions avec Microsoft Office : documents Word, classeurs Excel et présentations PowerPoint
+//! en PDF, LibreOffice prenant le relais s'il est installé et qu'Office manque ; PDF en document
+//! Word modifiable (par Word, ou à défaut par Automat-PDF lui-même). Office est piloté par
+//! `scripts/office.ps1` sous Windows, sans l'afficher, et par AppleScript sous macOS
+//! (`scripts/macos`, voir `mac`).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
+#[cfg(any(windows, target_os = "macos"))]
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+#[cfg(any(windows, target_os = "macos"))]
 use serde_json::json;
 
+#[cfg(target_os = "macos")]
+use crate::applescript as pilote;
 use crate::erreur::{Echec, Erreur};
 use crate::libreoffice;
-use crate::powershell;
+#[cfg(windows)]
+use crate::powershell as pilote;
 
+#[cfg(target_os = "macos")]
+#[path = "office_mac.rs"]
+mod mac;
+#[cfg(target_os = "macos")]
+pub use mac::installee;
+
+/// Windows : le script qui pilote Word, Excel et PowerPoint.
+#[cfg_attr(not(windows), allow(dead_code))]
 const SCRIPT: &str = include_str!("../scripts/office.ps1");
 /// Sans nouvelles d'Office pendant ce temps (une fenêtre attend une réponse…), tout est arrêté.
 /// Un Office dont la licence a expiré peut mettre trois minutes à démarrer : on les lui laisse.
+#[cfg(any(windows, target_os = "macos"))]
 const SILENCE_MAX: Duration = Duration::from_secs(300);
 /// Temps laissé pour arrêter les applications d'Office restées bloquées.
+#[cfg(windows)]
 const ARRET_MAX: Duration = Duration::from_secs(60);
 
 /// Ce que l'on fait d'un fichier, nommé comme dans le script (`sorte`).
@@ -82,6 +99,9 @@ enum Ligne {
         ok: bool,
         #[serde(default)]
         absent: Option<String>,
+        /// macOS : le système ne permet pas à Automat-PDF de piloter cette application.
+        #[serde(default)]
+        refus: Option<String>,
         #[serde(default)]
         details: Option<String>,
     },
@@ -116,14 +136,16 @@ impl Suivi {
                 rang,
                 ok,
                 absent,
+                refus,
                 details,
             } => {
                 // Une application absente, ou impossible à piloter, a fini de démarrer elle aussi.
                 self.en_demarrage = None;
-                let issue = match (ok, absent) {
-                    (true, _) => Issue::Faite,
-                    (false, Some(application)) => Issue::Absente(application),
-                    (false, None) => Issue::Echouee(details.unwrap_or_default()),
+                let issue = match (ok, absent, refus) {
+                    (true, _, _) => Issue::Faite,
+                    (false, _, Some(application)) => Issue::Refusee(application),
+                    (false, Some(application), None) => Issue::Absente(application),
+                    (false, None, None) => Issue::Echouee(details.unwrap_or_default()),
                 };
                 Some((rang, issue))
             }
@@ -138,7 +160,10 @@ enum Issue {
     /// L'application d'Office nécessaire n'est pas installée, ou ne se laisse pas piloter.
     Absente(String),
     /// L'application d'Office nécessaire n'a pas répondu à son lancement : elle a été arrêtée.
+    /// Sous macOS, aussi une application jamais ouverte : son premier lancement se fait à la main.
     Bloquee(String),
+    /// macOS ne permet pas à Automat-PDF de piloter l'application d'Office nécessaire.
+    Refusee(String),
     Echouee(String),
 }
 
@@ -146,6 +171,13 @@ enum Issue {
 fn bloquee(application: &str) -> String {
     format!(
         "Microsoft {application} ne répond pas : une fenêtre attend sans doute une réponse (activation d'Office, premier lancement). Ouvrez {application} une fois à la main, fermez ses fenêtres, puis recommencez."
+    )
+}
+
+/// Message pour une application d'Office que macOS ne laisse pas piloter.
+fn refusee(application: &str) -> String {
+    format!(
+        "macOS ne permet pas à Automat-PDF de piloter Microsoft {application}. Dans Réglages Système › Confidentialité et sécurité › Automatisation, autorisez « Microsoft {application} » pour Automat-PDF, puis recommencez."
     )
 }
 
@@ -182,6 +214,7 @@ fn cibles(sources: &[PathBuf], dossier: &Path, extension: &str) -> Vec<PathBuf> 
 /// Arrête les applications d'Office restées bloquées après un abandon : les processus apparus
 /// depuis leur lancement par le script, sans fenêtre (jamais ceux de l'utilisateur). Le chien de
 /// garde n'arrête que PowerShell : Office, lancé à part par Windows, continuerait sinon, caché.
+#[cfg(windows)]
 fn arreter_les_restes(lancees: &[(String, Vec<u32>)]) {
     if lancees.is_empty() {
         return;
@@ -193,36 +226,92 @@ fn arreter_les_restes(lancees: &[(String, Vec<u32>)]) {
             .collect::<Vec<_>>()
     })
     .to_string();
-    let _ = powershell::lancer(SCRIPT, &donnees, ARRET_MAX, |_| true);
+    let _ = pilote::lancer(SCRIPT, &donnees, ARRET_MAX, |_| true);
 }
 
-/// Issue sur laquelle on ne revient pas : ni application absente, ni application bloquée (un
-/// relais peut alors convertir à sa place).
+/// macOS : les applications lancées par le script et restées bloquées sont arrêtées.
+#[cfg(target_os = "macos")]
+fn arreter_les_restes(lancees: &[(String, Vec<u32>)]) {
+    mac::arreter_les_restes(lancees);
+}
+
+/// Le script qui pilote l'application : sous Windows, un seul pour Word, Excel et PowerPoint.
+#[cfg(windows)]
+fn script(_application: &str) -> String {
+    SCRIPT.to_string()
+}
+
+/// macOS : le script de cette application seule.
+#[cfg(target_os = "macos")]
+fn script(application: &str) -> String {
+    mac::script(application)
+}
+
+/// Deux conversions sont confiées au même script : sous Windows, il pilote toutes les applications.
+#[cfg(windows)]
+fn meme_lot(_application: &str, _autre: &str) -> bool {
+    true
+}
+
+/// macOS : un script ne pilote qu'une application (AppleScript demanderait sinon où trouver celles
+/// qui manquent).
+#[cfg(target_os = "macos")]
+fn meme_lot(application: &str, autre: &str) -> bool {
+    application == autre
+}
+
+/// Ce dont le script n'a pas rendu compte n'a pas été fait.
+#[cfg(any(windows, target_os = "macos"))]
+const NON_RENDU: &str = "Office n'a pas rendu compte de cette conversion.";
+
+/// Issue sur laquelle on ne revient pas : ni application absente, bloquée ou refusée (un relais
+/// peut alors convertir à sa place).
 fn definitive(issue: &Issue) -> bool {
-    !matches!(issue, Issue::Absente(_) | Issue::Bloquee(_))
+    !matches!(
+        issue,
+        Issue::Absente(_) | Issue::Bloquee(_) | Issue::Refusee(_)
+    )
 }
 
-/// Conversions faites par Office ; `progression` reçoit le nombre de conversions terminées (les
-/// conversions laissées à un relais sont comptées par lui). Une application qui ne répond pas à son
-/// lancement, ou qui y interrompt le script, est abandonnée (`Bloquee`) et les autres conversions
-/// reprises sans elle ; un document qui bloque Office (fenêtre, mot de passe) ou l'interrompt est
-/// seul abandonné, les suivants sont repris.
+/// Conversions faites par Office (voir `piloter`).
+#[cfg(windows)]
 fn avec_office(conversions: &[Conversion], progression: &impl Fn(usize)) -> Vec<Issue> {
-    if !cfg!(windows) {
-        return conversions
-            .iter()
-            .map(|conversion| Issue::Absente(conversion.sorte.application().into()))
-            .collect();
-    }
+    piloter(conversions, progression)
+}
+
+/// macOS : conversions faites par Office, sur des copies déposées dans ses conteneurs.
+#[cfg(target_os = "macos")]
+fn avec_office(conversions: &[Conversion], progression: &impl Fn(usize)) -> Vec<Issue> {
+    mac::avec_office(conversions, progression)
+}
+
+/// Ailleurs, Office n'existe pas : un relais convertit, s'il y en a un.
+#[cfg(not(any(windows, target_os = "macos")))]
+fn avec_office(conversions: &[Conversion], _progression: &impl Fn(usize)) -> Vec<Issue> {
+    conversions
+        .iter()
+        .map(|conversion| Issue::Absente(conversion.sorte.application().into()))
+        .collect()
+}
+
+/// Conversions confiées aux scripts qui pilotent Office ; `progression` reçoit le nombre de
+/// conversions terminées (les conversions laissées à un relais sont comptées par lui). Une
+/// application qui ne répond pas à son lancement, ou qui y interrompt le script, est abandonnée
+/// (`Bloquee`) et les autres conversions reprises sans elle ; un document qui bloque Office
+/// (fenêtre, mot de passe) ou l'interrompt est seul abandonné, les suivants sont repris.
+#[cfg(any(windows, target_os = "macos"))]
+fn piloter(conversions: &[Conversion], progression: &impl Fn(usize)) -> Vec<Issue> {
     let mut issues: Vec<Option<Issue>> = vec![None; conversions.len()];
     let mut traitees = 0;
-    loop {
-        let lot: Vec<usize> = (0..conversions.len())
-            .filter(|&rang| issues[rang].is_none())
+    // Le lot de chaque passage : les conversions restantes, à partir de la première.
+    while let Some(premiere) = (0..conversions.len()).find(|&rang| issues[rang].is_none()) {
+        let application = conversions[premiere].sorte.application();
+        let lot: Vec<usize> = (premiere..conversions.len())
+            .filter(|&rang| {
+                issues[rang].is_none()
+                    && meme_lot(application, conversions[rang].sorte.application())
+            })
             .collect();
-        if lot.is_empty() {
-            break;
-        }
         let donnees = json!({
             "conversions": lot
                 .iter()
@@ -234,7 +323,7 @@ fn avec_office(conversions: &[Conversion], progression: &impl Fn(usize)) -> Vec<
         })
         .to_string();
         let mut suivi = Suivi::default();
-        let resultat = powershell::lancer(SCRIPT, &donnees, SILENCE_MAX, |ligne| {
+        let resultat = pilote::lancer(&script(application), &donnees, SILENCE_MAX, |ligne| {
             if let Some((rang, issue)) = suivi.noter(ligne)
                 && let Some(&rang) = lot.get(rang)
                 && issues[rang].is_none()
@@ -253,12 +342,15 @@ fn avec_office(conversions: &[Conversion], progression: &impl Fn(usize)) -> Vec<
                 for &rang in &lot {
                     issues[rang].get_or_insert_with(|| Issue::Echouee(erreur.message.clone()));
                 }
-                break;
+                continue;
             }
         };
         // Terminé normalement : tout ce que le script pouvait faire est fait.
         if !fin.arrete && fin.succes {
-            break;
+            for &rang in &lot {
+                issues[rang].get_or_insert_with(|| Issue::Echouee(NON_RENDU.into()));
+            }
+            continue;
         }
         // Arrêté parce qu'il ne répondait plus, ou interrompu par une erreur : les applications
         // qu'il a lancées sont arrêtées, ce qui l'a bloqué est mis de côté, et le reste est repris.
@@ -294,7 +386,7 @@ fn avec_office(conversions: &[Conversion], progression: &impl Fn(usize)) -> Vec<
             for rang in restantes {
                 issues[rang] = Some(Issue::Echouee(abandon.clone()));
             }
-            break;
+            continue;
         }
         for (rang, issue) in abandonnees {
             if definitive(&issue) {
@@ -306,11 +398,7 @@ fn avec_office(conversions: &[Conversion], progression: &impl Fn(usize)) -> Vec<
     }
     issues
         .into_iter()
-        .map(|issue| {
-            issue.unwrap_or_else(|| {
-                Issue::Echouee("Office n'a pas rendu compte de cette conversion.".into())
-            })
-        })
+        .map(|issue| issue.unwrap_or_else(|| Issue::Echouee(NON_RENDU.into())))
         .collect()
 }
 
@@ -384,6 +472,10 @@ fn bilan(
             (_, Issue::Bloquee(application)) => resultat.echecs.push(Echec {
                 rang,
                 message: bloquee(&application),
+            }),
+            (_, Issue::Refusee(application)) => resultat.echecs.push(Echec {
+                rang,
+                message: refusee(&application),
             }),
             (_, Issue::Echouee(message)) => resultat.echecs.push(Echec { rang, message }),
             (None, Issue::Faite) => {}
@@ -637,7 +729,8 @@ mod tests {
             .join("automat-pdf-tests")
             .join("office-sortie");
         let dossier = dossier.to_str().unwrap();
-        if cfg!(windows) || libreoffice::trouver().is_some() {
+        if cfg!(windows) || libreoffice::trouver().is_some() || libreoffice::convertisseurs().office
+        {
             return; // poste équipé : la conversion serait réellement lancée
         }
         let conversions = en_pdf(
@@ -742,6 +835,32 @@ mod tests {
     }
 
     #[test]
+    fn une_application_refusee_par_macos_est_laissee_au_relais() {
+        let mut suivi = Suivi::default();
+        assert_eq!(
+            suivi.noter(r#"{"rang":0,"ok":false,"refus":"Word"}"#),
+            Some((0, Issue::Refusee("Word".into())))
+        );
+        assert!(!definitive(&Issue::Refusee("Word".into())));
+        let resultat = bilan(
+            &[Some(Conversion {
+                source: PathBuf::from("Note.docx"),
+                cible: PathBuf::from("Note.pdf"),
+                sorte: Sorte::Word,
+            })],
+            vec![Issue::Refusee("Word".into())],
+            |_| String::new(),
+        );
+        assert!(
+            resultat.echecs[0]
+                .message
+                .contains("Confidentialité et sécurité › Automatisation"),
+            "{}",
+            resultat.echecs[0].message
+        );
+    }
+
+    #[test]
     fn explique_qu_une_application_ne_repond_pas() {
         let conversion = |source: &str, sorte| {
             Some(Conversion {
@@ -770,8 +889,9 @@ mod tests {
         );
     }
 
-    /// Essai réel, sur un PC Windows avec Office (ou LibreOffice) : `cargo test -- --ignored`.
-    #[cfg(windows)]
+    /// Essai réel, sur un PC Windows ou un Mac avec Office (ou LibreOffice) :
+    /// `cargo test -- --ignored`. Sous macOS, Word et Excel doivent avoir été ouverts une fois.
+    #[cfg(any(windows, target_os = "macos"))]
     #[test]
     #[ignore = "pilote Office ou LibreOffice pour de vrai : plusieurs minutes"]
     fn convertit_les_fichiers_d_essai() {

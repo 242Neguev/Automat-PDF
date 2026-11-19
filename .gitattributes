@@ -1,3 +1,6 @@
 # Les scripts Windows doivent garder des fins de ligne Windows (CRLF).
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
+# Les scripts du Mac, des fins de ligne Unix (LF) : bash et osascript ne liraient pas les autres.
+*.command text eol=lf
+*.applescript text eol=lf

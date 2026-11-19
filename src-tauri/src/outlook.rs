@@ -1,14 +1,16 @@
 //! Envoi de fichiers par Outlook (Windows) : chaque message (destinataire, objet, texte, pièces
 //! jointes) est préparé dans les Brouillons, ou envoyé tout de suite. Outlook « classique » est
 //! piloté par le script `scripts/outlook.ps1` (automatisation COM).
+// Sous macOS, les messages sont préparés ou envoyés par Mail (`mail`) : ce module n'y sert pas.
+#![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use std::time::Duration;
 
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::envoi::{BilanEnvoi, Message, verifier};
-use crate::erreur::{Echec, Erreur};
+use crate::envoi::{BilanEnvoi, Message, Suivi, verifier};
+use crate::erreur::Erreur;
 use crate::powershell;
 
 const SCRIPT: &str = include_str!("../scripts/outlook.ps1");
@@ -19,27 +21,10 @@ const SILENCE_MAX: Duration = Duration::from_secs(300);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ModeEnvoi {
-    /// Dans les Brouillons d'Outlook, à vérifier puis envoyer.
+    /// Dans les Brouillons d'Outlook (de Mail sous macOS), à vérifier puis envoyer.
     Brouillons,
     /// Envoyés aussitôt.
     Direct,
-}
-
-/// Une ligne du compte rendu du script.
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum CompteRendu {
-    Message {
-        rang: usize,
-        ok: bool,
-        #[serde(default)]
-        details: Option<String>,
-    },
-    Erreur {
-        erreur: String,
-        #[serde(default)]
-        details: Option<String>,
-    },
 }
 
 /// Contenu du fichier lu par le script : les messages, avec des fins de ligne Windows.
@@ -71,40 +56,6 @@ fn erreur_du_script(code: &str, details: Option<String>) -> Erreur {
     }
 }
 
-/// Compte rendu du script, suivi ligne par ligne.
-struct Suivi<F: Fn(usize, usize)> {
-    bilan: BilanEnvoi,
-    erreur: Option<Erreur>,
-    total: usize,
-    progression: F,
-}
-
-impl<F: Fn(usize, usize)> Suivi<F> {
-    /// Note une ligne ; `false` quand une erreur générale (Outlook fermé…) arrête tout. Ce que
-    /// PowerShell écrit d'autre (avertissements) est ignoré.
-    fn noter(&mut self, ligne: &str) -> bool {
-        match serde_json::from_str::<CompteRendu>(ligne) {
-            Ok(CompteRendu::Message { rang, ok, details }) => {
-                if ok {
-                    self.bilan.reussis += 1;
-                } else {
-                    self.bilan.echecs.push(Echec {
-                        rang,
-                        message: details.unwrap_or_default(),
-                    });
-                }
-                (self.progression)(self.bilan.reussis + self.bilan.echecs.len(), self.total);
-                true
-            }
-            Ok(CompteRendu::Erreur { erreur, details }) => {
-                self.erreur = Some(erreur_du_script(&erreur, details));
-                false
-            }
-            Err(_) => true,
-        }
-    }
-}
-
 /// Prépare (ou envoie) les messages dans Outlook ; `progression` reçoit le nombre de messages
 /// traités et le total.
 pub fn envoyer(
@@ -113,28 +64,11 @@ pub fn envoyer(
     progression: impl Fn(usize, usize),
 ) -> Result<BilanEnvoi, Erreur> {
     verifier(messages)?;
-    let mut suivi = Suivi {
-        bilan: BilanEnvoi::default(),
-        erreur: None,
-        total: messages.len(),
-        progression,
-    };
+    let mut suivi = Suivi::new(messages.len(), progression, erreur_du_script);
     let fin = powershell::lancer(SCRIPT, &preparer(messages, mode), SILENCE_MAX, |ligne| {
         suivi.noter(ligne)
     })?;
-    if fin.arrete {
-        return Err(Erreur::simple(powershell::NE_REPOND_PLUS));
-    }
-    if let Some(erreur) = suivi.erreur {
-        return Err(erreur);
-    }
-    if !fin.succes && suivi.bilan.reussis + suivi.bilan.echecs.len() == 0 {
-        return Err(Erreur {
-            message: "Les messages n'ont pas pu être transmis à Outlook.".into(),
-            details: fin.erreurs,
-        });
-    }
-    Ok(suivi.bilan)
+    suivi.conclure(fin, "Les messages n'ont pas pu être transmis à Outlook.")
 }
 
 #[cfg(test)]
@@ -142,6 +76,7 @@ mod tests {
     use std::cell::RefCell;
 
     use super::*;
+    use crate::erreur::Echec;
 
     fn message(a: &str, pieces: Vec<String>) -> Message {
         Message {
@@ -175,12 +110,11 @@ mod tests {
     #[test]
     fn suit_le_compte_rendu_du_script() {
         let etapes = RefCell::new(Vec::new());
-        let mut suivi = Suivi {
-            bilan: BilanEnvoi::default(),
-            erreur: None,
-            total: 3,
-            progression: |fait, total| etapes.borrow_mut().push((fait, total)),
-        };
+        let mut suivi = Suivi::new(
+            3,
+            |fait, total| etapes.borrow_mut().push((fait, total)),
+            erreur_du_script,
+        );
         for ligne in [
             "AVERTISSEMENT : sans importance",
             r#"{"ok":true,"rang":0}"#,

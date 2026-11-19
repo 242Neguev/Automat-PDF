@@ -41,7 +41,7 @@ export interface DefinitionOutil {
   cle: Outil;
   icone: typeof IconFiles;
   page: ComponentType;
-  /** Fichiers qu'il prend de l'Explorateur (clic droit, glisser-déposer). */
+  /** Fichiers qu'il prend de l'Explorateur ou du Finder (clic droit, glisser-déposer). */
   accepte: SorteFichier[];
 }
 

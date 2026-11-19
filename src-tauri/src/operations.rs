@@ -20,12 +20,19 @@ use crate::marques::{self, OptionsMarques, Placement};
 use crate::memoire;
 use crate::messagerie::{self, Compte};
 use crate::office::{self, Conversions};
-use crate::outlook::{self, ModeEnvoi};
+use crate::outlook::ModeEnvoi;
 use crate::ouverture;
 use crate::pdf::{self, PageAssemblee};
 use crate::rendu::{self, FormatImage, FormatPage};
 use crate::securite::{self, OptionsProtection};
 use crate::texte;
+
+/// Logiciel de messagerie de l'ordinateur, piloté pour préparer ou envoyer les messages : Outlook
+/// (version classique) sous Windows, Mail sous macOS.
+#[cfg(target_os = "macos")]
+use crate::mail as logiciel_de_messagerie;
+#[cfg(not(target_os = "macos"))]
+use crate::outlook as logiciel_de_messagerie;
 
 /// Nom d'un fichier (avec son extension) à partir de son chemin.
 pub fn nom_de(chemin: &str) -> String {
@@ -452,13 +459,14 @@ pub fn separer_par_personne(
     Ok(Separation { dossier, fichiers })
 }
 
-/// Prépare dans Outlook (Brouillons) ou envoie les messages ; `progression` reçoit l'avancement.
+/// Prépare dans Outlook (Brouillons) ou envoie les messages ; sous macOS, dans Mail. `progression`
+/// reçoit l'avancement.
 pub fn envoyer_par_outlook(
     messages: &[Message],
     mode: ModeEnvoi,
     progression: impl Fn(usize, usize),
 ) -> Result<BilanEnvoi, Erreur> {
-    outlook::envoyer(messages, mode, progression)
+    logiciel_de_messagerie::envoyer(messages, mode, progression)
 }
 
 /// Envoie les messages par la messagerie de l'utilisateur (SMTP), sans Outlook ; `progression`
@@ -617,8 +625,10 @@ pub fn pdf_en_word(
     office::pdf_en_word(fichiers, dossier, progression)
 }
 
-/// Fichiers confiés à l'application par l'Explorateur (clic droit) : l'outil demandé et les
-/// fichiers. Ligne de commande : `Automat-PDF.exe --outil compresser "C:\…\paie.pdf"`.
+/// Fichiers confiés à l'application par le système : l'outil demandé et les fichiers. Sous
+/// Windows, par la ligne de commande (clic droit dans l'Explorateur) :
+/// `Automat-PDF.exe --outil compresser "C:\…\paie.pdf"` ; sous macOS, par les services du clic
+/// droit dans le Finder, « Ouvrir avec » ou l'icône du Dock (`services`, `lib`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Recus {
@@ -641,9 +651,10 @@ pub fn recus_de(arguments: impl IntoIterator<Item = String>) -> Option<Recus> {
     (!fichiers.is_empty()).then_some(Recus { outil, fichiers })
 }
 
-/// Fichiers confiés par l'Explorateur, gardés tant que l'interface n'est pas prête à les recevoir :
-/// plusieurs fichiers choisis lancent chacun l'application, et les lancements suivants arrivent
-/// souvent avant que la fenêtre ait fini de se charger.
+/// Fichiers confiés par le système, gardés tant que l'interface n'est pas prête à les recevoir :
+/// plusieurs fichiers choisis dans l'Explorateur lancent chacun l'application, et les lancements
+/// suivants arrivent souvent avant que la fenêtre ait fini de se charger ; sous macOS, les fichiers
+/// qui ont lancé l'application arrivent aussi avant l'interface.
 #[derive(Debug, Default)]
 pub struct Reception {
     prete: bool,

@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+mod applescript;
 mod caviardage;
 mod commandes;
 mod compression;
@@ -13,6 +15,8 @@ mod geometrie;
 mod images;
 mod imposition;
 mod libreoffice;
+#[cfg(target_os = "macos")]
+mod mail;
 mod marques;
 mod memoire;
 mod messagerie;
@@ -22,41 +26,163 @@ mod outlook;
 mod ouverture;
 mod pdf;
 mod pdf_en_word;
+mod pilotage;
 mod pixels;
 mod police;
 mod powershell;
 mod rendu;
 mod securite;
+#[cfg(target_os = "macos")]
+mod services;
 mod texte;
 
-use tauri::{Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
+
+use operations::Recus;
+
+/// Fichiers confiés à l'application par le système : clic droit (Explorateur, Finder), « Ouvrir
+/// avec », icône du Dock. Tant que l'interface se charge, ils sont gardés : elle les prendra avec
+/// ceux du lancement ; ensuite, ils lui sont remis aussitôt.
+pub(crate) fn confier<R: Runtime>(app: &AppHandle<R>, recus: Recus) {
+    let a_remettre = match app.try_state::<commandes::Lancement>() {
+        Some(lancement) => lancement
+            .0
+            .lock()
+            .ok()
+            .and_then(|mut reception| reception.recevoir(recus)),
+        None => Some(recus),
+    };
+    if let Some(recus) = a_remettre {
+        let _ = app.emit("fichiers-recus", recus);
+    }
+    au_premier_plan(app);
+}
+
+/// La fenêtre de l'application passe au premier plan.
+fn au_premier_plan<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(fenetre) = app.get_webview_window("main") {
+        let _ = fenetre.unminimize();
+        let _ = fenetre.set_focus();
+    }
+}
+
+/// macOS : la barre des menus, en français. Celle que Tauri propose d'office est en anglais ; elle
+/// garde ici son ordre et ses raccourcis (⌘C, ⌘V, ⌘Q…), qui servent aussi dans les champs de saisie.
+#[cfg(target_os = "macos")]
+fn menus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
+    use tauri::menu::{
+        AboutMetadata, HELP_SUBMENU_ID, Menu, PredefinedMenuItem as Element, Submenu,
+        WINDOW_SUBMENU_ID,
+    };
+    let nom = app.package_info().name.clone();
+    let a_propos = AboutMetadata {
+        name: Some(nom.clone()),
+        version: Some(app.package_info().version.to_string()),
+        copyright: app.config().bundle.copyright.clone(),
+        authors: app
+            .config()
+            .bundle
+            .publisher
+            .clone()
+            .map(|editeur| vec![editeur]),
+        ..Default::default()
+    };
+    Menu::with_items(
+        app,
+        &[
+            &Submenu::with_items(
+                app,
+                &nom,
+                true,
+                &[
+                    &Element::about(app, Some(&format!("À propos d'{nom}")), Some(a_propos))?,
+                    &Element::separator(app)?,
+                    &Element::services(app, Some("Services"))?,
+                    &Element::separator(app)?,
+                    &Element::hide(app, Some(&format!("Masquer {nom}")))?,
+                    &Element::hide_others(app, Some("Masquer les autres"))?,
+                    &Element::show_all(app, Some("Tout afficher"))?,
+                    &Element::separator(app)?,
+                    &Element::quit(app, Some(&format!("Quitter {nom}")))?,
+                ],
+            )?,
+            &Submenu::with_items(
+                app,
+                "Fichier",
+                true,
+                &[&Element::close_window(app, Some("Fermer la fenêtre"))?],
+            )?,
+            &Submenu::with_items(
+                app,
+                "Édition",
+                true,
+                &[
+                    &Element::undo(app, Some("Annuler"))?,
+                    &Element::redo(app, Some("Rétablir"))?,
+                    &Element::separator(app)?,
+                    &Element::cut(app, Some("Couper"))?,
+                    &Element::copy(app, Some("Copier"))?,
+                    &Element::paste(app, Some("Coller"))?,
+                    &Element::select_all(app, Some("Tout sélectionner"))?,
+                ],
+            )?,
+            &Submenu::with_items(
+                app,
+                "Présentation",
+                true,
+                &[&Element::fullscreen(app, Some("Plein écran"))?],
+            )?,
+            &Submenu::with_id_and_items(
+                app,
+                WINDOW_SUBMENU_ID,
+                "Fenêtre",
+                true,
+                &[
+                    &Element::minimize(app, Some("Placer dans le Dock"))?,
+                    &Element::maximize(app, Some("Agrandir"))?,
+                    &Element::separator(app)?,
+                    &Element::close_window(app, Some("Fermer"))?,
+                ],
+            )?,
+            &Submenu::with_id_and_items(app, HELP_SUBMENU_ID, "Aide", true, &[])?,
+        ],
+    )
+}
+
+/// macOS : fichiers ouverts depuis le Finder (« Ouvrir avec », glissés sur l'icône du Dock). Ils
+/// arrivent par un événement de l'application, jamais par la ligne de commande.
+#[cfg(target_os = "macos")]
+fn au_fil_des_evenements(app: &AppHandle, evenement: tauri::RunEvent) {
+    if let tauri::RunEvent::Opened { urls } = evenement {
+        let fichiers: Vec<String> = urls
+            .iter()
+            .filter_map(|url| url.to_file_path().ok())
+            .map(|chemin| chemin.to_string_lossy().into_owned())
+            .collect();
+        if !fichiers.is_empty() {
+            confier(
+                app,
+                Recus {
+                    outil: None,
+                    fichiers,
+                },
+            );
+        }
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let au_lancement = operations::recus_de(std::env::args());
-    tauri::Builder::default()
+    let constructeur = tauri::Builder::default()
         // Une seule fenêtre : un nouveau lancement (clic droit sur d'autres fichiers) confie ses
-        // fichiers à la fenêtre déjà ouverte, qui passe au premier plan. Tant que l'interface se
-        // charge, ils sont gardés : elle les prendra avec ceux du lancement.
-        .plugin(tauri_plugin_single_instance::init(|app, arguments, _| {
-            if let Some(recus) = operations::recus_de(arguments) {
-                let a_remettre = match app.try_state::<commandes::Lancement>() {
-                    Some(lancement) => lancement
-                        .0
-                        .lock()
-                        .ok()
-                        .and_then(|mut reception| reception.recevoir(recus)),
-                    None => Some(recus),
-                };
-                if let Some(recus) = a_remettre {
-                    let _ = app.emit("fichiers-recus", recus);
-                }
-            }
-            if let Some(fenetre) = app.get_webview_window("main") {
-                let _ = fenetre.unminimize();
-                let _ = fenetre.set_focus();
-            }
-        }))
+        // fichiers à la fenêtre déjà ouverte, qui passe au premier plan.
+        .plugin(tauri_plugin_single_instance::init(
+            |app, arguments, _| match operations::recus_de(arguments) {
+                Some(recus) => confier(app, recus),
+                None => au_premier_plan(app),
+            },
+        ))
         .plugin(tauri_plugin_dialog::init())
         // Mises à jour : la version publiée sur GitHub est comparée à celle-ci ; une nouvelle
         // version n'est installée qu'après vérification de sa signature (clé publique dans
@@ -65,6 +191,14 @@ pub fn run() {
         .manage(commandes::Lancement(std::sync::Mutex::new(
             operations::Reception::new(au_lancement),
         )))
+        .setup(|app| {
+            // macOS : les services du clic droit dans le Finder sont remis à cette application.
+            #[cfg(target_os = "macos")]
+            services::installer(app.handle().clone());
+            #[cfg(not(target_os = "macos"))]
+            let _ = app;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commandes::lire_liste,
             commandes::infos_pdf,
@@ -109,7 +243,16 @@ pub fn run() {
             commandes::regler_confidentialite,
             commandes::signaler_ouverture,
             commandes::ouvrir_page_des_versions,
-        ])
+            commandes::relancer,
+        ]);
+    #[cfg(not(target_os = "macos"))]
+    constructeur
         .run(tauri::generate_context!())
         .expect("erreur au lancement d'Automat-PDF");
+    #[cfg(target_os = "macos")]
+    constructeur
+        .menu(menus)
+        .build(tauri::generate_context!())
+        .expect("erreur au lancement d'Automat-PDF")
+        .run(au_fil_des_evenements);
 }

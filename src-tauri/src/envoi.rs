@@ -1,13 +1,15 @@
-//! Ce qui est commun aux deux façons d'envoyer les fichiers par e-mail : par la messagerie de
-//! l'utilisateur (`messagerie`, SMTP) ou par Outlook (`outlook`, Windows).
+//! Ce qui est commun aux façons d'envoyer les fichiers par e-mail : par la messagerie de
+//! l'utilisateur (`messagerie`, SMTP), par Outlook (`outlook`, Windows) ou par Mail (`mail`,
+//! macOS).
 
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use crate::erreur::{Echec, Erreur};
+use crate::pilotage::{Fin, NE_REPOND_PLUS};
 
-/// Un message à envoyer, ou à préparer dans Outlook.
+/// Un message à envoyer, ou à préparer dans Outlook ou Mail.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -54,6 +56,92 @@ pub fn verifier(messages: &[Message]) -> Result<(), Erreur> {
         message: "Certains messages ne peuvent pas être préparés.".into(),
         details: problemes,
     })
+}
+
+/// Une ligne du compte rendu d'un script d'envoi (Outlook, Mail).
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum CompteRendu {
+    Message {
+        rang: usize,
+        ok: bool,
+        #[serde(default)]
+        details: Option<String>,
+    },
+    Erreur {
+        erreur: String,
+        #[serde(default)]
+        details: Option<String>,
+    },
+}
+
+/// Compte rendu d'un script d'envoi (Outlook, Mail), suivi ligne par ligne.
+pub struct Suivi<F: Fn(usize, usize)> {
+    pub bilan: BilanEnvoi,
+    pub erreur: Option<Erreur>,
+    total: usize,
+    progression: F,
+    /// Message clair pour une erreur générale rapportée par le script (application fermée…).
+    expliquer: fn(&str, Option<String>) -> Erreur,
+}
+
+impl<F: Fn(usize, usize)> Suivi<F> {
+    /// `progression` reçoit le nombre de messages traités et le total.
+    pub fn new(
+        total: usize,
+        progression: F,
+        expliquer: fn(&str, Option<String>) -> Erreur,
+    ) -> Self {
+        Suivi {
+            bilan: BilanEnvoi::default(),
+            erreur: None,
+            total,
+            progression,
+            expliquer,
+        }
+    }
+
+    /// Note une ligne ; `false` quand une erreur générale (Outlook fermé…) arrête tout. Ce que le
+    /// script écrit d'autre (avertissements) est ignoré.
+    pub fn noter(&mut self, ligne: &str) -> bool {
+        match serde_json::from_str::<CompteRendu>(ligne) {
+            Ok(CompteRendu::Message { rang, ok, details }) => {
+                if ok {
+                    self.bilan.reussis += 1;
+                } else {
+                    self.bilan.echecs.push(Echec {
+                        rang,
+                        message: details.unwrap_or_default(),
+                    });
+                }
+                (self.progression)(self.bilan.reussis + self.bilan.echecs.len(), self.total);
+                true
+            }
+            Ok(CompteRendu::Erreur { erreur, details }) => {
+                self.erreur = Some((self.expliquer)(&erreur, details));
+                false
+            }
+            Err(_) => true,
+        }
+    }
+
+    /// Bilan, une fois le script terminé : `echec` explique un script interrompu avant le premier
+    /// message.
+    pub fn conclure(self, fin: Fin, echec: &str) -> Result<BilanEnvoi, Erreur> {
+        if fin.arrete {
+            return Err(Erreur::simple(NE_REPOND_PLUS));
+        }
+        if let Some(erreur) = self.erreur {
+            return Err(erreur);
+        }
+        if !fin.succes && self.bilan.reussis + self.bilan.echecs.len() == 0 {
+            return Err(Erreur {
+                message: echec.into(),
+                details: fin.erreurs,
+            });
+        }
+        Ok(self.bilan)
+    }
 }
 
 #[cfg(test)]

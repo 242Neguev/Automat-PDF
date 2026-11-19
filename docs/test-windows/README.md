@@ -1,6 +1,6 @@
 # Fiche de test sous Windows
 
-Tout ce qui ne peut pas être essayé sur Mac : la compilation et l'installateur, le clic droit dans l'Explorateur, la fenêtre unique, le glisser-déposer depuis l'Explorateur, les conversions par Microsoft Office et l'envoi par e-mail (par votre messagerie ou par Outlook). Le reste de l'application a été testé de bout en bout sur Mac, avec le vrai cœur de traitement.
+Tout ce qui ne peut pas être essayé sur Mac : la compilation et l'installateur, le clic droit dans l'Explorateur, la fenêtre unique, le glisser-déposer depuis l'Explorateur, les conversions par Microsoft Office et l'envoi par e-mail (par votre messagerie ou par Outlook). Le reste de l'application a été testé de bout en bout sur Mac, avec le vrai cœur de traitement. La version Mac a sa propre [fiche de test](../test-mac/README.md).
 
 **Version à tester** : le commit `9d5264d` ou plus récent (`git log -1` pour le vérifier).
 

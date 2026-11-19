@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Autorisations de l'application signée (macOS). Avec le « runtime renforcé » (hardened runtime),
+  qu'exige la notarisation par Apple, envoyer des événements Apple doit être permis : Automat-PDF
+  pilote Word, Excel, PowerPoint et Mail. macOS demande en plus l'accord de l'utilisateur, une fois
+  par application pilotée (NSAppleEventsUsageDescription, dans Info.plist).
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>

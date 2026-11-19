@@ -227,6 +227,7 @@ fn nettoyer(texte: &str) -> String {
 
 /// Valeur d'une ligne de `reg query` (« Nom    REG_SZ    valeur »), quelle que soit la langue de
 /// Windows.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn valeur_du_registre<'a>(sortie: &'a str, nom: &str) -> Option<&'a str> {
     sortie.lines().find_map(|ligne| {
         let mut morceaux = ligne.split_whitespace();
@@ -237,6 +238,7 @@ fn valeur_du_registre<'a>(sortie: &'a str, nom: &str) -> Option<&'a str> {
 }
 
 /// « Windows 11 24H2 (26100) », d'après la clé CurrentVersion du registre.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn decrire_windows(sortie: &str) -> String {
     let compilation: Option<u32> =
         valeur_du_registre(sortie, "CurrentBuild").and_then(|valeur| valeur.parse().ok());
@@ -276,12 +278,33 @@ pub fn systeme() -> String {
         )
 }
 
-#[cfg(not(windows))]
-pub fn systeme() -> String {
-    match std::env::consts::OS {
-        "macos" => "macOS".to_string(),
-        autre => nettoyer(autre),
+/// « macOS 26.0.1 », d'après la version que donne `sw_vers` ; « macOS » sans elle.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn decrire_macos(version: &str) -> String {
+    let version = version.trim();
+    if version.is_empty() {
+        "macOS".to_string()
+    } else {
+        nettoyer(&format!("macOS {version}"))
     }
+}
+
+/// Système de ce Mac : version de macOS.
+#[cfg(target_os = "macos")]
+pub fn systeme() -> String {
+    let version = std::process::Command::new("/usr/bin/sw_vers")
+        .arg("-productVersion")
+        .output()
+        .ok()
+        .filter(|sortie| sortie.status.success())
+        .map(|sortie| String::from_utf8_lossy(&sortie.stdout).into_owned())
+        .unwrap_or_default();
+    decrire_macos(&version)
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+pub fn systeme() -> String {
+    nettoyer(std::env::consts::OS)
 }
 
 /// Envoie le signal. Le site qui le reçoit répond `{"ok":true}` : toute autre réponse (la page
@@ -477,6 +500,21 @@ mod tests {
         assert_eq!(decrire_windows(""), "Windows");
         if cfg!(windows) {
             assert!(systeme().starts_with("Windows"), "{}", systeme());
+        }
+    }
+
+    #[test]
+    fn decrit_la_version_de_macos() {
+        assert_eq!(decrire_macos("26.0.1\n"), "macOS 26.0.1");
+        assert_eq!(decrire_macos(""), "macOS");
+        assert_eq!(decrire_macos("15.7 <script>"), "macOS 15.7 script");
+        if cfg!(target_os = "macos") {
+            let systeme = systeme();
+            assert!(systeme.starts_with("macOS "), "{systeme}");
+            assert!(
+                systeme[6..].starts_with(|c: char| c.is_ascii_digit()),
+                "{systeme}"
+            );
         }
     }
 
