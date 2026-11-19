@@ -88,7 +88,7 @@ Gratuit pour ce dépôt public : GitHub compile l'installateur sur l'un de ses o
 1. Ouvrir le dépôt sur GitHub, onglet **Actions**, puis **Installateurs** et **Run workflow**.
 2. À la fin de l'exécution, télécharger les **artefacts** : l'installateur `.exe` (NSIS) et le `.msi` de Windows, puis l'image disque `.dmg` du Mac (compilée après Windows).
 
-Pour publier une version, il suffit d'envoyer un tag : `git tag v0.2.2 && git push origin v0.2.2`. Une **publication GitHub en brouillon** est alors créée avec les installateurs attachés (Windows, puis Mac), et `latest.json`, que lisent les Automat-PDF installés : dès que la publication n'est plus un brouillon, ils proposent la mise à jour, sous Windows comme sur Mac.
+Pour publier une version, il suffit d'envoyer un tag : `git tag v0.3.0 && git push origin v0.3.0`. Une **publication GitHub en brouillon** est alors créée avec les installateurs attachés (Windows, puis Mac), et `latest.json`, que lisent les Automat-PDF installés : dès que la publication n'est plus un brouillon, ils proposent la mise à jour, sous Windows comme sur Mac.
 
 ## Obtenir l'application Mac
 
@@ -100,7 +100,7 @@ Pour publier une version, il suffit d'envoyer un tag : `git tag v0.2.2 && git pu
    - Rust (dans `~/.cargo`) et Node.js LTS (dans `~/.local/share/automat-pdf-compilation`).
 
    Compter 20 à 40 minutes la première fois, quelques minutes ensuite.
-3. À la fin, le Finder montre l'image disque : `src-tauri/target/universal-apple-darwin/release/bundle/dmg/Automat-PDF_0.2.2_universal.dmg`, une seule pour les Mac Intel et Apple Silicon (ou dans `~/Library/Caches/Automat-PDF-compilation/target/` si le projet est dans iCloud Drive, qui enverrait sinon plusieurs Go de fichiers intermédiaires dans le nuage).
+3. À la fin, le Finder montre l'image disque : `src-tauri/target/universal-apple-darwin/release/bundle/dmg/Automat-PDF_0.3.0_universal.dmg`, une seule pour les Mac Intel et Apple Silicon (ou dans `~/Library/Caches/Automat-PDF-compilation/target/` si le projet est dans iCloud Drive, qui enverrait sinon plusieurs Go de fichiers intermédiaires dans le nuage).
 
 `scripts/compiler-mac.command --natif` compile seulement pour le processeur de ce Mac, deux fois plus vite : pour un essai.
 
