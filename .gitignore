@@ -2,6 +2,8 @@
 node_modules/
 dist/
 dist-ssr/
+# Fichiers produits par scripts/publier.command (installateurs, signatures, latest.json)
+/dist-publication/
 *.local
 *.log
 

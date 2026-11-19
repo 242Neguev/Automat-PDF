@@ -1,4 +1,4 @@
-// Fichiers reçus de l'Explorateur (clic droit, glisser-déposer) : chaque outil dit ce qu'il en fait.
+// Fichiers reçus du système (clic droit dans l'Explorateur ou le Finder, glisser-déposer) : chaque outil dit ce qu'il en fait.
 import { useEffect, useRef } from "react";
 
 export type SorteFichier = "pdf" | "image" | "office" | "liste";

@@ -94,7 +94,14 @@ fn candidats() -> Vec<PathBuf> {
             });
         inscrits.chain(dossiers).collect()
     } else if cfg!(target_os = "macos") {
-        vec!["/Applications/LibreOffice.app/Contents/MacOS/soffice".into()]
+        // Glissé dans « Applications », ou dans celui de l'utilisateur (sans droits
+        // d'administrateur).
+        let programme = PathBuf::from("LibreOffice.app/Contents/MacOS/soffice");
+        let mut candidats = vec![PathBuf::from("/Applications").join(&programme)];
+        if let Some(maison) = std::env::var_os("HOME") {
+            candidats.push(PathBuf::from(maison).join("Applications").join(programme));
+        }
+        candidats
     } else {
         vec!["/usr/bin/soffice".into(), "/usr/local/bin/soffice".into()]
     }
@@ -106,6 +113,7 @@ pub fn trouver() -> Option<PathBuf> {
 }
 
 /// L'application d'Office (Word, Excel ou PowerPoint) est inscrite sur ce PC.
+#[cfg(not(target_os = "macos"))]
 fn inscrite(application: &str) -> bool {
     cfg!(windows)
         && lire_registre(
@@ -113,6 +121,12 @@ fn inscrite(application: &str) -> bool {
             "/reg:64",
         )
         .is_some()
+}
+
+/// macOS : l'application d'Office (Word, Excel ou PowerPoint) est installée.
+#[cfg(target_os = "macos")]
+fn inscrite(application: &str) -> bool {
+    crate::office::installee(application)
 }
 
 fn winget_disponible() -> bool {
@@ -268,11 +282,10 @@ mod tests {
             )));
         } else if cfg!(target_os = "macos") {
             assert_eq!(
-                candidats,
-                [PathBuf::from(
-                    "/Applications/LibreOffice.app/Contents/MacOS/soffice"
-                )]
+                candidats[0],
+                PathBuf::from("/Applications/LibreOffice.app/Contents/MacOS/soffice")
             );
+            assert!(candidats[1].ends_with("Applications/LibreOffice.app/Contents/MacOS/soffice"));
         }
     }
 }

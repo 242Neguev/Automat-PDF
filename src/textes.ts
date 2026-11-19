@@ -1,4 +1,12 @@
-// Textes de l'interface, regroupés pour pouvoir traduire l'application plus tard.
+// Textes de l'interface, regroupés pour pouvoir traduire l'application plus tard. Certains
+// dépendent du système (Windows ou macOS) : son nom, le logiciel de messagerie piloté, les touches.
+import { CET_ORDINATEUR, MAC } from "./systeme";
+
+/** Le système, tel qu'il est nommé dans les textes. */
+const SYSTEME = MAC ? "macOS" : "Windows";
+/** Le logiciel de messagerie que l'application pilote : Outlook (version classique) sous Windows, Mail sur Mac. */
+const LOGICIEL_MESSAGERIE = MAC ? "Mail" : "Outlook";
+
 export const textes = {
   application: "Automat-PDF",
   parEditeur: "par Eau sèche",
@@ -22,7 +30,7 @@ export const textes = {
     pourquoi:
       "Avec votre accord, Automat-PDF envoie à Eau sèche un court message anonyme à chaque ouverture. Eau sèche saura ainsi combien de personnes utilisent l'application, et à quelle fréquence.",
     envoyeTitre: "Ce qui est envoyé :",
-    envoye: ["la version d'Automat-PDF et celle de Windows ;", "la langue de l'ordinateur ;", "un numéro tiré au hasard, propre à cette installation."],
+    envoye: [`la version d'Automat-PDF et celle de ${SYSTEME} ;`, "la langue de l'ordinateur ;", "un numéro tiré au hasard, propre à cette installation."],
     jamaisTitre: "Jamais envoyés :",
     jamais: "vos fichiers, leur nom ou leur contenu, les noms des personnes, les adresses e-mail.",
     changerDAvis: "Vous pourrez changer d'avis à tout moment dans « À propos », en haut à droite de la fenêtre.",
@@ -31,7 +39,7 @@ export const textes = {
     misesAJour: "Me prévenir quand une nouvelle version est disponible",
     misesAJourDetail: "Au démarrage puis chaque jour, Automat-PDF regarde sur GitHub si une version plus récente est publiée. Rien d'autre n'est envoyé.",
     statistiques: "Envoyer des statistiques anonymes à Eau sèche",
-    statistiquesDetail: "À chaque ouverture : la version d'Automat-PDF et de Windows, la langue, un numéro tiré au hasard. Jamais vos fichiers, ni noms, ni adresses.",
+    statistiquesDetail: `À chaque ouverture : la version d'Automat-PDF et de ${SYSTEME}, la langue, un numéro tiré au hasard. Jamais vos fichiers, ni noms, ni adresses.`,
     nonEnregistre: "Le réglage n'a pas pu être enregistré",
   },
   miseAJour: {
@@ -220,7 +228,7 @@ export const textes = {
   organisation: {
     ajouter: "Ajouter des PDF…",
     deposerDetail: "Leurs pages s'afficheront ici, prêtes à être remises dans l'ordre.",
-    aide: "Faites glisser une page pour la déplacer ; les boutons d'une page apparaissent quand la souris passe dessus. Clic : sélectionner · Ctrl + clic : ajouter à la sélection · Maj + clic : sélectionner une suite de pages · Double-clic : agrandir.",
+    aide: `Faites glisser une page pour la déplacer ; les boutons d'une page apparaissent quand la souris passe dessus. Clic : sélectionner · ${MAC ? "⌘" : "Ctrl"} + clic : ajouter à la sélection · Maj + clic : sélectionner une suite de pages · Double-clic : agrandir.`,
     pivoterGauche: "Pivoter à gauche",
     pivoterDroite: "Pivoter à droite",
     supprimer: "Supprimer",
@@ -525,11 +533,17 @@ export const textes = {
     },
     envoi: {
       activer: "Envoyer chaque fichier par e-mail",
-      aide: "Par votre messagerie (Gmail, Yahoo, celle de votre organisation…), ou par Outlook (version classique) sous Windows.",
+      aide: MAC
+        ? "Par votre messagerie (Gmail, Yahoo, celle de votre organisation…), ou par l'app Mail du Mac."
+        : "Par votre messagerie (Gmail, Yahoo, celle de votre organisation…), ou par Outlook (version classique) sous Windows.",
       moyen: "Envoyer avec",
-      moyens: { messagerie: "Ma messagerie", outlook: "Outlook (version classique)" },
+      moyens: { messagerie: "Ma messagerie", outlook: MAC ? "Mail" : "Outlook (version classique)" },
+      /** Le logiciel de messagerie piloté, « depuis » lequel partent les messages. */
+      logiciel: LOGICIEL_MESSAGERIE,
       messagerieAide: "Les messages partent directement de votre messagerie, après confirmation : faites d'abord un essai à votre adresse.",
-      outlookAide: "Outlook (version classique) doit être ouvert sur ce PC : le « nouvel Outlook » ne se laisse pas piloter.",
+      outlookAide: MAC
+        ? "Les messages partent de l'adresse réglée dans l'app Mail. La première fois, macOS demande si Automat-PDF peut piloter Mail : acceptez."
+        : "Outlook (version classique) doit être ouvert sur ce PC : le « nouvel Outlook » ne se laisse pas piloter.",
       depuis: (adresse: string, serveur: string) => `Depuis ${adresse}, par ${serveur}`,
       aRegler: "Réglez d'abord votre messagerie : votre adresse, le serveur d'envoi et le mot de passe.",
       regler: "Régler la messagerie…",
@@ -540,7 +554,7 @@ export const textes = {
       messageAide: "Les mots entre {{ }} sont remplacés par les valeurs de la liste. N'écrivez pas le mot de passe dans le message : il voyagerait avec le fichier.",
       modes: { brouillons: "Brouillons à vérifier", direct: "Envoi direct" },
       modesAide: {
-        brouillons: "Chaque message est préparé dans les Brouillons d'Outlook : vérifiez-les, puis envoyez-les depuis Outlook.",
+        brouillons: `Chaque message est préparé dans les Brouillons ${MAC ? "de Mail" : "d'Outlook"} : vérifiez-les, puis envoyez-les depuis ${LOGICIEL_MESSAGERIE}.`,
         direct: "Les messages partent aussitôt, après confirmation.",
       },
       creerAvant: "Créez d'abord les fichiers (étape 4) : chacun sera joint au message de la personne.",
@@ -550,7 +564,7 @@ export const textes = {
       essaiAide: "Le premier message, adressé à vous-même, pour vérifier l'objet, le texte et le mot de passe avant l'envoi groupé.",
       essayer: { brouillons: "Préparer un brouillon d'essai", direct: "Envoyer l'essai" },
       envoyer: {
-        brouillons: (n: number) => `Préparer ${n} brouillon${n > 1 ? "s" : ""} dans Outlook`,
+        brouillons: (n: number) => `Préparer ${n} brouillon${n > 1 ? "s" : ""} dans ${LOGICIEL_MESSAGERIE}`,
         direct: (n: number) => `Envoyer ${n} e-mail${n > 1 ? "s" : ""}…`,
       },
       raisons: {
@@ -565,7 +579,7 @@ export const textes = {
       confirmer: "Envoyer",
       annuler: "Annuler",
       resultat: {
-        brouillons: (n: number) => `${n} brouillon${n > 1 ? "s" : ""} préparé${n > 1 ? "s" : ""} dans Outlook`,
+        brouillons: (n: number) => `${n} brouillon${n > 1 ? "s" : ""} préparé${n > 1 ? "s" : ""} dans ${LOGICIEL_MESSAGERIE}`,
         direct: (n: number) => `${n} e-mail${n > 1 ? "s" : ""} envoyé${n > 1 ? "s" : ""}`,
       },
       echecs: (n: number) => `${n} message${n > 1 ? "s" : ""} en échec :`,
@@ -573,8 +587,7 @@ export const textes = {
   },
   messagerie: {
     titre: "Messagerie",
-    intro:
-      "Les e-mails partent de votre adresse, par le serveur d'envoi (SMTP) de votre messagerie. Le mot de passe est gardé par le système (Gestionnaire d'identification de Windows, trousseau de macOS), jamais dans un fichier.",
+    intro: `Les e-mails partent de votre adresse, par le serveur d'envoi (SMTP) de votre messagerie. Le mot de passe est gardé par le système (${MAC ? "le trousseau de macOS" : "le Gestionnaire d'identification de Windows"}), jamais dans un fichier.`,
     adresse: "Votre adresse e-mail",
     nom: "Nom affiché",
     nomAide: "Ce que les destinataires voient comme expéditeur, par exemple « Service RH » (facultatif).",
@@ -596,8 +609,9 @@ export const textes = {
     conseils: {
       motDePasseApplication:
         "Cette messagerie refuse votre mot de passe habituel : créez un « mot de passe d'application » dans la sécurité de votre compte (validation en deux étapes activée), et saisissez-le ici.",
-      microsoft:
-        "Microsoft refuse de plus en plus l'envoi par simple mot de passe (Outlook.com, Hotmail, Microsoft 365) : si l'essai échoue, choisissez Outlook (version classique) ou une autre adresse.",
+      microsoft: MAC
+        ? "Microsoft refuse de plus en plus l'envoi par simple mot de passe (Outlook.com, Hotmail, Microsoft 365) : si l'essai échoue, ajoutez ce compte à l'app Mail et choisissez « Mail », ou utilisez une autre adresse."
+        : "Microsoft refuse de plus en plus l'envoi par simple mot de passe (Outlook.com, Hotmail, Microsoft 365) : si l'essai échoue, choisissez Outlook (version classique) ou une autre adresse.",
     },
     manque: {
       adresse: "Indiquez votre adresse e-mail.",
@@ -638,12 +652,16 @@ export const textes = {
       filtre: "Documents Office",
       deposer: "Glissez vos documents Word, Excel ou PowerPoint ici",
       deposerDetail: "Chacun deviendra un PDF, dans le dossier de votre choix.",
-      aide: "Microsoft Office doit être installé sur ce PC (à défaut, LibreOffice). Les fichiers d'origine ne sont pas modifiés ; un fichier protégé par mot de passe n'est pas converti.",
+      aide: MAC
+        ? "Microsoft Office doit être installé sur ce Mac et avoir été ouvert une fois (à défaut, LibreOffice). La première fois, macOS demande si Automat-PDF peut piloter Word, Excel ou PowerPoint : acceptez. Les fichiers d'origine ne sont pas modifiés ; un fichier protégé par mot de passe n'est pas converti."
+        : "Microsoft Office doit être installé sur ce PC (à défaut, LibreOffice). Les fichiers d'origine ne sont pas modifiés ; un fichier protégé par mot de passe n'est pas converti.",
     },
     libreoffice: {
       titre: { manque: "Ni Microsoft Office ni LibreOffice ne sont installés", conseille: "LibreOffice n'est pas installé" },
       texte: {
-        manque: "Sans l'un ou l'autre, les documents ne peuvent pas être convertis. LibreOffice est gratuit : une fois installé, Automat-PDF s'en sert de lui-même.",
+        manque: MAC
+          ? "Sans l'un ou l'autre, les documents ne peuvent pas être convertis. LibreOffice est gratuit : téléchargez-le depuis sa page, ouvrez le fichier .dmg et glissez LibreOffice dans « Applications », puis cliquez sur « Vérifier à nouveau »."
+          : "Sans l'un ou l'autre, les documents ne peuvent pas être convertis. LibreOffice est gratuit : une fois installé, Automat-PDF s'en sert de lui-même.",
         conseille: "Microsoft Office fera les conversions. LibreOffice, gratuit, prendrait le relais quand une application d'Office manque ou ne répond pas.",
       },
       installer: "Installer LibreOffice",
@@ -663,8 +681,7 @@ export const textes = {
       deposer: "Glissez vos PDF ici",
       deposerDetail: "Chacun deviendra un document Word modifiable (.docx).",
       aide: "Par Microsoft Word s'il est installé, le plus fidèle ; sinon, Automat-PDF convertit lui-même : texte modifiable, images à leur place, colonnes alignées par des tabulations. Relisez le document obtenu. Un PDF numérisé sans texte reconnu ne donne que des images.",
-      sansWord:
-        "Microsoft Word n'est pas installé sur ce PC : Automat-PDF convertira lui-même, avec une mise en page plus simple que celle de Word (paragraphes, polices, images ; les tableaux deviennent des colonnes alignées).",
+      sansWord: `Microsoft Word n'est pas installé sur ${CET_ORDINATEUR} : Automat-PDF convertira lui-même, avec une mise en page plus simple que celle de Word (paragraphes, polices, images ; les tableaux deviennent des colonnes alignées).`,
     },
   },
   liste: {

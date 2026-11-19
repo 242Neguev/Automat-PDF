@@ -247,7 +247,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automat-pdf"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "flate2",
  "getrandom 0.4.3",
@@ -256,6 +256,9 @@ dependencies = [
  "keyring",
  "lettre",
  "lopdf",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "reqwest",
  "serde",
  "serde_json",

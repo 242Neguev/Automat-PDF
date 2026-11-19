@@ -300,7 +300,7 @@ export default function SeparationParPersonne() {
     if (modeEnvoi === "brouillons") return void envoyer(envois.messages);
     setConfirmation({
       titre: t.envoi.confirmerTitre,
-      texte: t.envoi.confirmerTexte(envois.messages.length, parMessagerie && compteMessagerie ? compteMessagerie.adresse : "Outlook"),
+      texte: t.envoi.confirmerTexte(envois.messages.length, parMessagerie && compteMessagerie ? compteMessagerie.adresse : t.envoi.logiciel),
       bouton: t.envoi.confirmer,
       couleur: "eau",
       action: () => void envoyer(envois.messages),

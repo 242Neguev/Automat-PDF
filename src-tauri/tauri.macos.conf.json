@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "fileAssociations": [
+      {
+        "name": "Document PDF",
+        "ext": ["pdf"],
+        "contentTypes": ["com.adobe.pdf"],
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "name": "Image",
+        "ext": ["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif"],
+        "contentTypes": ["public.jpeg", "public.png", "org.webmproject.webp", "public.tiff", "com.microsoft.bmp", "com.compuserve.gif"],
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "name": "Document Office",
+        "ext": ["doc", "docx", "rtf", "odt", "xls", "xlsx", "ods", "ppt", "pptx", "odp"],
+        "contentTypes": [
+          "com.microsoft.word.doc",
+          "org.openxmlformats.wordprocessingml.document",
+          "public.rtf",
+          "org.oasis-open.opendocument.text",
+          "com.microsoft.excel.xls",
+          "org.openxmlformats.spreadsheetml.sheet",
+          "org.oasis-open.opendocument.spreadsheet",
+          "com.microsoft.powerpoint.ppt",
+          "org.openxmlformats.presentationml.presentation",
+          "org.oasis-open.opendocument.presentation"
+        ],
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-",
+      "entitlements": "macos/autorisations.entitlements",
+      "dmg": {
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 180, "y": 190 },
+        "applicationFolderPosition": { "x": 480, "y": 190 }
+      }
+    }
+  }
+}

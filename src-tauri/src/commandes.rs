@@ -425,7 +425,15 @@ pub async fn ouvrir_page_des_versions() -> Result<(), Erreur> {
     en_arriere_plan(operations::ouvrir_page_des_versions).await
 }
 
-/// Fichiers confiés par l'Explorateur (clic droit), gardés jusqu'à ce que l'interface les prenne.
+/// Relance l'application : sous macOS, la mise à jour remplace l'application sans la fermer, et la
+/// nouvelle version ne sert qu'une fois rouverte.
+#[tauri::command]
+pub fn relancer(app: AppHandle) {
+    app.restart()
+}
+
+/// Fichiers confiés par le système (clic droit, « Ouvrir avec »), gardés jusqu'à ce que
+/// l'interface les prenne.
 pub struct Lancement(pub Mutex<Reception>);
 
 /// Fichiers confiés avant que l'interface soit prête : au lancement, et par les lancements suivants

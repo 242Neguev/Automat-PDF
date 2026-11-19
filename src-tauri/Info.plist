@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS : ajouts à l'Info.plist de l'application (Tauri les fusionne avec le sien, en mode
+  développement comme dans l'application installée).
+  - CFBundleDevelopmentRegion, CFBundleAllowMixedLocalizations : l'application est en français ;
+    les fenêtres de macOS (ouvrir, enregistrer) suivent la langue du système.
+  - NSAppleEventsUsageDescription : raison affichée par macOS quand Automat-PDF demande à piloter
+    Word, Excel, PowerPoint ou Mail (Office en PDF, PDF en Word, envoi par Mail).
+  - NSServices : clic droit dans le Finder, comme le sous-menu de l'Explorateur sous Windows
+    (src-tauri/windows/clic-droit.nsh). Chaque service confie les fichiers choisis à l'outil
+    nommé dans NSUserData (src/outils.tsx) ; NSRequiredContext, même vide, l'active d'emblée.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>fr</string>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Automat-PDF pilote Microsoft Word, Excel et PowerPoint pour convertir vos documents, et Mail pour préparer ou envoyer vos messages.</string>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Automat-PDF : Organiser les pages</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>ouvrirAvecOutil</string>
+			<key>NSUserData</key>
+			<string>organiser</string>
+			<key>NSPortName</key>
+			<string>Automat-PDF</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Automat-PDF : Fusionner</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>ouvrirAvecOutil</string>
+			<key>NSUserData</key>
+			<string>fusionner</string>
+			<key>NSPortName</key>
+			<string>Automat-PDF</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Automat-PDF : Compresser</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>ouvrirAvecOutil</string>
+			<key>NSUserData</key>
+			<string>compresser</string>
+			<key>NSPortName</key>
+			<string>Automat-PDF</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Automat-PDF : Protéger par un mot de passe</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>ouvrirAvecOutil</string>
+			<key>NSUserData</key>
+			<string>motDePasse</string>
+			<key>NSPortName</key>
+			<string>Automat-PDF</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Automat-PDF : Séparer par personne</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>ouvrirAvecOutil</string>
+			<key>NSUserData</key>
+			<string>parPersonne</string>
+			<key>NSPortName</key>
+			<string>Automat-PDF</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Automat-PDF : Convertir en Word</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>ouvrirAvecOutil</string>
+			<key>NSUserData</key>
+			<string>pdfEnWord</string>
+			<key>NSPortName</key>
+			<string>Automat-PDF</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Automat-PDF : Convertir en images</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>ouvrirAvecOutil</string>
+			<key>NSUserData</key>
+			<string>enImages</string>
+			<key>NSPortName</key>
+			<string>Automat-PDF</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Automat-PDF : Mettre en PDF</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>ouvrirAvecOutil</string>
+			<key>NSUserData</key>
+			<string>images</string>
+			<key>NSPortName</key>
+			<string>Automat-PDF</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.jpeg</string>
+				<string>public.png</string>
+				<string>org.webmproject.webp</string>
+				<string>public.tiff</string>
+				<string>com.microsoft.bmp</string>
+				<string>com.compuserve.gif</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Automat-PDF : Convertir en PDF</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>ouvrirAvecOutil</string>
+			<key>NSUserData</key>
+			<string>officeEnPdf</string>
+			<key>NSPortName</key>
+			<string>Automat-PDF</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.microsoft.word.doc</string>
+				<string>org.openxmlformats.wordprocessingml.document</string>
+				<string>public.rtf</string>
+				<string>org.oasis-open.opendocument.text</string>
+				<string>com.microsoft.excel.xls</string>
+				<string>org.openxmlformats.spreadsheetml.sheet</string>
+				<string>org.oasis-open.opendocument.spreadsheet</string>
+				<string>com.microsoft.powerpoint.ppt</string>
+				<string>org.openxmlformats.presentationml.presentation</string>
+				<string>org.oasis-open.opendocument.presentation</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
