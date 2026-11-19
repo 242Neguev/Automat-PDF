@@ -39,7 +39,7 @@ L'installateur Windows (`.exe`) et l'image disque Mac (`.dmg`, une seule pour le
 | **PDF-12** | **Prise en main sans formation** : **accueil** « Que voulez-vous faire ? » (tâches en grand ; recherche avec les mots de tous les jours : « signer », « alléger », « réunir », « bulletins de paie »… ; fichiers déposés ou choisis sur l'accueil, et l'application propose les outils qui conviennent) ; sur chaque outil, une grande zone « Glissez votre PDF ici » ; nouveau fichier proposé **à côté de l'original** ; une fois le travail fait, un encadré **Ouvrir** / **Afficher dans le dossier** (seuls les PDF, documents Word et images que l'application crée s'ouvrent ainsi) ; bouton grisé accompagné de ce qu'il manque (« Ajoutez au moins deux PDF. ») ; **Séparer** et **Séparer par personne** en étapes numérotées, colonnes de la liste ajoutées d'un clic dans les noms de fichiers et les messages, colonne du mot de passe choisie dans une liste ; vocabulaire simplifié (« Masquer des passages », « Rectos et versos », « Réglages enregistrés » ; ni AES-256, ni CMJN, ni ppp à l'écran) ; textes d'aide plus contrastés, erreurs affichées 15 secondes | ✅ |
 | **PDF-13** | **Mises à jour et statistiques** : au démarrage puis chaque jour, Automat-PDF regarde sur GitHub si une nouvelle version est publiée ; un bandeau la propose, et **Mettre à jour** la télécharge, vérifie sa signature, l'installe puis rouvre l'application (recherche désactivable dans « À propos ») ; **statistiques anonymes** envoyées seulement après un « Oui » à la question posée au premier lancement (un signal par ouverture : numéro tiré au hasard, version, Windows, langue), reçues pour Eau sèche par le site de SI-Tech Global Consulting et affichées sur son tableau de bord : e-mail à chaque nouvelle installation, résumé chaque lundi avec les téléchargements et les recherches de mise à jour comptés par GitHub ([confidentialité](#confidentialité-privacy-policy)) | ✅ |
 | **PDF-14** | **Petits écrans** : sur un portable dont l'affichage est agrandi (1920 × 1080 à 150 %, 175 % ou 200 %), la fenêtre agrandie ne passe plus sous la barre des tâches : elle exigeait 680 pixels de haut, plus que l'écran n'en offre ; elle en demande 460 (et 900 de large) ; à l'ouverture, elle ne dépasse plus de l'écran ; le **bouton principal** de chaque outil reste à l'écran, collé en bas de la fenêtre, quand la page est plus haute qu'elle (avec ce qu'il manque quand il est grisé) ; les boutons de la question du premier lancement et des réglages de la messagerie restent visibles ; une fois le travail fait, l'encadré du résultat vient à l'écran ; l'aperçu en grand d'**Organiser** se règle sur la taille de la fenêtre ; dans **Signature ou cachet**, **Masquer des passages** et **Numéros et tampon**, la page passe sous les réglages quand la fenêtre est étroite | ✅ |
-| **PDF-15** | **Version Mac** (macOS 11 ou plus récent, une seule application pour les Mac Intel et Apple Silicon) : image disque `.dmg`, compilée sur un Mac par un double-clic (`scripts/compiler-mac.command`) ou par GitHub Actions avec l'installateur Windows ; **clic droit dans le Finder** par les services « Automat-PDF : Compresser »… (mêmes actions que sous Windows), **Ouvrir avec** et dépôt sur l'icône du Dock, sans prendre la place d'Aperçu ; une seule fenêtre ; **Office en PDF et PDF en Word par Microsoft Office pour Mac**, piloté par AppleScript : chaque document est confié à Word, Excel ou PowerPoint dans son propre dossier, où son bac à sable le laisse travailler sans rien demander, puis le fichier créé est rangé à sa place (LibreOffice ou Automat-PDF lui-même en relais, comme sous Windows ; jamais un document de l'utilisateur fermé) ; **envoi par Mail** (brouillons ou envoi direct) à la place d'Outlook ; mot de passe de la messagerie dans le trousseau de macOS ; barre des menus et textes adaptés au Mac (⌘, Finder, Mail) ; mises à jour installées puis application relancée ; statistiques avec la version de macOS ; [fiche de test sous Mac](docs/test-mac/README.md) | ✅ |
+| **PDF-15** | **Version Mac** (macOS 11 ou plus récent, une seule application pour les Mac Intel et Apple Silicon) : image disque `.dmg`, compilée sur un Mac par un double-clic (`scripts/compiler-mac.command`) et publiée avec l'installateur Windows, compilé lui aussi sur le Mac (`scripts/publier.command`) ; **clic droit dans le Finder** par les services « Automat-PDF : Compresser »… (mêmes actions que sous Windows), **Ouvrir avec** et dépôt sur l'icône du Dock, sans prendre la place d'Aperçu ; une seule fenêtre ; **Office en PDF et PDF en Word par Microsoft Office pour Mac**, piloté par AppleScript : chaque document est confié à Word, Excel ou PowerPoint dans son propre dossier, où son bac à sable le laisse travailler sans rien demander, puis le fichier créé est rangé à sa place (LibreOffice ou Automat-PDF lui-même en relais, comme sous Windows ; jamais un document de l'utilisateur fermé) ; **envoi par Mail** (brouillons ou envoi direct) à la place d'Outlook ; mot de passe de la messagerie dans le trousseau de macOS ; barre des menus et textes adaptés au Mac (⌘, Finder, Mail) ; mises à jour installées puis application relancée ; statistiques avec la version de macOS ; [fiche de test sous Mac](docs/test-mac/README.md) | ✅ |
 
 ## Développer (Mac ou Windows)
 
@@ -55,6 +55,8 @@ npm install            # dépendances de l'interface
 npm run tauri dev      # lance l'application en mode développement (rechargement automatique)
 npm run verifier       # TypeScript, tests de l'interface, mise en forme et lints Rust, tests du cœur
 ```
+
+Sur un Mac, `scripts/verifier.command` fait les vérifications complètes, pour macOS **et pour Windows** (lints Clippy et compilation des tests du cœur Windows, depuis le Mac) : c'est ce que faisait le workflow « Vérifications » de GitHub Actions, désactivé depuis le 19/11/2026 (voir [Publier une version](#publier-une-version-sur-un-mac)). Il installe ce qui manque, comme `compiler-mac.command` ; `--sans-windows` saute la partie Windows. Les tests du cœur Windows eux-mêmes se lancent sur un PC (`cargo test`).
 
 La première compilation Rust est longue (plusieurs minutes) ; les suivantes sont rapides. En développement, l'interface est servie sur le port 1440 : Automat-Process (port 1420) peut tourner en même temps.
 
@@ -81,14 +83,9 @@ Pour essayer l'application sous Windows, suivre la [fiche de test](docs/test-win
 
 > L'exécutable n'est pas encore signé : Windows affiche l'avertissement « Windows a protégé votre ordinateur ». Il faut cliquer sur **Informations complémentaires**, puis sur **Exécuter quand même**. La signature est prévue par SignPath Foundation, qui signe gratuitement les logiciels libres : voir la [politique de signature du code](#politique-de-signature-du-code-code-signing-policy).
 
-### Option 2 : GitHub Actions (rien à installer)
+### Option 2 : compiler sur un Mac
 
-Gratuit pour ce dépôt public : GitHub compile l'installateur sur l'un de ses ordinateurs Windows.
-
-1. Ouvrir le dépôt sur GitHub, onglet **Actions**, puis **Installateurs** et **Run workflow**.
-2. À la fin de l'exécution, télécharger les **artefacts** : l'installateur `.exe` (NSIS) et le `.msi` de Windows, puis l'image disque `.dmg` du Mac (compilée après Windows).
-
-Pour publier une version, il suffit d'envoyer un tag : `git tag v0.3.0 && git push origin v0.3.0`. Une **publication GitHub en brouillon** est alors créée avec les installateurs attachés (Windows, puis Mac), et `latest.json`, que lisent les Automat-PDF installés : dès que la publication n'est plus un brouillon, ils proposent la mise à jour, sous Windows comme sur Mac.
+`scripts/publier.command --essai --sans-mac` compile l'installateur Windows sur un Mac à puce Apple (compilation croisée prévue par Tauri : NSIS seulement, pas de `.msi`), avec une clé de mise à jour jetable, sans rien envoyer : l'installateur est dans `dist-publication/`. Voir [Publier une version](#publier-une-version-sur-un-mac).
 
 ## Obtenir l'application Mac
 
@@ -108,13 +105,30 @@ Pour publier une version, il suffit d'envoyer un tag : `git tag v0.3.0 && git pu
 
 Pour essayer l'application sur Mac, suivre la [fiche de test sous Mac](docs/test-mac/README.md).
 
-### Option 2 : GitHub Actions
+## Publier une version (sur un Mac)
 
-Le workflow **Installateurs** (voir plus haut) produit aussi l'image disque du Mac : dans les artefacts d'une exécution lancée à la main, ou dans la publication créée par un tag.
+Depuis le 19/11/2026, les versions se compilent et se publient **sur un Mac à puce Apple**, sans service payant : les workflows de GitHub Actions (`.github/workflows`) sont désactivés, et GitHub ne sert plus qu'à héberger le code et les publications. `scripts/publier.command` fait ce que faisait le workflow « Installateurs » :
+
+1. il vérifie que le dossier n'a pas de modification, que le commit est le dernier de `main` sur GitHub, que le numéro de version est le même partout et que les notes de version sont écrites (`notes-de-version/X.Y.Z.md`) ;
+2. il vérifie que la clé de mise à jour est bien celle des Automat-PDF installés (voir plus bas) ;
+3. il compile l'installateur Windows (depuis le Mac) et l'application Mac universelle, avec leurs fichiers de mise à jour signés, et vérifie chaque signature comme le feront les applications installées ;
+4. il écrit `latest.json` (Windows, Mac Intel et Apple Silicon) ;
+5. il crée la **publication GitHub en brouillon** : installateur `.exe` et sa signature, image disque `.dmg`, mise à jour Mac (`.app.tar.gz`) et sa signature, `latest.json` ; notes de version complétées des empreintes SHA-256.
+
+Il reste à relire le brouillon, à **essayer les installateurs** (fiches de test [Windows](docs/test-windows/README.md) et [Mac](docs/test-mac/README.md)), puis à publier : `gh release edit vX.Y.Z --draft=false` (ou **Publish release** sur GitHub). C'est la publication qui crée l'étiquette `vX.Y.Z` ; dès lors, les Automat-PDF installés proposent la mise à jour, sous Windows comme sur Mac.
+
+Avant la première publication, sur le Mac :
+
+- copier la **clé privée** des mises à jour dans `~/.tauri/automat-pdf.key` (hors de tout dépôt ; `--cle FICHIER` pour un autre emplacement) ; son mot de passe est demandé une fois, puis gardé dans le trousseau de macOS (« automat-pdf-cle-mises-a-jour ») ;
+- écrire l'adresse qui reçoit les statistiques anonymes dans `~/.config/automat-pdf/statistiques` (une ligne `https://…`) : sans elle, l'application ne pose pas la question et n'envoie rien.
+
+La première fois, le script installe aussi ce qu'il faut pour compiler Windows sur le Mac, dans `~/.local/share/automat-pdf-compilation` (environ 2 Go à télécharger, vérifiés) : LLVM (`clang-cl`, `lld-link`, `llvm-rc`), NSIS (`makensis`, compilé depuis ses sources) et `cargo-xwin`, qui télécharge les bibliothèques et en-têtes Windows de Microsoft, sous la licence de Microsoft. Chez Tauri, cette compilation croisée est encore dite expérimentale : c'est pourquoi l'installateur Windows s'essaie sur un PC avant chaque publication.
+
+`scripts/publier.command --essai` fait tout avec une clé jetable, sans rien envoyer (fichiers dans `dist-publication/`) : pour essayer la chaîne, ou un installateur. Autres options : `--sans-windows`, `--sans-mac`, `--remplacer` (refaire un brouillon).
 
 ## Signature des mises à jour
 
-Chaque mise à jour est signée par une clé propre au projet : avant d'installer une nouvelle version, Automat-PDF vérifie sa signature avec la clé publique écrite dans `src-tauri/tauri.conf.json`. La clé privée et son mot de passe sont rangés dans les secrets du dépôt (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) et, en lieu sûr, chez le mainteneur : perdue, elle obligerait chaque utilisateur à réinstaller Automat-PDF à la main. Seul GitHub Actions produit les fichiers de mise à jour (`src-tauri/tauri.publication.conf.json`) : une compilation sur un PC n'a pas besoin de la clé. Chaque signature porte le numéro de la version : une ancienne version ne peut pas être resservie comme une nouvelle (`requireSignedVersion`).
+Chaque mise à jour est signée par une clé propre au projet : avant d'installer une nouvelle version, Automat-PDF vérifie sa signature avec la clé publique écrite dans `src-tauri/tauri.conf.json`. La clé privée et son mot de passe sont gardés par le mainteneur : sur le Mac qui publie (voir plus haut) et, en lieu sûr, ailleurs ; perdue, elle obligerait chaque utilisateur à réinstaller Automat-PDF à la main. Seul `scripts/publier.command` produit les fichiers de mise à jour (`src-tauri/tauri.publication.conf.json`) : une compilation pour essai, sur un PC ou un Mac, n'a pas besoin de la clé. Chaque signature porte le numéro de la version : une ancienne version ne peut pas être resservie comme une nouvelle (`requireSignedVersion`).
 
 Quand SignPath signera l'installateur, cette signature le modifiera : il faudra refaire ensuite sa signature de mise à jour (`tauri signer sign --app-version X.Y.Z`) et la reporter dans `latest.json`, sinon les Automat-PDF installés refuseront la mise à jour.
 
@@ -202,13 +216,13 @@ Les installateurs seront signés gratuitement par [SignPath Foundation](https://
 
 *Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).*
 
-- Seules les versions compilées automatiquement depuis ce dépôt, par GitHub Actions, seront signées, chacune après une approbation manuelle.
+- Seules les versions compilées automatiquement depuis ce dépôt, par GitHub Actions, seront signées, chacune après une approbation manuelle. (Les versions actuelles, non signées, sont compilées sur un Mac par `scripts/publier.command` ; quand SignPath acceptera le projet, la compilation de Windows reviendra à GitHub Actions, gratuit pour ce dépôt public, condition de cette signature.)
 - **Auteurs et relecteurs** (*committers and reviewers*) : Eau sèche ([@242Neguev](https://github.com/242Neguev)). Toute contribution proposée par une autre personne (pull request) est relue avant d'être acceptée.
 - **Approbation des signatures** (*approvers*) : Eau sèche ([@242Neguev](https://github.com/242Neguev)).
 
 *In English: Windows releases of Automat-PDF will be signed for free by [SignPath.io](https://about.signpath.io), with a certificate issued to [SignPath Foundation](https://signpath.org), once the project is accepted. Only releases built automatically from this repository by GitHub Actions, each one approved manually by the maintainer ([@242Neguev](https://github.com/242Neguev)), will be signed.*
 
-**Mac** : l'application est signée « ad hoc » (sans identité d'Apple), ce qui suffit à macOS pour la lancer une fois autorisée (voir [Télécharger](#télécharger)). Signée par un certificat *Developer ID* et notarisée par Apple, elle s'ouvrirait sans avertissement : il faut pour cela un compte Apple Developer (99 $ par an), dont les secrets se règlent dans GitHub (voir `.github/workflows/installateurs.yml`). Comme pour Windows, seules les versions compilées par GitHub Actions seraient signées.
+**Mac** : l'application est signée « ad hoc » (sans identité d'Apple), ce qui suffit à macOS pour la lancer une fois autorisée (voir [Télécharger](#télécharger)). Signée par un certificat *Developer ID* et notarisée par Apple, elle s'ouvrirait sans avertissement : il faut pour cela un compte Apple Developer (99 $ par an), puis donner son identité de signature à `scripts/publier.command` (à ajouter le jour venu).
 
 ### Confidentialité (Privacy policy)
 

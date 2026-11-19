@@ -4,6 +4,8 @@ Tout ce qui ne peut pas être essayé sur Mac : la compilation et l'installateur
 
 **Version à tester** : le commit `9d5264d` ou plus récent (`git log -1` pour le vérifier).
 
+**Installateur compilé sur un Mac** (depuis la 0.3.0) : les versions publiées sont compilées sur un Mac par `scripts/publier.command` (compilation croisée, voir le README), et non plus sur un PC par GitHub Actions. Avant chaque publication, essayer **cet** installateur-là sur un PC, de préférence à celui de `compiler-windows.cmd` : prendre `Automat-PDF_X.Y.Z_x64-setup.exe` dans `dist-publication/` (essai, `scripts/publier.command --essai --sans-mac`) ou dans le brouillon de publication sur GitHub, puis suivre la fiche à partir de l'étape 1.3. Les parties 1 (installation), 2 (clic droit), 5 (Office), 8 (e-mail) et 10 (mises à jour) comptent le plus : ce sont elles qui passent par Windows lui-même.
+
 ## Avant de commencer
 
 - Un PC sous Windows 10 ou 11, avec Internet : la première compilation télécharge plusieurs Go (moins si Automat-Process a déjà été compilé sur ce PC).
