@@ -76,7 +76,7 @@ function PageZones({ chemin, page, zones, onZones }: { chemin: string; page: num
       onPointerMove={mouvement}
       onPointerUp={fin}
       data-page-caviardage
-      style={{ boxShadow: "0 1px 4px rgba(34, 37, 42, 0.25)", background: "white", cursor: "crosshair", touchAction: "none", userSelect: "none", flexShrink: 0 }}
+      style={{ boxShadow: "var(--automat-ombre-page)", background: "white", cursor: "crosshair", touchAction: "none", userSelect: "none", flexShrink: 0 }}
     >
       {fond ? (
         <img src={fond} width={LARGEUR} alt="" draggable={false} onLoad={(e) => setHauteur((LARGEUR * e.currentTarget.naturalHeight) / e.currentTarget.naturalWidth)} style={{ display: "block" }} />

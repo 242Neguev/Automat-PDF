@@ -39,7 +39,7 @@ const LARGEUR_APERCU = 420;
 /** Choix de la position du numéro : une page schématique avec six emplacements. */
 function ChoixPosition({ valeur, onValeur }: { valeur: Position; onValeur: (position: Position) => void }) {
   return (
-    <Box w={96} h={124} p={6} style={{ border: "1px solid var(--mantine-color-gray-4)", borderRadius: 3, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+    <Box w={96} h={124} p={6} style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: 3, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
       {[POSITIONS.slice(0, 3), POSITIONS.slice(3)].map((rangee, i) => (
         <SimpleGrid key={i} cols={3} spacing={4}>
           {rangee.map((position) => (
@@ -51,7 +51,7 @@ function ChoixPosition({ valeur, onValeur }: { valeur: Position; onValeur: (posi
                 h={18}
                 style={{
                   borderRadius: 2,
-                  background: position === valeur ? "var(--mantine-color-eau-6)" : "var(--mantine-color-gray-2)",
+                  background: position === valeur ? "var(--mantine-color-eau-6)" : "var(--automat-neutre)",
                 }}
               />
             </Tooltip>
@@ -273,7 +273,7 @@ export default function NumerosTampon() {
               </Group>
               <Box w={LARGEUR_APERCU} mih={LARGEUR_APERCU} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {apercu && options ? (
-                  <img src={apercu} alt={t.page(page + 1, source.pages)} width={LARGEUR_APERCU} style={{ boxShadow: "0 1px 4px rgba(34, 37, 42, 0.25)" }} />
+                  <img src={apercu} alt={t.page(page + 1, source.pages)} width={LARGEUR_APERCU} style={{ boxShadow: "var(--automat-ombre-page)" }} />
                 ) : options ? (
                   <Loader size="sm" color="gray" />
                 ) : (

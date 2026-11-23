@@ -1,6 +1,24 @@
+/*
+ * Thème de l'ordinateur, clair ou sombre (couleurs : theme.ts). Les éléments du système (barres de
+ * défilement, champs) le suivent aussi. Avant que l'interface ne s'affiche, le fond est déjà sombre :
+ * pas d'éclair blanc à l'ouverture.
+ */
+:root[data-mantine-color-scheme="light"] {
+  color-scheme: light;
+}
+:root[data-mantine-color-scheme="dark"] {
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mantine-color-scheme]) {
+    color-scheme: dark;
+    background-color: #22252a;
+  }
+}
+
 /* Zone où glisser ses fichiers : pointillés, et couleur d'accent au survol (elle se clique aussi). */
 .zone-depot {
-  border: 2px dashed var(--mantine-color-gray-4);
+  border: 2px dashed var(--mantine-color-default-border);
   cursor: pointer;
   transition:
     border-color 120ms ease,
@@ -8,7 +26,7 @@
 }
 .zone-depot:hover {
   border-color: var(--mantine-color-eau-5);
-  background-color: var(--mantine-color-eau-0);
+  background-color: var(--automat-accent-fond);
 }
 
 /*
@@ -26,7 +44,7 @@
   transition: box-shadow 120ms ease;
 }
 .barre-action[data-collee] {
-  box-shadow: 0 -10px 12px -10px rgba(34, 37, 42, 0.4);
+  box-shadow: var(--automat-ombre-barre);
 }
 /* Dans une fenêtre de dialogue, la barre descend jusqu'à son bord. */
 .pied-fenetre {
@@ -49,6 +67,6 @@
 }
 .tuile-outil:hover > .mantine-Paper-root,
 .tuile-outil:focus-visible > .mantine-Paper-root {
-  border-color: var(--mantine-color-eau-6);
-  background-color: var(--mantine-color-eau-0);
+  border-color: var(--automat-accent-bord);
+  background-color: var(--automat-accent-fond);
 }

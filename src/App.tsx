@@ -15,7 +15,6 @@ import { BandeauMiseAJour, useMiseAJour } from "./MiseAJour";
 import { GROUPES, OUTILS, type DefinitionOutil, type Outil } from "./outils";
 import { sortesDe, transmettre } from "./pages/commun/reception";
 import { textes } from "./textes";
-import { COULEURS } from "./theme";
 
 /** Ce qui est affiché : l'accueil, ou un outil. */
 type Vue = Outil | "accueil";
@@ -137,8 +136,8 @@ export default function App() {
         <Group h="100%" px="lg" justify="space-between">
           <UnstyledButton onClick={() => setVue("accueil")} aria-label={textes.accueil.titre}>
             <Group gap="sm">
-              <ThemeIcon size="lg" radius="md" color={COULEURS.encre}>
-                <Text fw={800} size="xs" c={COULEURS.sec}>
+              <ThemeIcon size="lg" radius="md" color="var(--automat-logo-fond)">
+                <Text fw={800} size="xs" c="var(--automat-logo-texte)">
                   PDF
                 </Text>
               </ThemeIcon>
@@ -207,7 +206,7 @@ export default function App() {
         <Box
           pos="fixed"
           inset={12}
-          style={{ zIndex: 300, pointerEvents: "none", border: "3px dashed var(--mantine-color-eau-6)", borderRadius: 12, background: "rgba(255, 255, 255, 0.85)" }}
+          style={{ zIndex: 300, pointerEvents: "none", border: "3px dashed var(--automat-accent-bord)", borderRadius: 12, background: "var(--automat-voile)" }}
           data-survol
         >
           <Stack h="100%" justify="center" align="center">

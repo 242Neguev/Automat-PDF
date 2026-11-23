@@ -364,7 +364,7 @@ export default function SeparationParPersonne() {
 
   return (
     <Stack gap="md" maw={900}>
-      <Paper withBorder p="md" bg="var(--mantine-color-gray-0)" data-enchainements>
+      <Paper withBorder p="md" bg="var(--automat-encart)" data-enchainements>
         <Stack gap={6}>
           <Group align="flex-end" gap="sm">
             <Select

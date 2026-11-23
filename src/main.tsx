@@ -6,11 +6,11 @@ import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
 import "./interface.css";
 import App from "./App";
-import { theme, variables } from "./theme";
+import { suivreOrdinateur, theme, variables } from "./theme";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <MantineProvider theme={theme} cssVariablesResolver={variables} defaultColorScheme="light">
+    <MantineProvider theme={theme} cssVariablesResolver={variables} defaultColorScheme="auto" colorSchemeManager={suivreOrdinateur}>
       <Notifications position="bottom-right" />
       <App />
     </MantineProvider>

@@ -98,7 +98,11 @@ Avec une image disque publiée par GitHub (étiquette `vX.Y.Z`), quand une versi
 2. **Mettre à jour**.
    **Attendu** : barre de téléchargement, puis Automat-PDF se ferme et se rouvre de lui-même, avec la nouvelle version dans **À propos**. macOS peut demander le mot de passe de l'ordinateur pour remplacer l'application dans le dossier Applications.
 
-## 9. Désinstaller
+## 9. Thème sombre
+
+Comme la partie 12 de la fiche Windows, avec *Réglages Système > Apparence* : **Sombre**, puis **Claire** (ou **Auto**, qui change avec l'heure). La barre de titre et le contenu de la fenêtre changent ensemble, aussitôt.
+
+## 10. Désinstaller
 
 Glisser Automat-PDF du dossier Applications à la Corbeille.
 
@@ -116,7 +120,8 @@ Glisser Automat-PDF du dossier Applications à la Corbeille.
 | 6. PDF en Word | | |
 | 7. Envoi par Mail | | |
 | 8. Mises à jour | | |
-| 9. Désinstallation | | |
+| 9. Thème sombre | | |
+| 10. Désinstallation | | |
 
 ## Premier passage sur Mac (18 et 19 novembre 2026)
 

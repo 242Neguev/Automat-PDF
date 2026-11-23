@@ -108,7 +108,7 @@ export default function Accueil({ groupes, onOutil, onFichiers }: Props) {
               data-recherche
             />
             <Group gap={6} wrap="nowrap">
-              <IconShieldCheck size={18} color="var(--mantine-color-teal-7)" style={{ flexShrink: 0 }} />
+              <IconShieldCheck size={18} color="var(--automat-confiance)" style={{ flexShrink: 0 }} />
               <Text size="sm" c="dimmed">
                 {t.rassurer}
               </Text>

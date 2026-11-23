@@ -210,7 +210,18 @@ Pour reproduire l'écran d'un portable : *Paramètres > Système > Écran*, **É
 5. Rétrécir la fenêtre en tirant son coin, le plus possible.
    **Attendu** : elle s'arrête à 900 × 460 environ ; chaque page défile. Dans **Signature ou cachet**, un PDF choisi, la page passe sous les réglages au lieu de déborder.
 
-## 12. Désinstaller
+## 12. Thème sombre
+
+Automat-PDF suit le mode clair ou sombre de Windows : *Paramètres > Personnalisation > Couleurs*, **Choisir votre mode**. Remettre la valeur d'origine à la fin.
+
+1. Automat-PDF ouvert, passer Windows en mode **Sombre**.
+   **Attendu** : la fenêtre passe en sombre aussitôt, sans redémarrer : fond gris foncé, textes clairs, logo « PDF » clair en haut à gauche, barre de titre sombre.
+2. Parcourir l'accueil, **Pages par feuille** (cartes et schémas des feuilles), **Numéros et tampon** avec un PDF choisi, puis **À propos**.
+   **Attendu** : tout se lit sans effort ; l'outil choisi et la carte choisie se distinguent ; les aperçus des pages restent blancs ; dans **À propos**, les logos d'Eau sèche sont clairs.
+3. Repasser Windows en mode **Clair**.
+   **Attendu** : l'application redevient claire aussitôt, comme avant.
+
+## 13. Désinstaller
 
 1. *Paramètres > Applications* : désinstaller Automat-PDF.
 2. Rouvrir une fenêtre de l'Explorateur et faire un clic droit sur un PDF, une image et un document Word.
@@ -232,7 +243,8 @@ Pour reproduire l'écran d'un portable : *Paramètres > Système > Écran*, **É
 | 9. Réglages enregistrés | | |
 | 10. Mises à jour et statistiques | | |
 | 11. Petit écran | | |
-| 12. Désinstallation | | |
+| 12. Thème sombre | | |
+| 13. Désinstallation | | |
 
 Les parties 1, 2, 5, 6 et 8 sont les plus importantes : ce sont celles qui n'ont jamais pu être essayées.
 

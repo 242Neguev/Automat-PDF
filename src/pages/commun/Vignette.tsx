@@ -66,7 +66,7 @@ export default function Vignette({ chemin, page, rotation = 0, taille, largeur, 
             maxWidth: "100%",
             maxHeight: "100%",
             transform: rotation ? `rotate(${rotation}deg)` : undefined,
-            boxShadow: "0 1px 4px rgba(34, 37, 42, 0.25)",
+            boxShadow: "var(--automat-ombre-page)",
             background: "white",
           }}
         />

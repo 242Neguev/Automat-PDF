@@ -100,7 +100,7 @@ function PlacementImage({
   }
 
   return (
-    <Box pos="relative" w={LARGEUR} h={hauteur ?? LARGEUR * 1.414} style={{ boxShadow: "0 1px 4px rgba(34, 37, 42, 0.25)", background: "white", flexShrink: 0 }}>
+    <Box pos="relative" w={LARGEUR} h={hauteur ?? LARGEUR * 1.414} style={{ boxShadow: "var(--automat-ombre-page)", background: "white", flexShrink: 0 }}>
       {fond ? (
         <img
           src={fond}

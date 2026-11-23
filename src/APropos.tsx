@@ -58,8 +58,8 @@ export default function APropos({ ouvert, fermer, confidentialite, regler, miseA
         <Divider label={t.editeur} labelPosition="left" />
         {/* La charte Eau sèche impose une zone de protection autour du symbole : on le laisse respirer. */}
         <Group gap="xl" py="sm" justify="center">
-          <Image src={symboleEauSeche} alt="" h={64} w="auto" fit="contain" />
-          <Image src={nomEauSeche} alt="Eau sèche" h={30} w="auto" fit="contain" />
+          <Image src={symboleEauSeche} alt="" h={64} w="auto" fit="contain" style={{ filter: "var(--automat-filtre-logo)" }} />
+          <Image src={nomEauSeche} alt="Eau sèche" h={30} w="auto" fit="contain" style={{ filter: "var(--automat-filtre-logo)" }} />
         </Group>
         <Group gap="lg" justify="center">
           <Coordonnee icone={IconPhone} valeur={t.telephone} />

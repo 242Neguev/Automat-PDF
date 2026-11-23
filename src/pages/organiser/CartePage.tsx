@@ -60,8 +60,8 @@ export default function CartePage({ element, numero, chemin, page, legende, desc
         opacity: isDragging ? 0.3 : 1,
         position: "relative",
         cursor: "grab",
-        outline: choisie ? "2px solid var(--mantine-color-eau-6)" : undefined,
-        background: choisie ? "var(--mantine-color-eau-0)" : undefined,
+        outline: choisie ? "2px solid var(--automat-accent-bord)" : undefined,
+        background: choisie ? "var(--automat-accent-fond)" : undefined,
         touchAction: "none",
       }}
       {...attributes}

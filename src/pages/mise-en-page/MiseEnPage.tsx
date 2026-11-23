@@ -28,8 +28,8 @@ function Feuille({ paysage, colonnes, pages }: { paysage: boolean; colonnes: num
         display: "grid",
         gridTemplateColumns: `repeat(${colonnes}, 1fr)`,
         gap: 3,
-        border: "1px solid var(--mantine-color-gray-4)",
-        background: "white",
+        border: "1px solid var(--mantine-color-default-border)",
+        background: "var(--automat-feuille)",
         borderRadius: 2,
       }}
     >
@@ -37,13 +37,13 @@ function Feuille({ paysage, colonnes, pages }: { paysage: boolean; colonnes: num
         <Box
           key={i}
           style={{
-            background: page ? "var(--mantine-color-eau-1)" : "transparent",
-            border: page ? "1px solid var(--mantine-color-eau-4)" : "1px dashed var(--mantine-color-gray-3)",
+            background: page ? "var(--automat-feuille-page)" : "transparent",
+            border: page ? "1px solid var(--automat-feuille-page-bord)" : "1px dashed var(--automat-feuille-vide)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontSize: 10,
-            color: "var(--mantine-color-eau-8)",
+            color: "var(--automat-feuille-page-texte)",
           }}
         >
           {page}
@@ -154,8 +154,8 @@ export default function MiseEnPage() {
                 p="md"
                 h="100%"
                 style={{
-                  outline: choisie ? "2px solid var(--mantine-color-eau-6)" : undefined,
-                  background: choisie ? "var(--mantine-color-eau-0)" : undefined,
+                  outline: choisie ? "2px solid var(--automat-accent-bord)" : undefined,
+                  background: choisie ? "var(--automat-accent-fond)" : undefined,
                 }}
               >
                 <Stack gap="xs" align="flex-start">
