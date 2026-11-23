@@ -64,8 +64,9 @@ export const pdfEnImages = (chemin: string, pages: number[], format: "png" | "jp
 
 export type Disposition = "deux-par-feuille" | "quatre-par-feuille" | "livret" | "format-a4";
 
-/** Enregistre dans `sortie` le PDF mis en page. */
-export const imposerPdf = (chemin: string, disposition: Disposition, sortie: string) => invoke<void>("imposer_pdf", { chemin, disposition, sortie });
+/** Enregistre dans `sortie` le PDF mis en page ; avec `repeter` (2 ou 4 par feuille), chaque page est répétée sur sa propre feuille. */
+export const imposerPdf = (chemin: string, disposition: Disposition, repeter: boolean, sortie: string) =>
+  invoke<void>("imposer_pdf", { chemin, disposition, repeter, sortie });
 
 /** Contenu brut d'une image, pour l'afficher telle quelle. */
 export const lireImage = (chemin: string) => invoke<ArrayBuffer>("lire_image", { chemin });

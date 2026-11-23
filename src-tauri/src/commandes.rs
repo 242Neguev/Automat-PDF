@@ -113,14 +113,15 @@ pub async fn pdf_en_images(
     en_arriere_plan(move || operations::pdf_en_images(&chemin, &pages, format, dpi, &dossier)).await
 }
 
-/// Enregistre le PDF mis en page (2 ou 4 par feuille, livret, format A4).
+/// Enregistre le PDF mis en page (2 ou 4 par feuille, à la suite ou répétées, livret, format A4).
 #[tauri::command]
 pub async fn imposer_pdf(
     chemin: String,
     disposition: Disposition,
+    repeter: bool,
     sortie: String,
 ) -> Result<(), Erreur> {
-    en_arriere_plan(move || operations::imposer_pdf(&chemin, disposition, &sortie)).await
+    en_arriere_plan(move || operations::imposer_pdf(&chemin, disposition, repeter, &sortie)).await
 }
 
 /// Enregistre le PDF avec numéros de page et tampon.

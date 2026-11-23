@@ -280,12 +280,18 @@ pub fn pdf_en_images(
         .ok_or_else(|| Erreur::simple("Aucune page à exporter."))
 }
 
-/// Enregistre dans `sortie` le PDF mis en page : 2 ou 4 pages par feuille, livret ou format A4.
-pub fn imposer_pdf(chemin: &str, disposition: Disposition, sortie: &str) -> Result<(), Erreur> {
+/// Enregistre dans `sortie` le PDF mis en page : 2 ou 4 pages par feuille (à la suite, ou chaque
+/// page répétée avec `repeter`), livret ou format A4.
+pub fn imposer_pdf(
+    chemin: &str,
+    disposition: Disposition,
+    repeter: bool,
+    sortie: &str,
+) -> Result<(), Erreur> {
     let octets = memoire::pdf(chemin)?;
     fichiers::enregistrer(
         sortie,
-        &imposition::imposer(&octets, &nom_de(chemin), disposition)?,
+        &imposition::imposer(&octets, &nom_de(chemin), disposition, repeter)?,
     )
 }
 

@@ -107,8 +107,10 @@ export const textes = {
     miseEnPage: {
       titre: "Pages par feuille",
       description: "2 ou 4 par feuille, livret, A4",
-      sousTitre: "Mettre 2 ou 4 pages par feuille pour économiser le papier, préparer un livret à plier, ou remettre toutes les pages au format A4.",
-      motsCles: "imprimer impression économiser papier deux quatre par feuille livret brochure plier format a4 redimensionner",
+      sousTitre:
+        "Mettre 2 ou 4 pages par feuille pour économiser le papier, imprimer une invitation en 4 exemplaires à découper, préparer un livret à plier, ou remettre toutes les pages au format A4.",
+      motsCles:
+        "imprimer impression économiser papier deux quatre par feuille livret brochure plier format a4 redimensionner invitation invitations carte cartes flyer flyers exemplaires copies répéter dupliquer découper",
     },
     images: {
       titre: "Images en PDF",
@@ -314,13 +316,21 @@ export const textes = {
     disposition: "Disposition",
     dispositions: {
       "deux-par-feuille": { titre: "2 pages par feuille", detail: "Deux pages côte à côte sur une feuille A4 en paysage." },
-      "quatre-par-feuille": { titre: "4 pages par feuille", detail: "Quatre pages sur une feuille A4 en portrait, dans l'ordre de lecture." },
+      "quatre-par-feuille": { titre: "4 pages par feuille", detail: "Quatre pages sur une feuille A4 en portrait." },
       livret: {
         titre: "Livret",
         detail: "Feuilles A4 à imprimer recto verso (retournement sur le bord court), puis à plier en deux : les pages se suivent.",
       },
       "format-a4": { titre: "Format A4", detail: "Chaque page mise à l'échelle sur une feuille A4, en portrait ou en paysage selon la page." },
     },
+    remplissage: "Sur chaque feuille",
+    remplissages: { suite: "Les pages à la suite", repetee: "Chaque page répétée" },
+    remplissagesAide: {
+      suite: (n: number) => `Les pages se suivent, ${n} par feuille, dans l'ordre de lecture : pour économiser le papier.`,
+      repetee: (n: number) =>
+        `Chaque page remplit sa propre feuille, en ${n} exemplaires à découper le long des traits de coupe : invitations, cartes, flyers… Pour un recto verso, imprimez le PDF créé en recto verso.`,
+    },
+    exemplaires: (n: number) => `${n} exemplaires par feuille`,
     resultat: (pages: number) => `${pages} page${pages > 1 ? "s" : ""} dans le PDF créé`,
     livret: (feuilles: number) => `${feuilles} feuille${feuilles > 1 ? "s" : ""} à imprimer recto verso`,
     raison: "Choisissez d'abord le PDF.",

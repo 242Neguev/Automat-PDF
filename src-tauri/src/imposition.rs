@@ -1,17 +1,25 @@
-//! Plusieurs pages par feuille (2 ou 4), livret à plier, ou pages remises au format A4. Chaque page
-//! devient un « formulaire » PDF (son contenu et ses ressources), placé à l'échelle dans une case de
-//! la feuille : rien n'est recalculé, texte et images restent nets. Les annotations visibles (champs
-//! de formulaire remplis, tampons) sont incrustées dans la page, pour ne pas disparaître.
+//! Plusieurs pages par feuille (2 ou 4), à la suite ou chaque page répétée (des invitations à
+//! découper), livret à plier, ou pages remises au format A4. Chaque page devient un « formulaire »
+//! PDF (son contenu et ses ressources), placé à l'échelle dans une case de la feuille : rien n'est
+//! recalculé, texte et images restent nets. Les annotations visibles (champs de formulaire remplis,
+//! tampons) sont incrustées dans la page, pour ne pas disparaître. Les exemplaires à découper sont
+//! posés à leur format fini (sans les marges d'un PDF prêt à imprimer), entourés de traits de coupe.
 
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream, dictionary};
 use serde::Deserialize;
 
 use crate::erreur::Erreur;
-use crate::geometrie::{A4, Cadre, Matrice, rectangle, resoudre};
+use crate::geometrie::{A4, Cadre, Matrice, boite, rectangle, resoudre};
 use crate::pdf::{charger, contenu_page};
 
 /// Marge autour des pages d'une feuille, et espace entre elles (points).
 const MARGE: f64 = 14.0;
+
+/// Traits de coupe autour des exemplaires : écart entre le coin de l'exemplaire et le début du trait,
+/// puis longueur du trait (points). Le trait tient dans l'espace entre deux exemplaires (au moins
+/// MARGE) sans toucher le voisin, dont les traits, sur les mêmes lignes de coupe, le recouvrent.
+const ECART_TRAIT: f64 = 3.0;
+const LONGUEUR_TRAIT: f64 = MARGE - 2.0 * ECART_TRAIT;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -29,29 +37,66 @@ pub enum Disposition {
 /// Case d'une feuille : x, y (coin bas gauche), largeur et hauteur, en points.
 type Case = (f64, f64, f64, f64);
 
-/// Une page devenue formulaire : son identifiant et son cadre (partie visible, rotation).
+/// Une page devenue formulaire : son identifiant, son cadre (partie visible, rotation) et son
+/// format fini (le même cadre, réduit à la zone de coupe d'un PDF prêt à imprimer).
 struct PageSource {
     forme: ObjectId,
     cadre: Cadre,
+    format_fini: Cadre,
 }
 
 impl PageSource {
     fn taille_vue(&self) -> (f64, f64) {
         self.cadre.taille_vue()
     }
+}
 
-    /// Matrice qui place la page, redressée et à l'échelle, au centre de la case (x, y, l, h).
-    fn placement(&self, (x, y, l, h): Case) -> Matrice {
-        let (vue_l, vue_h) = self.taille_vue();
-        let echelle = (l / vue_l).min(h / vue_h);
-        self.cadre
-            .vers_vue()
-            .puis(Matrice::echelle(echelle, echelle))
-            .puis(Matrice::translation(
-                x + (l - echelle * vue_l) / 2.0,
-                y + (h - echelle * vue_h) / 2.0,
-            ))
+/// Matrice qui pose la partie `cadre` d'une page, redressée et à l'échelle, au centre de la case
+/// (x, y, l, h).
+fn placement(cadre: &Cadre, (x, y, l, h): Case) -> Matrice {
+    let (vue_l, vue_h) = cadre.taille_vue();
+    let echelle = (l / vue_l).min(h / vue_h);
+    cadre
+        .vers_vue()
+        .puis(Matrice::echelle(echelle, echelle))
+        .puis(Matrice::translation(
+            x + (l - echelle * vue_l) / 2.0,
+            y + (h - echelle * vue_h) / 2.0,
+        ))
+}
+
+/// Format fini d'une page : la zone de coupe (TrimBox) d'un PDF prêt à imprimer, sans les marges où
+/// sont tracés ses propres traits de coupe ; à défaut, toute la partie visible.
+fn format_fini(document: &Document, page: &Dictionary, cadre: Cadre) -> Cadre {
+    let [gauche, bas, droite, haut] = cadre.boite;
+    page.get(b"TrimBox")
+        .ok()
+        .and_then(|zone| rectangle(document, zone))
+        .map(|[x0, y0, x1, y1]| [x0.max(gauche), y0.max(bas), x1.min(droite), y1.min(haut)])
+        .filter(|&[x0, y0, x1, y1]| x1 - x0 > 1.0 && y1 - y0 > 1.0)
+        .map_or(cadre, |zone| Cadre {
+            boite: zone,
+            ..cadre
+        })
+}
+
+/// Traits de coupe d'un exemplaire posé sur la feuille, de (x0, y0) à (x1, y1) : deux à chaque coin,
+/// dans le prolongement de ses bords, vers l'extérieur.
+fn traits_de_coupe([x0, y0, x1, y1]: [f64; 4]) -> String {
+    let (debut, fin) = (ECART_TRAIT, ECART_TRAIT + LONGUEUR_TRAIT);
+    let mut traits = String::new();
+    for (x, vers_x) in [(x0, -1.0), (x1, 1.0)] {
+        for (y, vers_y) in [(y0, -1.0), (y1, 1.0)] {
+            traits.push_str(&format!(
+                "{:.3} {y:.3} m {:.3} {y:.3} l S {x:.3} {:.3} m {x:.3} {:.3} l S\n",
+                x + vers_x * debut,
+                x + vers_x * fin,
+                y + vers_y * debut,
+                y + vers_y * fin,
+            ));
+        }
     }
+    traits
 }
 
 /// Apparence visible d'une annotation (formulaire PDF), s'il faut l'incruster.
@@ -208,6 +253,7 @@ fn formulaire(
     Ok(PageSource {
         forme: document.add_object(flux),
         cadre,
+        format_fini: format_fini(document, &dictionnaire, cadre),
     })
 }
 
@@ -218,9 +264,11 @@ struct Feuille {
 }
 
 /// Les feuilles à produire pour `nombre` pages ; `taille_vue` donne la taille d'une page (format A4).
+/// Avec `repeter`, 2 ou 4 par feuille : chaque page remplit toutes les cases de sa propre feuille.
 fn feuilles(
     nombre: usize,
     disposition: Disposition,
+    repeter: bool,
     taille_vue: impl Fn(usize) -> (f64, f64),
 ) -> Vec<Feuille> {
     let paysage = (A4.1, A4.0);
@@ -229,40 +277,46 @@ fn feuilles(
         let h = hauteur - 2.0 * MARGE;
         [(MARGE, MARGE, l, h), (2.0 * MARGE + l, MARGE, l, h)]
     };
-    match disposition {
-        Disposition::DeuxParFeuille => (0..nombre)
-            .step_by(2)
-            .map(|debut| Feuille {
-                taille: paysage,
-                cases: deux_cases(paysage)
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, case)| ((debut + i < nombre).then_some(debut + i), case))
-                    .collect(),
+    // Plusieurs pages par feuille : les pages à la suite (1, 2, 3, 4, puis 5…), ou chaque page
+    // répétée dans toutes les cases de sa feuille (une invitation en 4 exemplaires à découper).
+    let plusieurs = |taille: (f64, f64), cases: &[Case]| -> Vec<Feuille> {
+        let pages: Vec<Vec<Option<usize>>> = if repeter {
+            (0..nombre)
+                .map(|page| vec![Some(page); cases.len()])
+                .collect()
+        } else {
+            (0..nombre)
+                .step_by(cases.len())
+                .map(|debut| {
+                    (debut..debut + cases.len())
+                        .map(|page| (page < nombre).then_some(page))
+                        .collect()
+                })
+                .collect()
+        };
+        pages
+            .into_iter()
+            .map(|pages| Feuille {
+                taille,
+                cases: pages.into_iter().zip(cases.iter().copied()).collect(),
             })
-            .collect(),
+            .collect()
+    };
+    match disposition {
+        Disposition::DeuxParFeuille => plusieurs(paysage, &deux_cases(paysage)),
         Disposition::QuatreParFeuille => {
             let (largeur, hauteur) = A4;
             let (l, h) = ((largeur - 3.0 * MARGE) / 2.0, (hauteur - 3.0 * MARGE) / 2.0);
-            let positions = [
-                (MARGE, 2.0 * MARGE + h),
-                (2.0 * MARGE + l, 2.0 * MARGE + h),
-                (MARGE, MARGE),
-                (2.0 * MARGE + l, MARGE),
-            ];
-            (0..nombre)
-                .step_by(4)
-                .map(|debut| Feuille {
-                    taille: A4,
-                    cases: positions
-                        .iter()
-                        .enumerate()
-                        .map(|(i, &(x, y))| {
-                            ((debut + i < nombre).then_some(debut + i), (x, y, l, h))
-                        })
-                        .collect(),
-                })
-                .collect()
+            // Dans l'ordre de lecture : en haut à gauche, en haut à droite, puis en bas.
+            plusieurs(
+                A4,
+                &[
+                    (MARGE, 2.0 * MARGE + h, l, h),
+                    (2.0 * MARGE + l, 2.0 * MARGE + h, l, h),
+                    (MARGE, MARGE, l, h),
+                    (2.0 * MARGE + l, MARGE, l, h),
+                ],
+            )
         }
         Disposition::Livret => {
             // Pages complétées par des pages blanches jusqu'à un multiple de 4 ; feuille i :
@@ -296,8 +350,14 @@ fn feuilles(
     }
 }
 
-/// Le PDF mis en page selon la disposition choisie.
-pub fn imposer(octets: &[u8], nom: &str, disposition: Disposition) -> Result<Vec<u8>, Erreur> {
+/// Le PDF mis en page selon la disposition choisie ; avec `repeter` (2 ou 4 par feuille), chaque
+/// page est répétée sur sa propre feuille, à son format fini, avec des traits de coupe.
+pub fn imposer(
+    octets: &[u8],
+    nom: &str,
+    disposition: Disposition,
+    repeter: bool,
+) -> Result<Vec<u8>, Erreur> {
     let mut document = charger(octets, nom)?;
     let pages: Vec<ObjectId> = document.get_pages().into_values().collect();
     if pages.is_empty() {
@@ -310,19 +370,48 @@ pub fn imposer(octets: &[u8], nom: &str, disposition: Disposition) -> Result<Vec
         .enumerate()
         .map(|(i, page)| formulaire(&mut document, *page, i + 1))
         .collect::<Result<Vec<_>, _>>()?;
+    // Exemplaires à découper : chaque page n'est posée qu'à son format fini, découpée à sa zone de
+    // coupe, et l'application trace les traits de coupe autour.
+    let decouper = repeter
+        && matches!(
+            disposition,
+            Disposition::DeuxParFeuille | Disposition::QuatreParFeuille
+        );
     let arbre = document.new_object_id();
     let mut enfants = Vec::new();
-    for feuille in feuilles(sources.len(), disposition, |i| sources[i].taille_vue()) {
+    for feuille in feuilles(sources.len(), disposition, repeter, |i| {
+        sources[i].taille_vue()
+    }) {
         let mut contenu = String::new();
         let mut objets_graphiques = Dictionary::new();
+        let mut exemplaires = Vec::new();
         for (page, case) in feuille.cases {
             let Some(page) = page else { continue };
             let source = &sources[page];
-            contenu.push_str(&format!(
-                "q {} /P{page} Do Q\n",
-                source.placement(case).operateur()
-            ));
+            if decouper {
+                let [x0, y0, x1, y1] = source.format_fini.boite;
+                let matrice = placement(&source.format_fini, case);
+                contenu.push_str(&format!(
+                    "q {} {x0:.3} {y0:.3} {:.3} {:.3} re W n /P{page} Do Q\n",
+                    matrice.operateur(),
+                    x1 - x0,
+                    y1 - y0,
+                ));
+                exemplaires.push(boite(matrice, &[(x0, y0), (x1, y1)]));
+            } else {
+                contenu.push_str(&format!(
+                    "q {} /P{page} Do Q\n",
+                    placement(&source.cadre, case).operateur()
+                ));
+            }
             objets_graphiques.set(format!("P{page}").as_bytes(), source.forme);
+        }
+        if !exemplaires.is_empty() {
+            contenu.push_str("q 0 G 0.4 w 0 J [] 0 d\n");
+            for exemplaire in exemplaires {
+                contenu.push_str(&traits_de_coupe(exemplaire));
+            }
+            contenu.push_str("Q\n");
         }
         let contenu = document.add_object(Stream::new(Dictionary::new(), contenu.into_bytes()));
         let (largeur, hauteur) = feuille.taille;
@@ -390,11 +479,24 @@ mod tests {
         image::load_from_memory(&jpeg).unwrap().to_luma8()
     }
 
-    fn pixels_sombres(image: &image::GrayImage, x0: u32, x1: u32) -> usize {
-        (0..image.height())
+    /// Pixels sombres de la zone de (x0, y0) à (x1, y1) exclus, depuis le haut de l'image.
+    fn pixels_sombres(
+        image: &image::GrayImage,
+        (x0, y0): (u32, u32),
+        (x1, y1): (u32, u32),
+    ) -> usize {
+        (y0..y1)
             .flat_map(|y| (x0..x1).map(move |x| (x, y)))
             .filter(|&(x, y)| image.get_pixel(x, y).0[0] < 128)
             .count()
+    }
+
+    /// Pour chaque feuille, la page (à partir de 0) de chacune de ses cases.
+    fn pages_des_cases(feuilles: &[Feuille]) -> Vec<Vec<Option<usize>>> {
+        feuilles
+            .iter()
+            .map(|feuille| feuille.cases.iter().map(|(page, _)| *page).collect())
+            .collect()
     }
 
     /// PDF d'une page, modifiée par `modifier` avant l'enregistrement.
@@ -409,7 +511,13 @@ mod tests {
 
     #[test]
     fn met_deux_pages_par_feuille() {
-        let pdf = imposer(&pdf_herite(3, "Page"), "p.pdf", Disposition::DeuxParFeuille).unwrap();
+        let pdf = imposer(
+            &pdf_herite(3, "Page"),
+            "p.pdf",
+            Disposition::DeuxParFeuille,
+            false,
+        )
+        .unwrap();
         let feuilles = feuilles_de(&pdf);
         assert_eq!(feuilles.len(), 2);
         assert_eq!(feuilles[0].0, (841.89, 595.28));
@@ -417,12 +525,132 @@ mod tests {
         assert!(feuilles[1].1.contains("/P2 Do") && !feuilles[1].1.contains("/P3"));
         // Les deux moitiés de la première feuille sont bien dessinées.
         let image = rendu_feuille(pdf, 400);
-        assert!(pixels_sombres(&image, 0, 200) > 10 && pixels_sombres(&image, 200, 400) > 10);
+        let h = image.height();
+        assert!(pixels_sombres(&image, (0, 0), (200, h)) > 10);
+        assert!(pixels_sombres(&image, (200, 0), (400, h)) > 10);
+    }
+
+    #[test]
+    fn repete_une_page_seule_dans_les_quatre_cases() {
+        // Une invitation d'une page, en 4 exemplaires sur une feuille A4 : la page n'est copiée
+        // qu'une fois dans le PDF, et dessinée dans chaque quart de la feuille.
+        let pdf = imposer(
+            &pdf_herite(1, "Invitation"),
+            "i.pdf",
+            Disposition::QuatreParFeuille,
+            true,
+        )
+        .unwrap();
+        let feuilles = feuilles_de(&pdf);
+        assert_eq!(feuilles.len(), 1);
+        assert_eq!(feuilles[0].0, (595.28, 841.89));
+        assert_eq!(feuilles[0].1.matches("/P0 Do").count(), 4);
+        let image = rendu_feuille(pdf, 600);
+        let (l, h) = (image.width() / 2, image.height() / 2);
+        for (x, y) in [(0, 0), (l, 0), (0, h), (l, h)] {
+            assert!(
+                pixels_sombres(&image, (x, y), (x + l, y + h)) > 10,
+                "quart de feuille vide en ({x}, {y})"
+            );
+        }
+    }
+
+    #[test]
+    fn pose_le_format_fini_d_un_pdf_pret_a_imprimer() {
+        // Invitation prête à imprimer : page de 402 × 546 points, format fini (TrimBox) de 360 × 504
+        // peint en noir, et un carré noir dans la marge, en bas à gauche, comme ses traits de coupe.
+        let pdf = pdf_modifie(|document, page| {
+            let contenu = document.add_object(Stream::new(
+                dictionary! {},
+                b"0 g 21 21 360 504 re f 0 0 15 15 re f".to_vec(),
+            ));
+            let page = document.get_dictionary_mut(page).unwrap();
+            page.set("MediaBox", vec![0.into(), 0.into(), 402.into(), 546.into()]);
+            page.set(
+                "TrimBox",
+                vec![21.into(), 21.into(), 381.into(), 525.into()],
+            );
+            page.set("Contents", contenu);
+        });
+        let pdf = imposer(&pdf, "invitation.pdf", Disposition::QuatreParFeuille, true).unwrap();
+        let feuilles = feuilles_de(&pdf);
+        // Chaque exemplaire est découpé à son format fini et entouré de 8 traits de coupe.
+        assert_eq!(feuilles[0].1.matches("re W n").count(), 4);
+        assert_eq!(feuilles[0].1.matches(" l S").count(), 4 * 8);
+        let image = rendu_feuille(pdf, 1191);
+        let echelle = f64::from(image.width()) / A4.0;
+        let pixel = |x: f64, y: f64| {
+            image
+                .get_pixel((x * echelle) as u32, ((A4.1 - y) * echelle) as u32)
+                .0[0]
+        };
+        // Exemplaire en haut à gauche : le format fini prend toute la largeur de sa case (x de 14 à
+        // 290,6 points) ; avec ses marges, la page ne lui laisserait que x de 28,5 à 276,2.
+        assert!(pixel(20.0, 628.0) < 60 && pixel(285.0, 628.0) < 60);
+        // Le carré de la marge, qui tomberait vers (6, 426), est coupé.
+        assert!(pixel(6.0, 426.0) > 200);
+    }
+
+    #[test]
+    fn trace_les_traits_de_coupe_dans_le_prolongement_des_bords() {
+        let traits = traits_de_coupe([100.0, 200.0, 300.0, 500.0]);
+        // Coin en bas à gauche : vers la gauche et vers le bas, de 3 à 11 points du coin.
+        assert!(
+            traits.contains("97.000 200.000 m 89.000 200.000 l S"),
+            "{traits}"
+        );
+        assert!(
+            traits.contains("100.000 197.000 m 100.000 189.000 l S"),
+            "{traits}"
+        );
+        // Coin en haut à droite : vers la droite et vers le haut.
+        assert!(
+            traits.contains("303.000 500.000 m 311.000 500.000 l S"),
+            "{traits}"
+        );
+        assert!(
+            traits.contains("300.000 503.000 m 300.000 511.000 l S"),
+            "{traits}"
+        );
+    }
+
+    #[test]
+    fn repete_chaque_page_sur_sa_propre_feuille() {
+        // Recto et verso d'une invitation : une feuille de rectos, puis une feuille de versos.
+        let quatre = feuilles(2, Disposition::QuatreParFeuille, true, |_| A4);
+        assert_eq!(pages_des_cases(&quatre), [[Some(0); 4], [Some(1); 4]]);
+        let deux = feuilles(2, Disposition::DeuxParFeuille, true, |_| A4);
+        assert_eq!(pages_des_cases(&deux), [[Some(0); 2], [Some(1); 2]]);
+        // Sans répétition, les pages se suivent, et les cases en trop restent vides.
+        let suite = feuilles(2, Disposition::QuatreParFeuille, false, |_| A4);
+        assert_eq!(pages_des_cases(&suite), [[Some(0), Some(1), None, None]]);
+    }
+
+    #[test]
+    fn les_exemplaires_du_recto_et_du_verso_se_superposent() {
+        // Imprimée en recto verso, la feuille se retourne sur le bord long ou sur le bord court :
+        // chaque case du verso doit tomber exactement derrière une case du recto.
+        for disposition in [Disposition::DeuxParFeuille, Disposition::QuatreParFeuille] {
+            let feuille = &feuilles(1, disposition, true, |_| A4)[0];
+            let (largeur, hauteur) = feuille.taille;
+            let cases: Vec<Case> = feuille.cases.iter().map(|(_, case)| *case).collect();
+            let derriere = |(x, y, l, h): Case| {
+                cases.iter().any(|&(x2, y2, l2, h2)| {
+                    [x - x2, y - y2, l - l2, h - h2]
+                        .iter()
+                        .all(|ecart| ecart.abs() < 1e-6)
+                })
+            };
+            for &(x, y, l, h) in &cases {
+                assert!(derriere((largeur - x - l, y, l, h)), "{disposition:?}");
+                assert!(derriere((x, hauteur - y - h, l, h)), "{disposition:?}");
+            }
+        }
     }
 
     #[test]
     fn met_quatre_pages_par_feuille_dans_l_ordre_de_lecture() {
-        let feuilles = feuilles(5, Disposition::QuatreParFeuille, |_| A4);
+        let feuilles = feuilles(5, Disposition::QuatreParFeuille, false, |_| A4);
         assert_eq!(feuilles.len(), 2);
         let premiere: Vec<_> = feuilles[0]
             .cases
@@ -452,7 +680,7 @@ mod tests {
     #[test]
     fn ordonne_les_pages_d_un_livret() {
         let ordre = |n: usize| {
-            feuilles(n, Disposition::Livret, |_| A4)
+            feuilles(n, Disposition::Livret, false, |_| A4)
                 .iter()
                 .map(|feuille| {
                     let pages: Vec<String> = feuille
@@ -478,7 +706,7 @@ mod tests {
             page.set("MediaBox", vec![0.into(), 0.into(), 420.into(), 595.into()]);
             page.set("Rotate", 90);
         });
-        let feuilles = feuilles_de(&imposer(&pdf, "t.pdf", Disposition::FormatA4).unwrap());
+        let feuilles = feuilles_de(&imposer(&pdf, "t.pdf", Disposition::FormatA4, false).unwrap());
         // Page A5 affichée en paysage : feuille A4 en paysage, page tournée d'un quart de tour.
         assert_eq!(feuilles[0].0, (841.89, 595.28));
         assert!(
@@ -508,7 +736,10 @@ mod tests {
                 .unwrap()
                 .set("Annots", vec![Object::Reference(champ)]);
         });
-        let image = rendu_feuille(imposer(&pdf, "f.pdf", Disposition::FormatA4).unwrap(), 595);
+        let image = rendu_feuille(
+            imposer(&pdf, "f.pdf", Disposition::FormatA4, false).unwrap(),
+            595,
+        );
         // Le cadre du champ (x 100 à 300, y 100 à 200 depuis le bas) est noir sur la feuille.
         assert!(image.get_pixel(200, 842 - 150).0[0] < 60);
         assert!(image.get_pixel(450, 842 - 150).0[0] > 200);
