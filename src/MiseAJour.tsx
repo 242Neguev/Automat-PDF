@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Group, Loader, Progress, Stack, Text } from "@mantine/core";
 import { IconAlertTriangle, IconDownload, IconExternalLink, IconRefresh } from "@tabler/icons-react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { enErreur, ouvrirPageDesVersions } from "./coeur";
+import { enErreur, ouvrirPageDesVersions, relancer } from "./coeur";
 import { avancer, pourcentage, signatureRefusee, TELECHARGEMENT_VIDE } from "./donnees/telechargement";
 import { signalerErreur } from "./pages/commun/signalerErreur";
+import { MAC } from "./systeme";
 import { textes } from "./textes";
 
 const t = textes.miseAJour;
@@ -17,7 +18,7 @@ export type EtatMiseAJour =
   | { etape: "disponible"; version: string }
   | { etape: "telechargement"; version: string; avancement: number | null }
   | { etape: "installation"; version: string }
-  /** Installée sans que l'application se ferme (hors Windows) : il faut la rouvrir. */
+  /** Installée sans que l'application ait pu se rouvrir d'elle-même : il faut la rouvrir. */
   | { etape: "installee"; version: string }
   /**
    * `version` : celle qui n'a pas pu être installée ; null si c'est la recherche qui a échoué.
@@ -30,7 +31,7 @@ export interface MiseAJour {
   etat: EtatMiseAJour;
   /** Cherche une nouvelle version ; `manuelle` : demandée dans « À propos », qui montre alors le résultat. */
   chercher: (manuelle: boolean) => Promise<void>;
-  /** Télécharge la nouvelle version, vérifie sa signature et l'installe ; sous Windows, Automat-PDF se ferme puis se rouvre. */
+  /** Télécharge la nouvelle version, vérifie sa signature et l'installe ; Automat-PDF se ferme puis se rouvre. */
   installer: () => Promise<void>;
 }
 
@@ -88,6 +89,9 @@ export function useMiseAJour(automatique: boolean): MiseAJour {
       setEtat({ etape: "installation", version });
       // Sous Windows, l'installateur prend le relais : Automat-PDF se ferme ici, puis se rouvre.
       await mise.install();
+      // Sous macOS, la nouvelle version a remplacé l'application ouverte : on la rouvre. Si la
+      // relance échoue, l'encadré demande de le faire à la main.
+      if (MAC) await relancer().catch((erreur) => console.warn("Relance :", erreur));
       setEtat({ etape: "installee", version });
     } catch (erreur) {
       console.warn("Installation de la mise à jour :", erreur);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Box, Group, Paper, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
+import { Box, Group, Paper, SegmentedControl, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
 import { IconLayoutColumns } from "@tabler/icons-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { imposerPdf, pagesPdf, type Disposition } from "../../coeur";
@@ -14,6 +14,8 @@ import { ZoneFichier } from "../commun/ZoneFichier";
 
 const t = textes.miseEnPage;
 const DISPOSITIONS: Disposition[] = ["deux-par-feuille", "quatre-par-feuille", "livret", "format-a4"];
+/** Cases des dispositions à plusieurs pages par feuille : on y met les pages à la suite, ou chaque page répétée. */
+const CASES: Partial<Record<Disposition, number>> = { "deux-par-feuille": 2, "quatre-par-feuille": 4 };
 
 /** Feuille schématique : ses pages numérotées, posées en grille. */
 function Feuille({ paysage, colonnes, pages }: { paysage: boolean; colonnes: number; pages: (number | null)[] }) {
@@ -51,12 +53,12 @@ function Feuille({ paysage, colonnes, pages }: { paysage: boolean; colonnes: num
   );
 }
 
-function Schema({ disposition }: { disposition: Disposition }) {
+function Schema({ disposition, repeter }: { disposition: Disposition; repeter: boolean }) {
   switch (disposition) {
     case "deux-par-feuille":
-      return <Feuille paysage colonnes={2} pages={[1, 2]} />;
+      return <Feuille paysage colonnes={2} pages={repeter ? [1, 1] : [1, 2]} />;
     case "quatre-par-feuille":
-      return <Feuille paysage={false} colonnes={2} pages={[1, 2, 3, 4]} />;
+      return <Feuille paysage={false} colonnes={2} pages={repeter ? [1, 1, 1, 1] : [1, 2, 3, 4]} />;
     case "livret":
       return (
         <Group gap={6}>
@@ -69,13 +71,13 @@ function Schema({ disposition }: { disposition: Disposition }) {
   }
 }
 
-/** Nombre de pages du PDF produit. */
-function pagesProduites(disposition: Disposition, pages: number): number {
+/** Nombre de pages du PDF produit ; répétée, chaque page a sa propre feuille. */
+function pagesProduites(disposition: Disposition, pages: number, repeter: boolean): number {
   switch (disposition) {
     case "deux-par-feuille":
-      return Math.ceil(pages / 2);
+      return repeter ? pages : Math.ceil(pages / 2);
     case "quatre-par-feuille":
-      return Math.ceil(pages / 4);
+      return repeter ? pages : Math.ceil(pages / 4);
     case "livret":
       return Math.max(1, Math.ceil(pages / 4)) * 2;
     case "format-a4":
@@ -83,13 +85,18 @@ function pagesProduites(disposition: Disposition, pages: number): number {
   }
 }
 
-/** Pages par feuille : 2 ou 4 pages par feuille, livret à plier, ou pages remises au format A4. */
+/** Pages par feuille : 2 ou 4 pages par feuille (à la suite ou répétées), livret à plier, ou pages remises au format A4. */
 export default function MiseEnPage() {
   const [source, setSource] = useState<{ chemin: string; nom: string; pages: number } | null>(null);
   const [disposition, setDisposition] = useState<Disposition>("deux-par-feuille");
+  // Chaque page répétée sur sa feuille : d'office pour un PDF d'une seule page (une invitation,
+  // une carte), dont les autres cases resteraient vides.
+  const [repeter, setRepeter] = useState(false);
   const [enCours, setEnCours] = useState(false);
   const [cree, setCree] = useState<Cree | null>(null);
-  const produites = source ? pagesProduites(disposition, source.pages) : 0;
+  const cases = CASES[disposition];
+  const repetee = repeter && cases !== undefined;
+  const produites = source ? pagesProduites(disposition, source.pages, repetee) : 0;
 
   async function choisir() {
     const chemin = await open({ multiple: false, directory: false, filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
@@ -98,7 +105,9 @@ export default function MiseEnPage() {
 
   async function ouvrir(chemin: string) {
     try {
-      setSource({ chemin, nom: nomDe(chemin), pages: (await pagesPdf(chemin)).length });
+      const pages = (await pagesPdf(chemin)).length;
+      setSource({ chemin, nom: nomDe(chemin), pages });
+      setRepeter(pages === 1);
       setCree(null);
     } catch (e) {
       signalerErreur(e);
@@ -109,12 +118,13 @@ export default function MiseEnPage() {
   async function creer() {
     if (!source) return;
     const base = source.nom.replace(/\.pdf$/i, "");
-    const sortie = await save({ defaultPath: aCote(source.chemin, t.nomFichier(base, t.dispositions[disposition].titre)), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
+    const nomDisposition = repetee ? t.exemplaires(cases) : t.dispositions[disposition].titre;
+    const sortie = await save({ defaultPath: aCote(source.chemin, t.nomFichier(base, nomDisposition)), filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     setEnCours(true);
     setCree(null);
     try {
-      await imposerPdf(source.chemin, disposition, sortie);
+      await imposerPdf(source.chemin, disposition, repetee, sortie);
       setCree({ titre: t.cree, chemin: sortie, details: [disposition === "livret" ? t.livret(produites / 2) : t.resultat(produites)] });
     } catch (e) {
       signalerErreur(e);
@@ -150,7 +160,7 @@ export default function MiseEnPage() {
               >
                 <Stack gap="xs" align="flex-start">
                   <Box h={80} style={{ display: "flex", alignItems: "center" }}>
-                    <Schema disposition={valeur} />
+                    <Schema disposition={valeur} repeter={repeter && CASES[valeur] !== undefined} />
                   </Box>
                   <Text fw={600} size="sm">
                     {t.dispositions[valeur].titre}
@@ -164,6 +174,22 @@ export default function MiseEnPage() {
           );
         })}
       </SimpleGrid>
+
+      {cases !== undefined && (
+        <Stack gap={4} align="flex-start">
+          <Text size="sm" fw={500}>
+            {t.remplissage}
+          </Text>
+          <SegmentedControl
+            value={repeter ? "repetee" : "suite"}
+            onChange={(valeur) => setRepeter(valeur === "repetee")}
+            data={(["suite", "repetee"] as const).map((value) => ({ value, label: t.remplissages[value] }))}
+          />
+          <Text size="sm" c="dimmed">
+            {t.remplissagesAide[repeter ? "repetee" : "suite"](cases)}
+          </Text>
+        </Stack>
+      )}
 
       <BarreAction>
         <Group>

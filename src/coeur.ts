@@ -64,8 +64,9 @@ export const pdfEnImages = (chemin: string, pages: number[], format: "png" | "jp
 
 export type Disposition = "deux-par-feuille" | "quatre-par-feuille" | "livret" | "format-a4";
 
-/** Enregistre dans `sortie` le PDF mis en page. */
-export const imposerPdf = (chemin: string, disposition: Disposition, sortie: string) => invoke<void>("imposer_pdf", { chemin, disposition, sortie });
+/** Enregistre dans `sortie` le PDF mis en page ; avec `repeter` (2 ou 4 par feuille), chaque page est répétée sur sa propre feuille. */
+export const imposerPdf = (chemin: string, disposition: Disposition, repeter: boolean, sortie: string) =>
+  invoke<void>("imposer_pdf", { chemin, disposition, repeter, sortie });
 
 /** Contenu brut d'une image, pour l'afficher telle quelle. */
 export const lireImage = (chemin: string) => invoke<ArrayBuffer>("lire_image", { chemin });
@@ -190,7 +191,7 @@ export interface BilanEnvoi {
   echecs: { rang: number; message: string }[];
 }
 
-/** Prépare dans Outlook (Brouillons) ou envoie les messages ; l'avancement arrive par l'événement « progression-envoi ». */
+/** Prépare dans Outlook (Brouillons), ou dans Mail sous macOS, ou envoie les messages ; l'avancement arrive par l'événement « progression-envoi ». */
 export const envoyerParOutlook = (messages: Message[], mode: ModeEnvoi) => invoke<BilanEnvoi>("envoyer_par_outlook", { messages, mode });
 
 /** Compte d'envoi de la messagerie (SMTP) ; le mot de passe, lui, est gardé par le système. */
@@ -265,7 +266,7 @@ export const ouvrirPageLibreoffice = () => invoke<void>("ouvrir_page_libreoffice
 /** Ouvre un fichier créé par l'application (PDF, document Word, image) dans l'application habituelle, ou un dossier. */
 export const ouvrirFichier = (chemin: string) => invoke<void>("ouvrir_fichier", { chemin });
 
-/** Affiche un fichier dans son dossier (Explorateur), sélectionné ; un dossier est simplement ouvert. */
+/** Affiche un fichier dans son dossier (Explorateur, Finder), sélectionné ; un dossier est simplement ouvert. */
 export const montrerDansDossier = (chemin: string) => invoke<void>("montrer_dans_dossier", { chemin });
 
 /** Réglages de confidentialité : recherche des mises à jour, statistiques anonymes. */
@@ -291,7 +292,10 @@ export const signalerOuverture = (langue: string) => invoke<boolean>("signaler_o
 /** Ouvre la page de la dernière version publiée dans le navigateur. */
 export const ouvrirPageDesVersions = () => invoke<void>("ouvrir_page_des_versions");
 
-/** Fichiers confiés par l'Explorateur : l'outil demandé (clic droit) et les fichiers. */
+/** Relance l'application (macOS : la mise à jour installée ne sert qu'une fois l'application rouverte). */
+export const relancer = () => invoke<void>("relancer");
+
+/** Fichiers confiés par le système (clic droit dans l'Explorateur ou le Finder, « Ouvrir avec », icône du Dock) : l'outil demandé et les fichiers. */
 export interface Recus {
   outil: string | null;
   fichiers: string[];

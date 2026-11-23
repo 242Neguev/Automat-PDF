@@ -1,6 +1,6 @@
 [package]
 name = "automat-pdf"
-version = "0.2.2"
+version = "0.3.0"
 description = "Automat-PDF : fusionner, séparer, organiser et diffuser des PDF"
 authors = ["Eau sèche <gneguev@gmail.com>"]
 license = "MIT"
@@ -46,6 +46,14 @@ tauri-plugin-updater = { version = "2", default-features = false, features = ["n
 # Statistiques anonymes (seulement avec l'accord de l'utilisateur) : le même client HTTP que les
 # mises à jour.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls", "system-proxy"] }
+
+# macOS : clic droit dans le Finder. Les « Services » d'Automat-PDF (Info.plist) confient les
+# fichiers choisis à l'application, qui les lit dans le presse-papiers des services (AppKit).
+# Les mêmes versions que Tauri, réduites aux classes utilisées.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSURL"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSPasteboard", "NSPasteboardItem"] }
 
 # Voir https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

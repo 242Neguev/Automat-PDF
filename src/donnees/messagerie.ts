@@ -1,5 +1,5 @@
 // Réglages de la messagerie, propres à ce PC : le moyen d'envoi (la messagerie de l'utilisateur, par
-// SMTP, ou Outlook) et le compte d'envoi. Le mot de passe n'y figure jamais : le système le garde.
+// SMTP, ou le logiciel de messagerie : Outlook sous Windows, Mail sous macOS) et le compte d'envoi. Le mot de passe n'y figure jamais : le système le garde.
 import type { CompteMessagerie } from "../coeur";
 
 export type MoyenEnvoi = "messagerie" | "outlook";

@@ -113,14 +113,15 @@ pub async fn pdf_en_images(
     en_arriere_plan(move || operations::pdf_en_images(&chemin, &pages, format, dpi, &dossier)).await
 }
 
-/// Enregistre le PDF mis en page (2 ou 4 par feuille, livret, format A4).
+/// Enregistre le PDF mis en page (2 ou 4 par feuille, à la suite ou répétées, livret, format A4).
 #[tauri::command]
 pub async fn imposer_pdf(
     chemin: String,
     disposition: Disposition,
+    repeter: bool,
     sortie: String,
 ) -> Result<(), Erreur> {
-    en_arriere_plan(move || operations::imposer_pdf(&chemin, disposition, &sortie)).await
+    en_arriere_plan(move || operations::imposer_pdf(&chemin, disposition, repeter, &sortie)).await
 }
 
 /// Enregistre le PDF avec numéros de page et tampon.
@@ -425,7 +426,15 @@ pub async fn ouvrir_page_des_versions() -> Result<(), Erreur> {
     en_arriere_plan(operations::ouvrir_page_des_versions).await
 }
 
-/// Fichiers confiés par l'Explorateur (clic droit), gardés jusqu'à ce que l'interface les prenne.
+/// Relance l'application : sous macOS, la mise à jour remplace l'application sans la fermer, et la
+/// nouvelle version ne sert qu'une fois rouverte.
+#[tauri::command]
+pub fn relancer(app: AppHandle) {
+    app.restart()
+}
+
+/// Fichiers confiés par le système (clic droit, « Ouvrir avec »), gardés jusqu'à ce que
+/// l'interface les prenne.
 pub struct Lancement(pub Mutex<Reception>);
 
 /// Fichiers confiés avant que l'interface soit prête : au lancement, et par les lancements suivants

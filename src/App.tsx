@@ -70,9 +70,13 @@ export default function App() {
     window.scrollTo({ top: 0 });
   }, [vue]);
 
-  /** Confie à l'outil les fichiers qu'il prend ; les autres sont signalés. */
+  /**
+   * Confie à l'outil les fichiers qu'il prend ; les autres sont signalés. Une question encore
+   * ouverte sur d'autres fichiers (« Que faire de ce fichier ? ») est refermée : elle cacherait l'outil.
+   */
   function confier(definition: DefinitionOutil, fichiers: string[]) {
     const laisses = fichiers.filter((fichier) => !prend(definition, fichier));
+    setChoix(null);
     setVue(definition.cle);
     transmettre(
       definition.cle,

@@ -1,8 +1,10 @@
 # Fiche de test sous Windows
 
-Tout ce qui ne peut pas être essayé sur Mac : la compilation et l'installateur, le clic droit dans l'Explorateur, la fenêtre unique, le glisser-déposer depuis l'Explorateur, les conversions par Microsoft Office et l'envoi par e-mail (par votre messagerie ou par Outlook). Le reste de l'application a été testé de bout en bout sur Mac, avec le vrai cœur de traitement.
+Tout ce qui ne peut pas être essayé sur Mac : la compilation et l'installateur, le clic droit dans l'Explorateur, la fenêtre unique, le glisser-déposer depuis l'Explorateur, les conversions par Microsoft Office et l'envoi par e-mail (par votre messagerie ou par Outlook). Le reste de l'application a été testé de bout en bout sur Mac, avec le vrai cœur de traitement. La version Mac a sa propre [fiche de test](../test-mac/README.md).
 
 **Version à tester** : le commit `9d5264d` ou plus récent (`git log -1` pour le vérifier).
+
+**Installateur compilé sur un Mac** (depuis la 0.3.0) : les versions publiées sont compilées sur un Mac par `scripts/publier.command` (compilation croisée, voir le README), et non plus sur un PC par GitHub Actions. Avant chaque publication, essayer **cet** installateur-là sur un PC, de préférence à celui de `compiler-windows.cmd` : prendre `Automat-PDF_X.Y.Z_x64-setup.exe` dans `dist-publication/` (essai, `scripts/publier.command --essai --sans-mac`) ou dans le brouillon de publication sur GitHub, puis suivre la fiche à partir de l'étape 1.3. Les parties 1 (installation), 2 (clic droit), 5 (Office), 8 (e-mail) et 10 (mises à jour) comptent le plus : ce sont elles qui passent par Windows lui-même.
 
 ## Avant de commencer
 
@@ -32,7 +34,7 @@ Tout ce qui ne peut pas être essayé sur Mac : la compilation et l'installateur
    - Accepter les installations proposées : Node.js, outils C++ de Visual Studio, Rust.
    - Si le script demande de fermer la fenêtre et de le relancer (après une installation), le faire.
    - S'il s'arrête sur **ÉCHEC**, faire une capture des 30 dernières lignes de la fenêtre.
-3. À la fin, le dossier de l'installateur s'ouvre : `src-tauri\target\release\bundle\nsis\`, ou `%LOCALAPPDATA%\Automat-PDF-compilation\target\release\bundle\nsis\` si le projet est dans OneDrive. Lancer `Automat-PDF_0.2.2_x64-setup.exe`.
+3. À la fin, le dossier de l'installateur s'ouvre : `src-tauri\target\release\bundle\nsis\`, ou `%LOCALAPPDATA%\Automat-PDF-compilation\target\release\bundle\nsis\` si le projet est dans OneDrive. Lancer `Automat-PDF_0.3.0_x64-setup.exe`.
    - « Windows a protégé votre ordinateur » : cliquer sur **Informations complémentaires**, puis sur **Exécuter quand même**.
    - L'installation se fait pour l'utilisateur courant, sans droits d'administrateur.
 

@@ -1,23 +1,13 @@
 //! Scripts PowerShell (Windows) : Outlook et Office se pilotent par automatisation COM. Le script,
 //! fixe, est écrit dans un dossier temporaire et lancé sans fenêtre ; ses données passent par un
 //! fichier, jamais par la ligne de commande ; il rend compte par des lignes JSON, une par élément.
+// Sous macOS, Office et Mail se pilotent par AppleScript (`applescript`) : ce module n'y sert pas.
+#![cfg_attr(target_os = "macos", allow(dead_code, unused_imports))]
 
 use std::time::Duration;
 
 use crate::erreur::Erreur;
-
-/// Message pour un script arrêté parce qu'il ne disait plus rien.
-pub const NE_REPOND_PLUS: &str = "L'application pilotée ne répond plus (une fenêtre attend peut-être une réponse, ou un mot de passe) : le traitement a été arrêté.";
-
-/// Ce que le script a laissé en sortant.
-#[derive(Debug)]
-pub struct Fin {
-    pub succes: bool,
-    /// Arrêté par le chien de garde : il ne disait plus rien depuis trop longtemps.
-    pub arrete: bool,
-    /// Premières lignes de ses erreurs.
-    pub erreurs: Vec<String>,
-}
+pub use crate::pilotage::Fin;
 
 /// Lance `script` avec le fichier de données `donnees` (paramètre `-Donnees`) ; chaque ligne écrite
 /// par le script est passée à `ligne`, qui renvoie `false` pour cesser de lire. Si le script ne dit
