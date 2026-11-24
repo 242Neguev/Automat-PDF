@@ -97,6 +97,8 @@ Avec une image disque publiée par GitHub (étiquette `vX.Y.Z`), quand une versi
    **Attendu** : le bandeau « Une nouvelle version d'Automat-PDF est disponible ».
 2. **Mettre à jour**.
    **Attendu** : barre de téléchargement, puis Automat-PDF se ferme et se rouvre de lui-même, avec la nouvelle version dans **À propos**. macOS peut demander le mot de passe de l'ordinateur pour remplacer l'application dans le dossier Applications.
+3. Après la mise à jour, convertir un document Word (partie 5) et envoyer par **Ma messagerie** (partie 7), comme avant.
+   **Attendu** : ni la question « Automat-PDF souhaite contrôler Microsoft Word », ni la demande d'accès au trousseau : les deux versions sont signées par le même certificat d'Eau sèche (Terminal : `codesign -dv /Applications/Automat-PDF.app` montre `Authority=Eau sèche - Automat-PDF`), et macOS garde leurs autorisations. Si macOS les redemande, le noter : une version a été signée autrement (« ad hoc »).
 
 ## 9. Thème sombre
 

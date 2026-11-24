@@ -12,6 +12,8 @@
 #   preparer_outils_windows   compilation de la version Windows sur ce Mac : LLVM (clang-cl, lld-link,
 #                             llvm-rc), NSIS (makensis) et cargo-xwin, qui fournit les bibliothèques
 #                             Windows de Microsoft (sous leur licence) à la première compilation.
+#   identite_mac              empreinte du certificat de signature Mac d'Eau sèche, s'il est installé
+#                             et approuvé (scripts/certificat-mac.command) ; rien sinon.
 
 outils="${AUTOMAT_PDF_OUTILS:-$HOME/.local/share/automat-pdf-compilation}"
 
@@ -24,6 +26,19 @@ NSIS_SOURCES_SHA256="a8ffe024602d46b6d766f9e1ce30c324ad2a24daeacd3efc2642d436a0c
 NSIS_ZIP_SHA256="ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8"
 SCONS_VERSION="4.11.1"
 CARGO_XWIN_VERSION="0.23.1"
+
+# Certificat de signature Mac d'Eau sèche, auto-signé (créé une fois par scripts/certificat-mac.command).
+# Il donne à l'application la même identité d'une version à l'autre : macOS lui garde ses autorisations
+# (mot de passe de la messagerie dans le trousseau, pilotage de Word, Excel, PowerPoint et Mail) après
+# une mise à jour, ce que la signature « ad hoc », propre à chaque compilation, ne permet pas. Ce n'est
+# PAS une signature d'Apple : macOS avertit toujours à la première ouverture.
+CERTIFICAT_MAC_NOM="Eau sèche - Automat-PDF"
+identite_mac() {
+  # -v : seulement une identité approuvée pour signer du code (codesign refuse les autres). Ni échec
+  # ni sortie anticipée d'awk : le script appelant tourne en « set -euo pipefail ».
+  { security find-identity -v -p codesigning 2>/dev/null || true; } \
+    | awk -v nom="\"$CERTIFICAT_MAC_NOM\"" 'index($0, nom) && t == "" { t = $2 } END { if (t != "") print t }'
+}
 
 # Double-cliqué depuis le Finder, le script garde sa fenêtre ouverte à la fin : le temps de lire.
 attendre() {

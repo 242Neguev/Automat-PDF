@@ -8,7 +8,9 @@
 #   2. lit la clé privée des mises à jour (fichier hors des dépôts, ~/.tauri/automat-pdf.key) et son
 #      mot de passe (trousseau de macOS) ; vérifie qu'elle est bien celle des Automat-PDF installés ;
 #   3. compile l'installateur Windows (NSIS, depuis ce Mac) et l'application Mac universelle (.dmg),
-#      avec leurs fichiers de mise à jour signés, puis vérifie chaque signature ;
+#      celle-ci signée par le certificat d'Eau sèche (auto-signé : même identité d'une version à
+#      l'autre, voir scripts/certificat-mac.command), avec leurs fichiers de mise à jour signés, puis
+#      vérifie chaque signature ;
 #   4. écrit latest.json (Windows, Mac Intel et Apple Silicon), que lisent les Automat-PDF installés ;
 #   5. crée la publication GitHub en BROUILLON, avec les fichiers et les notes de version
 #      (notes-de-version/<version>.md, complétées des empreintes SHA-256). À relire, essayer, puis
@@ -17,7 +19,8 @@
 #
 # Options :
 #   --essai         tout compiler et vérifier avec une clé jetable, sans rien envoyer (fichiers
-#                   dans dist-publication/) : pour essayer la chaîne ou un installateur sur un PC
+#                   dans dist-publication/) : pour essayer la chaîne ou un installateur sur un PC ;
+#                   sans certificat Mac sur ce Mac, l'application est alors signée « ad hoc »
 #   --remplacer     remplacer un brouillon déjà créé pour cette version
 #   --sans-windows, --sans-mac
 #   --cle FICHIER   la clé privée (sinon $AUTOMAT_PDF_CLE, sinon ~/.tauri/automat-pdf.key)
@@ -27,6 +30,9 @@
 #   trousseau, « automat-pdf-cle-mises-a-jour »   son mot de passe (demandé une fois, puis gardé)
 #   ~/.config/automat-pdf/statistiques            l'adresse qui reçoit les statistiques anonymes
 #                                                 (sans elle, l'application ne pose pas la question)
+#   trousseau, « Eau sèche - Automat-PDF »        le certificat de signature Mac, auto-signé, créé une
+#                                                 fois par scripts/certificat-mac.command (sauvegarde :
+#                                                 ~/.tauri/automat-pdf-certificat-mac.p12, en lieu sûr)
 
 set -euo pipefail
 
@@ -45,7 +51,7 @@ while [ $# -gt 0 ]; do
     --sans-windows) windows=0 ;;
     --sans-mac) mac=0 ;;
     --cle) shift; cle="${1:?--cle attend le chemin du fichier de clé}" ;;
-    -h|--aide|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--aide|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echec "option inconnue : $1 (voir --aide)" ;;
   esac
   shift
@@ -138,6 +144,22 @@ else
   echo "Statistiques : aucune adresse (essai : l'application ne posera pas la question)."
 fi
 
+# Certificat de signature Mac (auto-signé, scripts/certificat-mac.command) : la même identité à chaque
+# version, pour que macOS garde à l'application ses autorisations après une mise à jour. Une version
+# publiée sans lui (« ad hoc ») les ferait redemander sur tous les Mac où elle est installée.
+identite=""
+if [ "$mac" = 1 ]; then
+  etape "Certificat de signature Mac"
+  identite="$(identite_mac)"
+  if [ -n "$identite" ]; then
+    echo "Certificat : « $CERTIFICAT_MAC_NOM » ($identite)."
+  elif [ "$essai" = 1 ]; then
+    echo "Certificat absent de ce Mac : application signée « ad hoc » (essai seulement)."
+  else
+    echec "certificat de signature Mac absent, ou pas encore approuvé : lancez une fois scripts/certificat-mac.command."
+  fi
+fi
+
 # ------------------------------------------------------------------------------------------- 3.
 etape "Dépendances de l'interface (npm ci)"
 npm ci --no-fund --no-audit || echec "npm ci a échoué."
@@ -166,12 +188,24 @@ fi
 
 if [ "$mac" = 1 ]; then
   etape "Application Mac universelle (Intel et Apple Silicon, 10 à 30 minutes)"
-  npm run tauri build -- --target universal-apple-darwin --bundles app,dmg \
+  # APPLE_SIGNING_IDENTITY remplace signingIdentity (« - », ad hoc) de src-tauri/tauri.macos.conf.json.
+  APPLE_SIGNING_IDENTITY="${identite:--}" npm run tauri build -- --target universal-apple-darwin --bundles app,dmg \
     --config src-tauri/tauri.publication.conf.json || echec "la compilation Mac a échoué : voir les messages ci-dessus."
   bundle="$cible/universal-apple-darwin/release/bundle"
   dmg="Automat-PDF_${version}_universal.dmg"
   archive="Automat-PDF_${version}_universal.app.tar.gz"
   [ -f "$bundle/dmg/$dmg" ] && [ -f "$bundle/macos/Automat-PDF.app.tar.gz.sig" ] || echec "image disque ou mise à jour signée introuvable dans $bundle."
+  # La signature de l'application (l'image disque et la mise à jour la contiennent) : intacte et, sauf
+  # essai sans certificat, liée au certificat d'Eau sèche.
+  app="$bundle/macos/Automat-PDF.app"
+  codesign --verify --strict --deep "$app" 2>/dev/null || echec "signature de l'application Mac invalide."
+  exigence="$(codesign -d -r- "$app" 2>&1 | sed -n 's/^designated => //p')"
+  if [ -n "$identite" ]; then
+    echo "$exigence" | grep -qi "$identite" || echec "l'application n'est pas signée par « $CERTIFICAT_MAC_NOM » : $exigence"
+    echo "Signature Mac : « $CERTIFICAT_MAC_NOM », identité stable ($exigence)."
+  else
+    echo "Signature Mac : « ad hoc » (essai)."
+  fi
   cp "$bundle/dmg/$dmg" "$sortie/"
   cp "$bundle/macos/Automat-PDF.app.tar.gz" "$sortie/$archive"
   cp "$bundle/macos/Automat-PDF.app.tar.gz.sig" "$sortie/$archive.sig"

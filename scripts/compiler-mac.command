@@ -36,6 +36,14 @@ preparer_dossier_cible
 etape "Installation des dépendances de l'interface (npm ci)"
 npm ci --no-fund --no-audit || echec "npm ci a échoué : voir les messages ci-dessus."
 
+# Certificat d'Eau sèche (scripts/certificat-mac.command), s'il est sur ce Mac : la même identité que les
+# versions publiées, donc les mêmes autorisations de macOS d'une compilation à l'autre. Sinon, « ad hoc ».
+identite="$(identite_mac)"
+if [ -n "$identite" ]; then
+  export APPLE_SIGNING_IDENTITY="$identite"
+  echo "Signature : certificat « $CERTIFICAT_MAC_NOM » ($identite)."
+fi
+
 if [ "$natif" = 1 ]; then
   etape "Compilation de l'application pour ce Mac (la première fois : 5 à 15 minutes)"
   npm run tauri build -- --bundles app,dmg || echec "la compilation a échoué : voir les messages ci-dessus."

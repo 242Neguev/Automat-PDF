@@ -112,7 +112,7 @@ Depuis le 19/11/2026, les versions se compilent et se publient **sur un Mac à p
 
 1. il vérifie que le dossier n'a pas de modification, que le commit est le dernier de `main` sur GitHub, que le numéro de version est le même partout et que les notes de version sont écrites (`notes-de-version/X.Y.Z.md`) ;
 2. il vérifie que la clé de mise à jour est bien celle des Automat-PDF installés (voir plus bas) ;
-3. il compile l'installateur Windows (depuis le Mac) et l'application Mac universelle, avec leurs fichiers de mise à jour signés, et vérifie chaque signature comme le feront les applications installées ;
+3. il compile l'installateur Windows (depuis le Mac) et l'application Mac universelle, signée par le certificat d'Eau sèche (voir [plus bas](#politique-de-signature-du-code-code-signing-policy)), avec leurs fichiers de mise à jour signés, et vérifie chaque signature comme le feront les applications installées ;
 4. il écrit `latest.json` (Windows, Mac Intel et Apple Silicon) ;
 5. il crée la **publication GitHub en brouillon** : installateur `.exe` et sa signature, image disque `.dmg`, mise à jour Mac (`.app.tar.gz`) et sa signature, `latest.json` ; notes de version complétées des empreintes SHA-256.
 
@@ -121,7 +121,8 @@ Il reste à relire le brouillon, à **essayer les installateurs** (fiches de tes
 Avant la première publication, sur le Mac :
 
 - copier la **clé privée** des mises à jour dans `~/.tauri/automat-pdf.key` (hors de tout dépôt ; `--cle FICHIER` pour un autre emplacement) ; son mot de passe est demandé une fois, puis gardé dans le trousseau de macOS (« automat-pdf-cle-mises-a-jour ») ;
-- écrire l'adresse qui reçoit les statistiques anonymes dans `~/.config/automat-pdf/statistiques` (une ligne `https://…`) : sans elle, l'application ne pose pas la question et n'envoie rien.
+- écrire l'adresse qui reçoit les statistiques anonymes dans `~/.config/automat-pdf/statistiques` (une ligne `https://…`) : sans elle, l'application ne pose pas la question et n'envoie rien ;
+- installer le **certificat de signature Mac** : double-cliquer une fois sur `scripts/certificat-mac.command`, qui le crée (ou le reprend de sa sauvegarde avec `--restaurer`), l'installe dans le trousseau et le fait approuver par macOS pour signer du code (macOS demande deux fois le mot de passe de la session). Sa sauvegarde, `~/.tauri/automat-pdf-certificat-mac.p12`, se garde en lieu sûr avec son mot de passe, comme la clé des mises à jour. Sans lui, le script refuse de publier.
 
 La première fois, le script installe aussi ce qu'il faut pour compiler Windows sur le Mac, dans `~/.local/share/automat-pdf-compilation` (environ 2 Go à télécharger, vérifiés) : LLVM (`clang-cl`, `lld-link`, `llvm-rc`), NSIS (`makensis`, compilé depuis ses sources) et `cargo-xwin`, qui télécharge les bibliothèques et en-têtes Windows de Microsoft, sous la licence de Microsoft. Chez Tauri, cette compilation croisée est encore dite expérimentale : c'est pourquoi l'installateur Windows s'essaie sur un PC avant chaque publication.
 
@@ -223,7 +224,9 @@ Les installateurs seront signés gratuitement par [SignPath Foundation](https://
 
 *In English: Windows releases of Automat-PDF will be signed for free by [SignPath.io](https://about.signpath.io), with a certificate issued to [SignPath Foundation](https://signpath.org), once the project is accepted. Only releases built automatically from this repository by GitHub Actions, each one approved manually by the maintainer ([@242Neguev](https://github.com/242Neguev)), will be signed.*
 
-**Mac** : l'application est signée « ad hoc » (sans identité d'Apple), ce qui suffit à macOS pour la lancer une fois autorisée (voir [Télécharger](#télécharger)). Signée par un certificat *Developer ID* et notarisée par Apple, elle s'ouvrirait sans avertissement : il faut pour cela un compte Apple Developer (99 $ par an), puis donner son identité de signature à `scripts/publier.command` (à ajouter le jour venu).
+**Mac** : l'application est signée par un certificat d'Eau sèche, **auto-signé** (« Eau sèche - Automat-PDF », créé par `scripts/certificat-mac.command`), et non par Apple : macOS affiche donc toujours son avertissement à la première ouverture (voir [Télécharger](#télécharger)). Ce certificat donne à l'application la même identité d'une version à l'autre : après une mise à jour, macOS lui garde ses autorisations (mot de passe de la messagerie dans le trousseau, pilotage de Word, Excel, PowerPoint et Mail), qu'une signature « ad hoc », propre à chaque compilation, ferait redemander. Signée par un certificat *Developer ID* et notarisée par Apple, elle s'ouvrirait sans avertissement : il faut pour cela un compte Apple Developer (99 $ par an), puis donner son identité de signature à `scripts/publier.command` (à ajouter le jour venu ; l'identité de l'application changera alors une dernière fois).
+
+*In English: the Mac application is signed with a self-signed certificate of Eau sèche, not by Apple, so macOS still warns at first launch; the certificate keeps the application's identity stable across updates, so that macOS keeps its permissions (keychain, automation of Word, Excel, PowerPoint and Mail).*
 
 ### Confidentialité (Privacy policy)
 
