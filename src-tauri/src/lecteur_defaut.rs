@@ -5,8 +5,8 @@
 //!
 //! Windows : l'installateur inscrit Automat-PDF parmi les applications qui ouvrent les PDF
 //! (`windows/clic-droit.nsh` : ProgID `AutomatPDF.Document`, « Ouvrir avec »,
-//! RegisteredApplications). Mac : l'Info.plist déclare les PDF, au rang « Alternate » (jamais
-//! choisi d'office).
+//! RegisteredApplications). Mac : `tauri.macos.conf.json` déclare les PDF (« fileAssociations »),
+//! au rang « Alternate » : jamais choisi d'office.
 
 use serde::Serialize;
 use tauri::{AppHandle, WebviewWindow};

@@ -10,9 +10,9 @@
   - NSServices : clic droit dans le Finder, comme le sous-menu de l'Explorateur sous Windows
     (src-tauri/windows/clic-droit.nsh). Chaque service confie les fichiers choisis à l'outil
     nommé dans NSUserData (src/outils.tsx) ; NSRequiredContext, même vide, l'active d'emblée.
-  - CFBundleDocumentTypes : Automat-PDF ouvre les PDF (« Ouvrir avec » du Finder), au rang
-    « Alternate » : macOS ne le choisit jamais d'office comme lecteur des PDF ; l'application le
-    propose, et macOS demande à l'utilisateur de confirmer (src-tauri/src/lecteur_defaut.rs).
+  - Pas de CFBundleDocumentTypes ici : les documents qu'Automat-PDF ouvre (PDF, images, Office) sont
+    déclarés par « fileAssociations » dans tauri.macos.conf.json, au rang « Alternate » ; un
+    tableau écrit ici remplacerait le leur.
 -->
 <plist version="1.0">
 <dict>
@@ -20,21 +20,6 @@
 	<string>fr</string>
 	<key>CFBundleAllowMixedLocalizations</key>
 	<true/>
-	<key>CFBundleDocumentTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>Document PDF</string>
-			<key>CFBundleTypeRole</key>
-			<string>Viewer</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>com.adobe.pdf</string>
-			</array>
-		</dict>
-	</array>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Automat-PDF pilote Microsoft Word, Excel et PowerPoint pour convertir vos documents, et Mail pour préparer ou envoyer vos messages.</string>
 	<key>NSServices</key>
