@@ -37,6 +37,9 @@ import {
   navigationPdf,
   ouvrirFichier,
   ouvrirLien,
+  commentairesPdf,
+  retoucherCommentaires,
+  type CommentairePdf,
   pagesPdf,
   tailleFichier,
   type DestinationPdf,
@@ -48,7 +51,7 @@ import {
   type OptionsImpression,
 } from "../../coeur";
 import { echelleAjustee, hautAffiche, premiereDeRangee, rangees, tourner, transformation, type Disposition, type Rotation } from "../../donnees/affichage";
-import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, sans, zoneDe, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
+import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, retouchesDe, sans, zoneDe, type Annotation, type Historique, type Teinte, type Zone } from "../../donnees/annotations";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { motsCouverts, occurrences, type Occurrence } from "../../donnees/recherche-texte";
 import { formaterTaille } from "../../donnees/tailles";
@@ -153,6 +156,17 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   const [ouverture, setOuverture] = useState(0);
   /** Signets et liens du document ; le panneau de gauche (vignettes ou signets) ; le lien vers un site à confirmer. */
   const [navigation, setNavigation] = useState<NavigationPdf | null>(null);
+  /**
+   * Commentaires déjà présents dans le PDF (null : pas encore lus) ; celui choisi dans la liste,
+   * et le cadre qui le montre un instant sur sa page ; version des images des pages, relues après
+   * chaque retouche de ces commentaires.
+   */
+  const [existants, setExistants] = useState<CommentairePdf[] | null>(null);
+  const [choisiPdf, setChoisiPdf] = useState<string | null>(null);
+  const [repere, setRepere] = useState<{ page: number; zone: Zone } | null>(null);
+  const [versionImages, setVersionImages] = useState(0);
+  /** Les retouches envoyées au cœur pour chaque document (pour ne pas les refaire pour rien). */
+  const retouchesEnvoyees = useRef<Record<string, string>>({});
   const [panneau, setPanneau] = useState<"pages" | "signets">("pages");
   const [lienExterne, setLienExterne] = useState<string | null>(null);
   /** Impression en cours : pages envoyées à l'imprimante, et sur combien (0 : la fenêtre d'impression est ouverte). */
@@ -220,6 +234,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     if (precedent !== chemin) {
       if (precedent) etats.current[precedent] = { ...positionLue.current, mode: mode_.current, echelle: echelle_.current, rotation: rotation_.current };
       documentAffiche.current = chemin;
+      // Ses retouches sont renvoyées au cœur : son onglet a pu se fermer entre-temps (le cœur les a oubliées).
+      if (chemin) delete retouchesEnvoyees.current[chemin];
       const etat = chemin ? etats.current[chemin] : undefined;
       setMode(etat?.mode ?? "largeur");
       if (etat?.mode === "libre") setEchelle(etat.echelle);
@@ -257,6 +273,14 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     navigationPdf(chemin).then(
       (lue) => actuelDoc && setNavigation(lue),
       () => undefined,
+    );
+    // Les commentaires déjà présents dans le PDF reçu (après son mot de passe, s'il en a un).
+    setExistants(null);
+    setChoisiPdf(null);
+    setRepere(null);
+    commentairesPdf(chemin).then(
+      (lus) => actuelDoc && setExistants(lus),
+      () => actuelDoc && setExistants([]),
     );
     return () => {
       actuelDoc = false;
@@ -511,6 +535,24 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     const format = formats?.[annotation.page];
     allerA(annotation.page, format ? Math.max(0, hautAffiche(format, zone.x, zone.y, rotation) * echelle - tiers) : 0);
   }
+  /** Liste des commentaires : mène à un commentaire du PDF et le montre un instant sur sa page. */
+  function allerAuCommentairePdf(commentaire: CommentairePdf) {
+    setSelection(null);
+    setChoisiPdf(commentaire.id);
+    setRepere({ page: commentaire.page, zone: commentaire });
+    const tiers = (defilement.current?.clientHeight ?? 0) / 3;
+    const format = formats?.[commentaire.page];
+    allerA(commentaire.page, format ? Math.max(0, hautAffiche(format, commentaire.x, commentaire.y, rotation) * echelle - tiers) : 0);
+  }
+  /** Supprime un commentaire du PDF, ou change son texte : une étape de l'historique (annuler, rétablir). */
+  function supprimerCommentairePdf(commentaire: CommentairePdf) {
+    ajouterAnnotation({ id: nouvelId(), sorte: "suppression", page: commentaire.page, cible: commentaire.id });
+    setChoisiPdf(null);
+    setRepere(null);
+  }
+  function modifierCommentairePdf(commentaire: CommentairePdf, texte: string) {
+    ajouterAnnotation({ id: nouvelId(), sorte: "retouche", page: commentaire.page, cible: commentaire.id, texte });
+  }
   function remonter(sens: "annuler" | "retablir") {
     changerHistorique(sens === "annuler" ? annuler : retablir);
     setSelection(null);
@@ -555,6 +597,11 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
       await annoterPdf(chemin, pourLeCoeur(annotations), sortie);
       const source = chemin;
       setHistoriques(({ [source]: _enregistrees, ...autres }) => autres);
+      // Le PDF annoté garde les retouches ; l'original (toujours ouvert dans son onglet) retrouve les siennes.
+      if (retouches.supprimes.length > 0 || retouches.textes.length > 0) {
+        retouchesEnvoyees.current[source] = JSON.stringify({ supprimes: [], textes: [] });
+        void retoucherCommentaires(source, { supprimes: [], textes: [] }).then(() => relire(source), signalerErreur);
+      }
       setSelection(null);
       setAnnoter(false);
       setEnregistre(sortie);
@@ -565,6 +612,29 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
       setEnregistrement(false);
     }
   }
+
+  // Les retouches des commentaires du PDF suivent l'historique : envoyées au cœur (qui les applique
+  // à sa copie en mémoire, depuis l'origine), puis les pages et les vignettes relues.
+  const retouches = useMemo(() => retouchesDe(annotations), [annotations]);
+  useEffect(() => {
+    if (!chemin || !formats) return;
+    const cle = JSON.stringify(retouches);
+    const vide = retouches.supprimes.length === 0 && retouches.textes.length === 0;
+    const avant = retouchesEnvoyees.current[chemin];
+    if (cle === avant || (avant === undefined && vide)) return;
+    retouchesEnvoyees.current[chemin] = cle;
+    const document = chemin;
+    retoucherCommentaires(document, retouches).then(() => {
+      relire(document);
+      setVersionImages((version) => version + 1);
+    }, signalerErreur);
+  }, [chemin, formats, retouches]);
+  // Le cadre qui montre un commentaire du PDF s'efface après deux clignotements.
+  useEffect(() => {
+    if (!repere) return;
+    const minuterie = window.setTimeout(() => setRepere(null), 2200);
+    return () => window.clearTimeout(minuterie);
+  }, [repere]);
 
   // Raccourcis de l'éditeur : annuler, rétablir, supprimer l'annotation choisie (hors saisie de texte).
   useEffect(() => {
@@ -996,6 +1066,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
                       format={formats[index]}
                       echelle={echelle}
                       rotation={rotation}
+                      version={versionImages}
                       racine={defilement.current}
                       requete={resultats && resultats.length > 0 ? recherche : ""}
                       rangActuel={occurrenceActuelle?.page === index ? occurrenceActuelle.rang : -1}
@@ -1026,6 +1097,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
                                 onModifier={modifierAnnotation}
                                 onSupprimer={supprimerAnnotation}
                                 onEffacer={effacerAnnotations}
+                                repere={repere?.page === index ? repere.zone : null}
                               />
                             )
                           : undefined
@@ -1041,7 +1113,22 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
         {/* En annotation, la liste des commentaires ; sinon les outils qui s'appliquent à ce PDF : des
             cartes de verre, avec la pastille de leur groupe. */}
         {annoter ? (
-          <ListeCommentaires annotations={annotations} selection={selection} onChoisir={allerAuCommentaire} onSupprimer={supprimerAnnotation} />
+          <ListeCommentaires
+            annotations={annotations}
+            existants={existants ?? []}
+            supprimes={retouches.supprimes}
+            textesChanges={retouches.textes}
+            selection={selection}
+            choisiPdf={choisiPdf}
+            onChoisir={(annotation) => {
+              setChoisiPdf(null);
+              allerAuCommentaire(annotation);
+            }}
+            onSupprimer={supprimerAnnotation}
+            onAllerPdf={allerAuCommentairePdf}
+            onSupprimerPdf={supprimerCommentairePdf}
+            onModifierPdf={modifierCommentairePdf}
+          />
         ) : (
           <Stack gap={8} w={272} style={{ overflow: "auto", flexShrink: 0 }} data-outils-lecteur>
             <div>
@@ -1134,6 +1221,8 @@ interface PropsPage {
   echelle: number;
   /** Rotation de l'affichage : la page est dessinée droite, puis tournée dans sa boîte. */
   rotation: Rotation;
+  /** Change quand le cœur a retouché le PDF (commentaires) : l'image de la page est redemandée. */
+  version: number;
   racine: HTMLDivElement | null;
   /** Le texte cherché (vide : rien à surligner). */
   requete: string;
@@ -1152,7 +1241,7 @@ interface PropsPage {
  * de l'écran. Les mots, invisibles, se sélectionnent et se copient ; ceux que la recherche trouve sont
  * surlignés.
  */
-function PageLecteur({ chemin, index, format, echelle, rotation, racine, requete, rangActuel, refPage, couche, liens, onLien }: PropsPage) {
+function PageLecteur({ chemin, index, format, echelle, rotation, version, racine, requete, rangActuel, refPage, couche, liens, onLien }: PropsPage) {
   const boite = useRef<HTMLDivElement | null>(null);
   const [proche, setProche] = useState(false);
   const [image, setImage] = useState<string | null>(null);
@@ -1181,7 +1270,7 @@ function PageLecteur({ chemin, index, format, echelle, rotation, racine, requete
     return () => {
       actuelle = false;
     };
-  }, [proche, chemin, index, demandee]);
+  }, [proche, chemin, index, demandee, version]);
 
   useEffect(() => {
     if (!proche || mots) return;

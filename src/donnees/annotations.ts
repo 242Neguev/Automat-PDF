@@ -106,12 +106,20 @@ export type Annotation =
   | { id: string; sorte: "forme"; page: number; forme: Forme; debut: Point; fin: Point; teinte: Teinte; epaisseur: number }
   /** Un trait à main levée. */
   | { id: string; sorte: "dessin"; page: number; points: Point[]; teinte: Teinte; epaisseur: number }
-  | { id: string; sorte: "tampon"; page: number; zone: Zone; mot: MotTampon; date: string | null };
+  | { id: string; sorte: "tampon"; page: number; zone: Zone; mot: MotTampon; date: string | null }
+  /** Commentaire déjà présent dans le PDF (`cible` : son repère), supprimé ; ou son texte changé. */
+  | { id: string; sorte: "suppression"; page: number; cible: string }
+  | { id: string; sorte: "retouche"; page: number; cible: string; texte: string };
+
+/** Les retouches des commentaires du PDF : une étape de l'historique, mais rien à dessiner. */
+export const estRetouche = (annotation: Annotation): annotation is Annotation & { sorte: "suppression" | "retouche" } =>
+  annotation.sorte === "suppression" || annotation.sorte === "retouche";
 
 /** Ce que le cœur reçoit : les annotations sans leur identifiant (ni l'ancien texte d'une
  * correction), en laissant de côté les vides. Une correction vide efface le mot. */
 export function pourLeCoeur(annotations: Annotation[]) {
   return annotations
+    .filter((a) => !estRetouche(a))
     .filter((a) => {
       if (a.sorte === "texte") return a.texte.trim() !== "";
       if (a.sorte === "surlignage" || a.sorte === "soulignage" || a.sorte === "barre") return a.zones.length > 0;
@@ -350,6 +358,9 @@ export function zoneDe(annotation: Annotation): Zone {
       return annotation.zone;
     case "note":
       return { x: annotation.x, y: annotation.y, largeur: 20, hauteur: 20 };
+    case "suppression":
+    case "retouche":
+      return { x: 0, y: 0, largeur: 0, hauteur: 0 };
     case "texte":
       return { x: annotation.x, y: annotation.y, largeur: annotation.taille * 8, hauteur: annotation.taille * INTERLIGNE };
   }
@@ -363,4 +374,22 @@ export function ordreDeLecture(annotations: Annotation[]): Annotation[] {
     // Sur une même ligne (à quelques points près), la plus à gauche d'abord.
     return a.page - b.page || (Math.abs(za.y - zb.y) > 4 ? za.y - zb.y : za.x - zb.x);
   });
+}
+
+/**
+ * Les retouches des commentaires du PDF, d'après l'historique : les supprimés, et le dernier texte
+ * de chacun des autres. Toujours dans le même ordre : deux historiques équivalents donnent les
+ * mêmes retouches (le cœur ne refait rien pour rien).
+ */
+export function retouchesDe(annotations: Annotation[]): { supprimes: string[]; textes: [string, string][] } {
+  const supprimes = new Set<string>();
+  const textes = new Map<string, string>();
+  for (const annotation of annotations) {
+    if (annotation.sorte === "suppression") supprimes.add(annotation.cible);
+    else if (annotation.sorte === "retouche") textes.set(annotation.cible, annotation.texte);
+  }
+  return {
+    supprimes: [...supprimes].sort(),
+    textes: [...textes].filter(([cible]) => !supprimes.has(cible)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  };
 }

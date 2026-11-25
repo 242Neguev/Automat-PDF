@@ -10,6 +10,7 @@ use tauri::{AppHandle, WebviewWindow};
 
 use crate::annotations::{self, Annotation};
 use crate::caviardage::{self, ModeCaviardage, PageACaviarder, Rapport};
+use crate::commentaires::{self, Commentaire, Retouches};
 use crate::compression::{self, Bilan, Niveau};
 use crate::confidentialite::{self, Confidentialite};
 use crate::envoi::{BilanEnvoi, Message};
@@ -627,6 +628,27 @@ pub fn proprietes_imprimante(
 pub fn navigation_pdf(chemin: &str) -> Result<Navigation, Erreur> {
     let document = pdf::charger(&memoire::pdf(chemin)?, &nom_de(chemin))?;
     Ok(navigation::navigation(&document))
+}
+
+/// Les commentaires déjà présents dans un PDF reçu, d'après son contenu d'origine (avant les
+/// retouches du lecteur) : leurs repères ne changent pas d'une retouche à l'autre.
+pub fn commentaires_pdf(chemin: &str) -> Result<Vec<Commentaire>, Erreur> {
+    let document = pdf::charger(&memoire::origine(chemin)?, &nom_de(chemin))?;
+    Ok(commentaires::commentaires(&document))
+}
+
+/// Retouche les commentaires du PDF, en mémoire seulement (toujours depuis son contenu d'origine) :
+/// le lecteur les montre, le PDF annoté enregistré et l'impression les gardent.
+pub fn retoucher_commentaires(chemin: &str, retouches: &Retouches) -> Result<(), Erreur> {
+    let nom = nom_de(chemin);
+    memoire::retoucher(chemin, |origine| {
+        if retouches.vides() {
+            return Ok(None);
+        }
+        let mut document = pdf::charger(origine, &nom)?;
+        commentaires::retoucher(&mut document, retouches);
+        pdf::ecrire(document).map(Some)
+    })
 }
 
 /// Ouvre le lien d'un PDF (page web, e-mail), après l'accord de l'utilisateur dans le lecteur.

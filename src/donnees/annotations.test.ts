@@ -16,6 +16,7 @@ import {
   zonesSurlignees,
   dateDuJour,
   prolonger,
+  retouchesDe,
   TAMPONS,
   zoneDe,
   zoneTampon,
@@ -178,6 +179,20 @@ describe("commentaires : souligner, barrer, formes, dessin, tampons", () => {
     trait = prolonger(trait, { x: 0.2, y: 0.1 });
     trait = prolonger(trait, { x: 3, y: 4 });
     expect(trait).toEqual([{ x: 0, y: 0 }, { x: 3, y: 4 }]);
+  });
+
+  it("tient les retouches des commentaires du PDF, sans les envoyer comme annotations", () => {
+    const annotations: Annotation[] = [
+      { id: "a", sorte: "retouche", page: 0, cible: "12 0", texte: "Vu" },
+      { id: "b", sorte: "suppression", page: 1, cible: "p1-3" },
+      { id: "c", sorte: "retouche", page: 0, cible: "9 0", texte: "Premier" },
+      { id: "d", sorte: "retouche", page: 0, cible: "9 0", texte: "Second" },
+      { id: "e", sorte: "retouche", page: 1, cible: "p1-3", texte: "Perdu" },
+      note("f"),
+    ];
+    expect(retouchesDe(annotations)).toEqual({ supprimes: ["p1-3"], textes: [["12 0", "Vu"], ["9 0", "Second"]] });
+    expect(retouchesDe([])).toEqual({ supprimes: [], textes: [] });
+    expect(pourLeCoeur(annotations).map((a) => a.sorte)).toEqual(["note"]);
   });
 
   it("liste les commentaires dans l'ordre de lecture", () => {

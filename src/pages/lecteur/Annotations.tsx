@@ -107,6 +107,9 @@ const OUTIL_DE: Record<Annotation["sorte"], OutilAnnotation> = {
   image: "image",
   correction: "corriger",
   blanc: "correcteur",
+  // Retouches des commentaires du PDF : jamais montrées comme des annotations.
+  suppression: "gomme",
+  retouche: "texte",
 };
 
 /** L'icône d'une annotation (celle de son outil, ou de sa forme), pour la liste des commentaires. */
@@ -326,6 +329,8 @@ interface PropsCouche {
   onSupprimer: (id: string) => void;
   /** Annotations effacées d'un geste de gomme : une seule étape à annuler. */
   onEffacer: (ids: string[]) => void;
+  /** Un commentaire du PDF choisi dans la liste : un cadre le montre un instant sur la page. */
+  repere?: Zone | null;
 }
 
 /** Passage surligné, souligné ou barré : la même façon de choisir les mots. */
@@ -358,8 +363,10 @@ function decaler(annotation: Annotation, dx: number, dy: number): Annotation {
       return { ...annotation, debut: point(annotation.debut), fin: point(annotation.fin) };
     case "dessin":
       return { ...annotation, points: annotation.points.map(point) };
-    // Une correction reste à la place du texte qu'elle remplace.
+    // Une correction reste à la place du texte qu'elle remplace ; une retouche n'a pas de place.
     case "correction":
+    case "suppression":
+    case "retouche":
       return annotation;
     default:
       return { ...annotation, x: annotation.x + dx, y: annotation.y + dy };
@@ -826,6 +833,10 @@ export function CoucheAnnotations(props: PropsCouche) {
           </div>
         );
       }
+      // Commentaire du PDF supprimé ou changé : le cœur redessine la page, rien à montrer ici.
+      case "suppression":
+      case "retouche":
+        return null;
     }
   }
 
@@ -851,6 +862,14 @@ export function CoucheAnnotations(props: PropsCouche) {
     >
       {visibles.map(rendu)}
       {traceEnCours && dessinSvg(traceEnCours, false)}
+      {props.repere && (
+        <div
+          key={`${props.repere.x}-${props.repere.y}`}
+          className="repere-commentaire"
+          style={{ left: px(props.repere.x) - 4, top: px(props.repere.y) - 4, width: px(props.repere.largeur) + 8, height: px(props.repere.hauteur) + 8 }}
+          data-repere-commentaire
+        />
+      )}
       {motsVises.map((rang) => {
         const mot = props.mots![rang];
         return <div key={`vise-${rang}`} className="mot-a-corriger" style={{ left: px(mot.x) - 2, top: px(mot.y) - 1, width: px(mot.longueur) + 4, height: px(mot.taille) + 2 }} />;

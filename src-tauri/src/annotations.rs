@@ -262,7 +262,7 @@ impl Annotation {
 }
 
 /// Texte d'un champ PDF (contenu d'une note) : en UTF-16 avec sa marque, pour les accents.
-fn texte_pdf(texte: &str) -> Object {
+pub(crate) fn texte_pdf(texte: &str) -> Object {
     if texte.is_ascii() {
         return Object::String(texte.as_bytes().to_vec(), StringFormat::Literal);
     }

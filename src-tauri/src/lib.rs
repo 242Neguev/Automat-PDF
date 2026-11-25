@@ -3,6 +3,7 @@ mod annotations;
 mod applescript;
 mod caviardage;
 mod commandes;
+mod commentaires;
 mod compression;
 mod confidentialite;
 mod contenu;
@@ -228,6 +229,8 @@ pub fn run() {
             commandes::deverrouiller_lecture,
             commandes::reverrouiller_lecture,
             commandes::navigation_pdf,
+            commandes::commentaires_pdf,
+            commandes::retoucher_commentaires,
             commandes::imprimer_pdf,
             commandes::imprimantes,
             commandes::feuille_imprimante,

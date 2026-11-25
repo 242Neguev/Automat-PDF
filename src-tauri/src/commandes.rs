@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::annotations::Annotation;
 use crate::caviardage::{ModeCaviardage, PageACaviarder, Rapport};
+use crate::commentaires::{Commentaire, Retouches};
 use crate::compression::{Bilan, Niveau};
 use crate::confidentialite::Confidentialite;
 use crate::envoi::{BilanEnvoi, Message};
@@ -276,6 +277,18 @@ pub async fn devenir_lecteur_par_defaut(
     fenetre: tauri::WebviewWindow,
 ) -> Result<Demande, Erreur> {
     en_arriere_plan(move || operations::devenir_lecteur_par_defaut(&app, &fenetre)).await
+}
+
+/// Les commentaires déjà présents dans un PDF reçu, pour la liste du lecteur.
+#[tauri::command]
+pub async fn commentaires_pdf(chemin: String) -> Result<Vec<Commentaire>, Erreur> {
+    en_arriere_plan(move || operations::commentaires_pdf(&chemin)).await
+}
+
+/// Supprime des commentaires du PDF, ou en change le texte, en mémoire seulement.
+#[tauri::command]
+pub async fn retoucher_commentaires(chemin: String, retouches: Retouches) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::retoucher_commentaires(&chemin, &retouches)).await
 }
 
 /// Signets et liens d'un PDF, pour le lecteur.

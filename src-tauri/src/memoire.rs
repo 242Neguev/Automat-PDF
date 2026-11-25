@@ -19,6 +19,9 @@ struct Entree {
     octets: Arc<Vec<u8>>,
     /// Contenu déchiffré avec le mot de passe donné dans le lecteur, jamais écrit sur le disque.
     deverrouille: bool,
+    /// Contenu d'avant les retouches du lecteur (commentaires du PDF supprimés ou changés) : les
+    /// retouches se refont toujours depuis lui, et il revient quand elles sont toutes défaites.
+    origine: Option<Arc<Vec<u8>>>,
 }
 
 fn entrees() -> &'static Mutex<Vec<Entree>> {
@@ -53,16 +56,21 @@ pub fn pdf(chemin: &str) -> Result<Arc<Vec<u8>>, Erreur> {
             taille,
             octets: octets.clone(),
             deverrouille: false,
+            origine: None,
         },
     );
     limiter(&mut entrees);
     Ok(octets)
 }
 
-/// Oublie les fichiers en trop : les plus anciens PDF ordinaires d'abord (voir `FICHIERS_GARDES`).
+/// Oublie les fichiers en trop : les plus anciens PDF ordinaires d'abord (voir `FICHIERS_GARDES`) ;
+/// un PDF retouché dans le lecteur passe, comme un PDF déverrouillé, après les autres.
 fn limiter(entrees: &mut Vec<Entree>) {
     while entrees.len() > FICHIERS_GARDES {
-        match entrees.iter().rposition(|e| !e.deverrouille) {
+        match entrees
+            .iter()
+            .rposition(|e| !e.deverrouille && e.origine.is_none())
+        {
             Some(position) => drop(entrees.remove(position)),
             None if entrees.len() > 2 * FICHIERS_GARDES => drop(entrees.pop()),
             None => break,
@@ -98,13 +106,59 @@ pub fn deverrouiller(chemin: &str, mot_de_passe: &str, nom: &str) -> Result<(), 
     Ok(())
 }
 
-/// Oublie le contenu déchiffré d'un PDF quand son onglet se ferme dans le lecteur : comme à sa
-/// première ouverture, il redemandera son mot de passe.
+/// Oublie ce que le lecteur a fait d'un PDF quand son onglet se ferme : son contenu déchiffré
+/// (comme à sa première ouverture, il redemandera son mot de passe) et ses retouches.
 pub fn reverrouiller(chemin: &str) {
-    entrees()
+    let mut entrees = entrees()
         .lock()
-        .unwrap_or_else(|empoisonne| empoisonne.into_inner())
-        .retain(|e| !(e.chemin == chemin && e.deverrouille));
+        .unwrap_or_else(|empoisonne| empoisonne.into_inner());
+    entrees.retain(|e| !(e.chemin == chemin && e.deverrouille));
+    for entree in entrees.iter_mut().filter(|e| e.chemin == chemin) {
+        if let Some(origine) = entree.origine.take() {
+            entree.octets = origine;
+        }
+    }
+}
+
+/// Le contenu d'un PDF tel qu'il était avant les retouches du lecteur (sinon, tel quel).
+pub fn origine(chemin: &str) -> Result<Arc<Vec<u8>>, Erreur> {
+    let actuel = pdf(chemin)?;
+    let entrees = entrees()
+        .lock()
+        .unwrap_or_else(|empoisonne| empoisonne.into_inner());
+    Ok(entrees
+        .iter()
+        .find(|e| e.chemin == chemin && Arc::ptr_eq(&e.octets, &actuel))
+        .and_then(|e| e.origine.clone())
+        .unwrap_or(actuel))
+}
+
+/// Retouche, en mémoire seulement, le contenu d'un PDF : `retoucher` reçoit son contenu
+/// d'origine et rend le contenu retouché, ou rien quand il n'y a plus de retouche (l'origine
+/// revient). Rien n'est écrit sur le disque.
+pub fn retoucher(
+    chemin: &str,
+    retoucher: impl FnOnce(&[u8]) -> Result<Option<Vec<u8>>, Erreur>,
+) -> Result<(), Erreur> {
+    let origine = origine(chemin)?;
+    let retouche = retoucher(&origine)?;
+    let mut entrees = entrees()
+        .lock()
+        .unwrap_or_else(|empoisonne| empoisonne.into_inner());
+    if let Some(entree) = entrees.iter_mut().find(|e| e.chemin == chemin) {
+        match retouche {
+            Some(octets) => {
+                entree.origine.get_or_insert(origine);
+                entree.octets = Arc::new(octets);
+            }
+            None => {
+                if let Some(origine) = entree.origine.take() {
+                    entree.octets = origine;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -167,6 +221,34 @@ mod tests {
     }
 
     #[test]
+    fn retouche_en_memoire_puis_revient_a_l_origine() {
+        let chemin =
+            crate::essais::fichier_temporaire("memoire-retouches", "Reçu.pdf", b"%PDF origine");
+        assert_eq!(pdf(&chemin).unwrap().as_slice(), b"%PDF origine");
+        retoucher(&chemin, |origine| {
+            assert_eq!(origine, b"%PDF origine");
+            Ok(Some(b"%PDF retouche 1".to_vec()))
+        })
+        .unwrap();
+        assert_eq!(pdf(&chemin).unwrap().as_slice(), b"%PDF retouche 1");
+        // Une nouvelle retouche repart de l'origine, pas de la précédente.
+        retoucher(&chemin, |origine| {
+            assert_eq!(origine, b"%PDF origine");
+            Ok(Some(b"%PDF retouche 2".to_vec()))
+        })
+        .unwrap();
+        assert_eq!(origine(&chemin).unwrap().as_slice(), b"%PDF origine");
+        // Plus de retouche : l'origine revient ; l'onglet fermé l'efface aussi.
+        retoucher(&chemin, |_| Ok(None)).unwrap();
+        assert_eq!(pdf(&chemin).unwrap().as_slice(), b"%PDF origine");
+        retoucher(&chemin, |_| Ok(Some(b"%PDF retouche 3".to_vec()))).unwrap();
+        reverrouiller(&chemin);
+        assert_eq!(pdf(&chemin).unwrap().as_slice(), b"%PDF origine");
+        // Le fichier, lui, n'a jamais changé.
+        assert_eq!(std::fs::read(&chemin).unwrap(), b"%PDF origine");
+    }
+
+    #[test]
     fn garde_les_pdf_deverrouilles_plus_longtemps_que_les_autres() {
         let entree = |chemin: String, deverrouille: bool| Entree {
             chemin,
@@ -174,6 +256,7 @@ mod tests {
             taille: 0,
             octets: Arc::new(Vec::new()),
             deverrouille,
+            origine: None,
         };
         // Le PDF déverrouillé est le plus ancien : les PDF ordinaires les plus anciens partent avant lui.
         let mut entrees: Vec<Entree> = (0..9)

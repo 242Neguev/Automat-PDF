@@ -262,6 +262,37 @@ export interface EtatLecteurPdf {
 
 export const lecteurParDefaut = () => invoke<EtatLecteurPdf>("lecteur_par_defaut");
 
+/** Un commentaire déjà présent dans le PDF (lu par le cœur) ; place en points de la page affichée. */
+export interface CommentairePdf {
+  /** Repère stable dans le PDF d'origine (« 12 0 », ou « p2-5 »). */
+  id: string;
+  page: number;
+  /** Sorte PDF : Text (note), Highlight, Underline, StrikeOut, FreeText, Square, Ink, Stamp… */
+  sorte: string;
+  x: number;
+  y: number;
+  largeur: number;
+  hauteur: number;
+  texte: string;
+  auteur: string;
+  date: string | null;
+  couleur: [number, number, number] | null;
+  reponse: boolean;
+  /** Son texte peut changer (tous, sauf le texte posé sur la page). */
+  modifiable: boolean;
+}
+
+/** Les commentaires déjà présents dans un PDF reçu, d'après son contenu d'origine. */
+export const commentairesPdf = (chemin: string) => invoke<CommentairePdf[]>("commentaires_pdf", { chemin });
+
+/** Retouches des commentaires du PDF : toutes à la fois, appliquées en mémoire depuis l'origine. */
+export interface RetouchesPdf {
+  supprimes: string[];
+  textes: [string, string][];
+}
+
+export const retoucherCommentaires = (chemin: string, retouches: RetouchesPdf) => invoke<void>("retoucher_commentaires", { chemin, retouches });
+
 /**
  * Propose de faire d'Automat-PDF le lecteur des PDF : la fenêtre de choix de Windows (ou, à défaut,
  * ses Paramètres : `parametres`), la confirmation de macOS. Renvoie l'état après coup.
