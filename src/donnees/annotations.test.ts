@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, pourLeCoeur, retablir, zonesSurlignees, type Annotation, type MotPlace } from "./annotations";
+import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, pourLeCoeur, retablir, sans, zonesSurlignees, type Annotation, type MotPlace } from "./annotations";
 
 // Deux lignes : « Net à payer : 389 250 » puis « Signature ».
 const mot = (x: number, y: number, longueur: number, debutLigne = false): MotPlace => ({ x, y, longueur, taille: 10, debutLigne });
@@ -55,5 +55,15 @@ describe("envoi au cœur", () => {
 
   it("propose un nom à côté de l'original", () => {
     expect(nomAnnote("Contrat de travail.PDF")).toBe("Contrat de travail - annoté.pdf");
+  });
+});
+
+describe("gomme", () => {
+  it("efface d'un geste toutes les annotations touchées, en une seule étape à annuler", () => {
+    const avant = appliquer(HISTORIQUE_VIDE, [note("a"), note("b"), note("c")]);
+    const apres = appliquer(avant, sans(avant.present, ["a", "c", "a"]));
+    expect(apres.present.map((a) => a.id)).toEqual(["b"]);
+    expect(annuler(apres).present.map((a) => a.id)).toEqual(["a", "b", "c"]);
+    expect(sans(avant.present, [])).toBe(avant.present);
   });
 });

@@ -123,6 +123,7 @@ export const textes = {
         note: { titre: "Note", aide: "Cliquez où placer la note, puis écrivez-la : elle s'ouvre d'un clic dans tous les lecteurs de PDF." },
         texte: { titre: "Texte", aide: "Cliquez où écrire, puis tapez votre texte ; Échap ou un clic ailleurs pour terminer." },
         image: { titre: "Image", aide: "Une signature, un cachet ou un logo : il se place au milieu de la page, puis se déplace à la souris." },
+        gomme: { titre: "Gomme", aide: `Passez sur une annotation pour l'effacer : surlignage, note, texte ou image. ${MAC ? "⌘Z" : "Ctrl+Z"} la fait revenir.` },
       },
       teintes: { jaune: "Jaune", vert: "Vert", rose: "Rose", bleu: "Bleu", noir: "Noir", marine: "Bleu marine", rouge: "Rouge" },
       taille: "Taille du texte",

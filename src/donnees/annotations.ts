@@ -152,3 +152,9 @@ export function nomAnnote(nom: string): string {
   const base = nom.replace(/\.pdf$/i, "");
   return `${base} - annoté.pdf`;
 }
+
+/** Les annotations sans celles effacées d'un geste de gomme (une seule étape à annuler). */
+export function sans(annotations: Annotation[], effacees: Iterable<string>): Annotation[] {
+  const ids = new Set(effacees);
+  return ids.size === 0 ? annotations : annotations.filter((a) => !ids.has(a.id));
+}

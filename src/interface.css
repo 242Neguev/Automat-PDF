@@ -576,3 +576,13 @@ html[data-fenetre="verre"][data-mantine-color-scheme="light"] {
   outline: 1.5px dashed var(--mantine-color-eau-6);
   outline-offset: 2px;
 }
+/* La gomme : un rond pour curseur, et l'annotation qu'elle va effacer, pâlie et cerclée de rouge. */
+.couche-annotations[data-outil="gomme"],
+.couche-annotations[data-outil="gomme"] [data-annotation-id] {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22'%3E%3Ccircle cx='11' cy='11' r='8' fill='white' fill-opacity='0.6' stroke='%23c92a2a' stroke-width='2'/%3E%3C/svg%3E") 11 11, crosshair;
+}
+.couche-annotations[data-outil="gomme"] [data-annotation-id]:hover {
+  opacity: 0.45;
+  outline: 1.5px dashed #c92a2a;
+  outline-offset: 2px;
+}

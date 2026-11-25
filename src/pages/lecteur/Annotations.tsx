@@ -3,7 +3,7 @@
 // affichée (comme les mots), converties en pixels par l'échelle du lecteur.
 import { useEffect, useRef, useState, type PointerEvent as EvenementPointeur, type ReactNode } from "react";
 import { ActionIcon, Box, Button, ColorSwatch, Group, NumberInput, Popover, Text, Textarea, Tooltip } from "@mantine/core";
-import { IconArrowBackUp, IconArrowForwardUp, IconCheck, IconDeviceFloppy, IconHighlight, IconMessageCircle, IconPhoto, IconPointer, IconTrash, IconTypography } from "@tabler/icons-react";
+import { IconArrowBackUp, IconArrowForwardUp, IconCheck, IconDeviceFloppy, IconEraser, IconHighlight, IconMessageCircle, IconPhoto, IconPointer, IconTrash, IconTypography } from "@tabler/icons-react";
 import {
   INTERLIGNE,
   nouvelId,
@@ -21,7 +21,7 @@ import { textes } from "../../textes";
 
 const t = textes.lecteur.annotation;
 
-export type OutilAnnotation = "selection" | "surligner" | "note" | "texte" | "image";
+export type OutilAnnotation = "selection" | "surligner" | "note" | "texte" | "image" | "gomme";
 
 const ICONES: Record<OutilAnnotation, typeof IconPointer> = {
   selection: IconPointer,
@@ -29,8 +29,9 @@ const ICONES: Record<OutilAnnotation, typeof IconPointer> = {
   note: IconMessageCircle,
   texte: IconTypography,
   image: IconPhoto,
+  gomme: IconEraser,
 };
-const ORDRE: OutilAnnotation[] = ["selection", "surligner", "note", "texte", "image"];
+const ORDRE: OutilAnnotation[] = ["selection", "surligner", "note", "texte", "image", "gomme"];
 
 export const couleur = (teinte: Teinte, opacite = 1) => `rgba(${RVB[teinte].join(", ")}, ${opacite})`;
 
@@ -174,11 +175,14 @@ interface PropsCouche {
   onAjouter: (annotation: Annotation) => void;
   onModifier: (annotation: Annotation) => void;
   onSupprimer: (id: string) => void;
+  /** Annotations effacées d'un geste de gomme : une seule étape à annuler. */
+  onEffacer: (ids: string[]) => void;
 }
 
-/** Geste en cours sur la couche : surlignage tracé, ou annotation déplacée ou agrandie. */
+/** Geste en cours sur la couche : surlignage tracé, gomme passée, ou annotation déplacée ou agrandie. */
 type Geste =
   | { sorte: "surligner"; debut: Point; courant: Point }
+  | { sorte: "gommer"; effacees: string[] }
   | { sorte: "deplacer"; annotation: Annotation; debut: Point; courant: Point }
   | { sorte: "taille"; annotation: Annotation & { sorte: "image" }; debut: Point; courant: Point };
 
@@ -226,6 +230,15 @@ export function CoucheAnnotations(props: PropsCouche) {
     return { x: (evenement.clientX - rect.left) / echelle, y: (evenement.clientY - rect.top) / echelle };
   };
 
+  /** Les annotations de cette page sous le pointeur (là où passe la gomme). */
+  function touchees(evenement: { clientX: number; clientY: number }): string[] {
+    const ids = document
+      .elementsFromPoint(evenement.clientX, evenement.clientY)
+      .map((element) => element.closest("[data-annotation-id]")?.getAttribute("data-annotation-id"))
+      .filter((id): id is string => !!id && annotations.some((a) => a.id === id));
+    return [...new Set(ids)];
+  }
+
   function valider(annotation: Annotation | null) {
     if (!annotation || valide.current === annotation) return;
     valide.current = annotation;
@@ -261,6 +274,10 @@ export function CoucheAnnotations(props: PropsCouche) {
       evenement.preventDefault();
       // Le point cliqué est le milieu de la première ligne.
       setBrouillon({ id: nouvelId(), sorte: "texte", page, x: ici.x, y: ici.y - (INTERLIGNE * props.taille) / 2, texte: "", taille: props.taille, teinte: props.teinteTexte });
+    } else if (outil === "gomme") {
+      evenement.preventDefault();
+      evenement.currentTarget.setPointerCapture(evenement.pointerId);
+      setGeste({ sorte: "gommer", effacees: touchees(evenement) });
     } else if (outil === "selection") {
       onSelection(null);
     }
@@ -268,11 +285,21 @@ export function CoucheAnnotations(props: PropsCouche) {
 
   function pointeurMouvement(evenement: EvenementPointeur<HTMLElement>) {
     if (!geste) return;
+    if (geste.sorte === "gommer") {
+      const nouvelles = touchees(evenement).filter((id) => !geste.effacees.includes(id));
+      if (nouvelles.length > 0) setGeste({ sorte: "gommer", effacees: [...geste.effacees, ...nouvelles] });
+      return;
+    }
     setGeste({ ...geste, courant: point(evenement) });
   }
 
   function pointeurHaut() {
     if (!geste) return;
+    if (geste.sorte === "gommer") {
+      if (geste.effacees.length > 0) props.onEffacer(geste.effacees);
+      setGeste(null);
+      return;
+    }
     const { debut, courant } = geste;
     if (geste.sorte === "surligner") {
       const zones = zonesSurlignees(props.mots ?? [], debut, courant);
@@ -303,7 +330,7 @@ export function CoucheAnnotations(props: PropsCouche) {
 
   /** L'annotation telle qu'elle s'affiche : pendant un geste, à sa place provisoire. */
   function affichee(annotation: Annotation): Annotation {
-    if (!geste || geste.sorte === "surligner" || geste.annotation.id !== annotation.id) return annotation;
+    if (!geste || geste.sorte === "surligner" || geste.sorte === "gommer" || geste.annotation.id !== annotation.id) return annotation;
     const { debut, courant } = geste;
     return geste.sorte === "deplacer"
       ? decaler(annotation, courant.x - debut.x, courant.y - debut.y)
@@ -312,7 +339,10 @@ export function CoucheAnnotations(props: PropsCouche) {
 
   const px = (points: number) => points * echelle;
   const enSelection = actif && outil === "selection";
-  const visibles = annotations.filter((a) => a.id !== brouillon?.id);
+  // En sélection, on saisit les annotations ; avec la gomme, on passe dessus : elles reçoivent le pointeur.
+  const touchables = actif && (outil === "selection" || outil === "gomme");
+  const effacees = geste?.sorte === "gommer" ? geste.effacees : [];
+  const visibles = annotations.filter((a) => a.id !== brouillon?.id && !effacees.includes(a.id));
   const apercu = geste?.sorte === "surligner" ? zonesSurlignees(props.mots ?? [], geste.debut, geste.courant) : [];
 
   function rendu(brute: Annotation): ReactNode {
@@ -324,12 +354,13 @@ export function CoucheAnnotations(props: PropsCouche) {
         return annotation.zones.map((zone, rang) => (
           <div
             key={`${annotation.id}-${rang}`}
+            data-annotation-id={annotation.id}
             className="annotation-surlignage"
             data-selectionnee={choisie}
             onPointerDown={enSelection ? prise() : undefined}
             onPointerMove={pointeurMouvement}
             onPointerUp={pointeurHaut}
-            style={{ left: px(zone.x), top: px(zone.y), width: px(zone.largeur), height: px(zone.hauteur), background: couleur(annotation.teinte, 0.5), pointerEvents: enSelection ? "auto" : "none" }}
+            style={{ left: px(zone.x), top: px(zone.y), width: px(zone.largeur), height: px(zone.hauteur), background: couleur(annotation.teinte, 0.5), pointerEvents: touchables ? "auto" : "none" }}
           />
         ));
       case "note":
@@ -337,6 +368,7 @@ export function CoucheAnnotations(props: PropsCouche) {
           <button
             key={annotation.id}
             type="button"
+            data-annotation-id={annotation.id}
             className="annotation-note"
             data-selectionnee={choisie}
             title={annotation.texte}
@@ -344,7 +376,7 @@ export function CoucheAnnotations(props: PropsCouche) {
             onPointerDown={enSelection ? prise() : undefined}
             onPointerMove={pointeurMouvement}
             onPointerUp={pointeurHaut}
-            onDoubleClick={() => actif && setBrouillon(annotation)}
+            onDoubleClick={() => actif && outil !== "gomme" && setBrouillon(annotation)}
             style={{ left: px(annotation.x), top: px(annotation.y), pointerEvents: actif ? "auto" : "none" }}
           >
             <IconMessageCircle size={15} stroke={2} />
@@ -354,18 +386,19 @@ export function CoucheAnnotations(props: PropsCouche) {
         return (
           <div
             key={annotation.id}
+            data-annotation-id={annotation.id}
             className="annotation-texte"
             data-selectionnee={choisie}
             onPointerDown={enSelection ? prise() : undefined}
             onPointerMove={pointeurMouvement}
             onPointerUp={pointeurHaut}
-            onDoubleClick={() => actif && setBrouillon(annotation)}
+            onDoubleClick={() => actif && outil !== "gomme" && setBrouillon(annotation)}
             style={{
               left: px(annotation.x),
               top: px(annotation.y),
               fontSize: px(annotation.taille),
               color: couleur(annotation.teinte),
-              pointerEvents: enSelection ? "auto" : "none",
+              pointerEvents: touchables ? "auto" : "none",
             }}
           >
             {annotation.texte}
@@ -376,12 +409,13 @@ export function CoucheAnnotations(props: PropsCouche) {
         return (
           <div
             key={annotation.id}
+            data-annotation-id={annotation.id}
             className="annotation-image"
             data-selectionnee={choisie}
             onPointerDown={enSelection ? prise() : undefined}
             onPointerMove={pointeurMouvement}
             onPointerUp={pointeurHaut}
-            style={{ left: px(annotation.zone.x), top: px(annotation.zone.y), width: px(annotation.zone.largeur), height: px(annotation.zone.hauteur), pointerEvents: enSelection ? "auto" : "none" }}
+            style={{ left: px(annotation.zone.x), top: px(annotation.zone.y), width: px(annotation.zone.largeur), height: px(annotation.zone.hauteur), pointerEvents: touchables ? "auto" : "none" }}
           >
             {image && <img src={image.adresse} alt="" draggable={false} />}
             {choisie && enSelection && <span className="poignee-annotation" aria-label={t.redimensionner} onPointerDown={prise("taille")} onPointerMove={pointeurMouvement} onPointerUp={pointeurHaut} />}

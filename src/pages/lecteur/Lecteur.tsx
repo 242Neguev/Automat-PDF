@@ -8,7 +8,7 @@ import { ActionIcon, Alert, Badge, Box, Button, Center, CloseButton, Group, Load
 import { IconChevronDown, IconChevronUp, IconCircleCheck, IconExternalLink, IconFileText, IconFolder, IconLayoutSidebar, IconPencil, IconPlus, IconSearch, IconZoomIn, IconZoomOut } from "@tabler/icons-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { annoterPdf, enErreur, lireImage, montrerDansDossier, ouvrirFichier, pagesPdf, tailleFichier, type FormatPage, type Mot } from "../../coeur";
-import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
+import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, sans, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { motsCouverts, occurrences, type Occurrence } from "../../donnees/recherche-texte";
 import { formaterTaille } from "../../donnees/tailles";
@@ -327,6 +327,10 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   const modifierAnnotation = (annotation: Annotation) => changerHistorique((h) => appliquer(h, h.present.map((a) => (a.id === annotation.id ? annotation : a))));
   function supprimerAnnotation(id: string) {
     changerHistorique((h) => appliquer(h, h.present.filter((a) => a.id !== id)));
+    setSelection(null);
+  }
+  function effacerAnnotations(ids: string[]) {
+    changerHistorique((h) => appliquer(h, sans(h.present, ids)));
     setSelection(null);
   }
   function remonter(sens: "annuler" | "retablir") {
@@ -655,6 +659,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
                             onAjouter={ajouterAnnotation}
                             onModifier={modifierAnnotation}
                             onSupprimer={supprimerAnnotation}
+                            onEffacer={effacerAnnotations}
                           />
                         )
                       : undefined
