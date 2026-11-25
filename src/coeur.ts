@@ -254,6 +254,20 @@ export const feuilleImprimante = (options: OptionsImpression) => invoke<Feuille>
 /** Ouvre la fenêtre de réglages du pilote de l'imprimante ; `null` : annulée (Windows). */
 export const proprietesImprimante = (imprimante: string, pilote: number[]) => invoke<ReglagesImprimante | null>("proprietes_imprimante", { imprimante, pilote });
 
+/** Automat-PDF comme lecteur des PDF du système : le proposer est-il possible (Windows, macOS 12 et plus), est-ce déjà fait ? */
+export interface EtatLecteurPdf {
+  possible: boolean;
+  parDefaut: boolean;
+}
+
+export const lecteurParDefaut = () => invoke<EtatLecteurPdf>("lecteur_par_defaut");
+
+/**
+ * Propose de faire d'Automat-PDF le lecteur des PDF : la fenêtre de choix de Windows (ou, à défaut,
+ * ses Paramètres : `parametres`), la confirmation de macOS. Renvoie l'état après coup.
+ */
+export const devenirLecteurParDefaut = () => invoke<{ etat: EtatLecteurPdf; parametres: boolean }>("devenir_lecteur_par_defaut");
+
 /** Événement du cœur pendant l'envoi des pages à l'imprimante (Windows) : pages envoyées, et sur combien. */
 export const AVANCEMENT_IMPRESSION = "impression-avancement";
 export interface AvancementImpression {

@@ -16,6 +16,7 @@ mod geometrie;
 mod images;
 mod imposition;
 mod impression;
+mod lecteur_defaut;
 mod libreoffice;
 #[cfg(target_os = "macos")]
 mod mail;
@@ -231,6 +232,8 @@ pub fn run() {
             commandes::imprimantes,
             commandes::feuille_imprimante,
             commandes::proprietes_imprimante,
+            commandes::lecteur_par_defaut,
+            commandes::devenir_lecteur_par_defaut,
             commandes::ouvrir_lien,
             commandes::compresser_pdf,
             commandes::taille_fichier,

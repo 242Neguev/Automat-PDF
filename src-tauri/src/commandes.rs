@@ -16,6 +16,7 @@ use crate::erreur::Erreur;
 use crate::images::OptionsImages;
 use crate::imposition::Disposition;
 use crate::impression::{Feuille, Imprimante, OptionsImpression, Reglages};
+use crate::lecteur_defaut::{Demande, EtatLecteur};
 use crate::libreoffice::Convertisseurs;
 use crate::marques::{OptionsMarques, Placement};
 use crate::messagerie::Compte;
@@ -255,6 +256,26 @@ pub async fn proprietes_imprimante(
 ) -> Result<Option<Reglages>, Erreur> {
     en_arriere_plan(move || operations::proprietes_imprimante(&app, &fenetre, &imprimante, &pilote))
         .await
+}
+
+/// Automat-PDF ouvre-t-il les PDF du système ? Et peut-il le proposer ?
+#[tauri::command]
+pub async fn lecteur_par_defaut(app: AppHandle) -> EtatLecteur {
+    en_arriere_plan(move || Ok::<_, Erreur>(operations::lecteur_par_defaut(&app)))
+        .await
+        .unwrap_or(EtatLecteur {
+            possible: false,
+            par_defaut: false,
+        })
+}
+
+/// Propose de faire d'Automat-PDF le lecteur des PDF, par la fenêtre du système.
+#[tauri::command]
+pub async fn devenir_lecteur_par_defaut(
+    app: AppHandle,
+    fenetre: tauri::WebviewWindow,
+) -> Result<Demande, Erreur> {
+    en_arriere_plan(move || operations::devenir_lecteur_par_defaut(&app, &fenetre)).await
 }
 
 /// Signets et liens d'un PDF, pour le lecteur.

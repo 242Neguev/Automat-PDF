@@ -64,6 +64,7 @@ import ListeCommentaires from "./Commentaires";
 import MotDePasseLecture from "./MotDePasseLecture";
 import ColonneSignets from "./Signets";
 import FenetreImpression from "./Impression";
+import { PropositionLecteurParDefaut } from "./LecteurParDefaut";
 import PleinEcran from "./PleinEcran";
 import { MAC } from "../../systeme";
 import { motsDe, textesDe } from "./textes";
@@ -883,6 +884,9 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
           {t.motDePasse.ouvert}
         </Alert>
       )}
+
+      {/* Faire d'Automat-PDF le lecteur des PDF : proposé une fois par session, tant que ni choisi ni refusé. */}
+      {formats && !annoter && <PropositionLecteurParDefaut />}
 
       {chemin && formats && (
         <FenetreImpression

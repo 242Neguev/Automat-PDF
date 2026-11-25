@@ -5,6 +5,7 @@ import symboleEauSeche from "./assets/eau-seche/symbole.png";
 import { version } from "../package.json";
 import type { Confidentialite } from "./coeur";
 import { ReglagesConfidentialite, type Reglage } from "./Confidentialite";
+import { ReglageLecteurParDefaut } from "./pages/lecteur/LecteurParDefaut";
 import type { MiseAJour } from "./MiseAJour";
 import { textes } from "./textes";
 
@@ -55,6 +56,7 @@ export default function APropos({ ouvert, fermer, confidentialite, regler, miseA
             <ReglagesConfidentialite confidentialite={confidentialite} regler={regler} miseAJour={miseAJour} />
           </>
         )}
+        {ouvert && <ReglageLecteurParDefaut />}
         <Divider label={t.editeur} labelPosition="left" />
         {/* La charte Eau sèche impose une zone de protection autour du symbole : on le laisse respirer. */}
         <Group gap="xl" py="sm" justify="center">

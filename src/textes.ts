@@ -10,6 +10,21 @@ const LOGICIEL_MESSAGERIE = MAC ? "Mail" : "Outlook";
 export const textes = {
   application: "Automat-PDF",
   parEditeur: "par Eau sèche",
+  lecteurParDefaut: {
+    titre: "Ouvrir vos PDF avec Automat-PDF ?",
+    texte: "Un double-clic sur un PDF l'ouvrira directement ici, dans le lecteur : lire, annoter, imprimer.",
+    aideWindows: "Windows ouvre sa fenêtre de choix : sélectionnez Automat-PDF, puis « Toujours ».",
+    aideMac: "macOS vous demandera de confirmer.",
+    choisir: "Choisir Automat-PDF…",
+    plusTard: "Plus tard",
+    jamais: "Ne plus proposer",
+    reussi: "C'est fait : vos PDF s'ouvriront avec Automat-PDF.",
+    parametres: "Windows a ouvert ses Paramètres : dans « Applications par défaut », choisissez Automat-PDF pour les fichiers .pdf.",
+    pasEncore: "Vos PDF s'ouvrent toujours avec l'autre application. Vous pourrez changer d'avis dans « À propos ».",
+    reglage: "Lecteur de PDF",
+    estParDefaut: "Automat-PDF ouvre vos PDF d'un double-clic.",
+    nEstPas: "Vos PDF s'ouvrent avec une autre application.",
+  },
   aPropos: {
     bouton: "À propos",
     titre: "À propos",

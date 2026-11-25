@@ -24,7 +24,29 @@
   WriteRegStr SHCTX "${AUTOMATPDF_CLASSES}\${EXT}\shell\AutomatPDF\shell\0lire\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
 !macroend
 
+; Lecteur de PDF : Automat-PDF s'inscrit parmi les applications qui ouvrent les PDF (« Ouvrir avec »,
+; Applications par défaut de Windows), sans prendre la place du lecteur actuel : Windows ne le permet
+; qu'avec l'accord de l'utilisateur, que l'application demande ensuite (src-tauri/src/lecteur_defaut.rs).
+!define AUTOMATPDF_CLASSE "AutomatPDF.Document"
+!define AUTOMATPDF_CAPACITES "Software\Automat-PDF\Capabilities"
+
+!macro AutomatPdfLecteur
+  WriteRegStr SHCTX "Software\Classes\${AUTOMATPDF_CLASSE}" "" "Document PDF"
+  WriteRegStr SHCTX "Software\Classes\${AUTOMATPDF_CLASSE}\DefaultIcon" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\",0"
+  WriteRegStr SHCTX "Software\Classes\${AUTOMATPDF_CLASSE}\shell\open\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
+  WriteRegStr SHCTX "Software\Classes\.pdf\OpenWithProgids" "${AUTOMATPDF_CLASSE}" ""
+  WriteRegStr SHCTX "Software\Classes\Applications\${MAINBINARYNAME}.exe" "FriendlyAppName" "Automat-PDF"
+  WriteRegStr SHCTX "Software\Classes\Applications\${MAINBINARYNAME}.exe\SupportedTypes" ".pdf" ""
+  WriteRegStr SHCTX "Software\Classes\Applications\${MAINBINARYNAME}.exe\shell\open\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
+  WriteRegStr SHCTX "${AUTOMATPDF_CAPACITES}" "ApplicationName" "Automat-PDF"
+  WriteRegStr SHCTX "${AUTOMATPDF_CAPACITES}" "ApplicationDescription" "Lire, annoter, imprimer et transformer vos PDF"
+  WriteRegStr SHCTX "${AUTOMATPDF_CAPACITES}" "ApplicationIcon" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\",0"
+  WriteRegStr SHCTX "${AUTOMATPDF_CAPACITES}\FileAssociations" ".pdf" "${AUTOMATPDF_CLASSE}"
+  WriteRegStr SHCTX "Software\RegisteredApplications" "Automat-PDF" "${AUTOMATPDF_CAPACITES}"
+!macroend
+
 !macro NSIS_HOOK_POSTINSTALL
+  !insertmacro AutomatPdfLecteur
   !insertmacro AutomatPdfSousMenu ".pdf"
   !insertmacro AutomatPdfLire ".pdf"
   !insertmacro AutomatPdfAction ".pdf" "1" "organiser" "Organiser les pages"
@@ -75,6 +97,12 @@
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
+  DeleteRegKey SHCTX "Software\Classes\${AUTOMATPDF_CLASSE}"
+  DeleteRegValue SHCTX "Software\Classes\.pdf\OpenWithProgids" "${AUTOMATPDF_CLASSE}"
+  DeleteRegKey SHCTX "Software\Classes\Applications\${MAINBINARYNAME}.exe"
+  DeleteRegKey SHCTX "${AUTOMATPDF_CAPACITES}"
+  DeleteRegKey /ifempty SHCTX "Software\Automat-PDF"
+  DeleteRegValue SHCTX "Software\RegisteredApplications" "Automat-PDF"
   DeleteRegKey SHCTX "${AUTOMATPDF_CLASSES}\.pdf\shell\AutomatPDF"
   DeleteRegKey SHCTX "${AUTOMATPDF_CLASSES}\.jpg\shell\AutomatPDF"
   DeleteRegKey SHCTX "${AUTOMATPDF_CLASSES}\.jpeg\shell\AutomatPDF"

@@ -52,16 +52,21 @@ reqwest = { version = "0.13", default-features = false, features = ["blocking", 
 # Les mêmes versions que Tauri, réduites aux classes utilisées.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSString", "NSURL"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "NSPrintOperation", "NSPrintPanel"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSBundle", "NSData", "NSError", "NSString", "NSURL"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "NSPrintOperation", "NSPrintPanel", "NSWorkspace", "block2", "objc2-uniform-type-identifiers"] }
 # Impression depuis le lecteur : PDFKit imprime le PDF lui-même (net à toute résolution), par la
 # fenêtre d'impression de macOS (imprimante, pages, copies, recto verso, aperçu).
 objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", "PDFDocument", "objc2-app-kit"] }
+# Lecteur de PDF par défaut (lecteur_defaut.rs) : NSWorkspace et le type des PDF ; macOS demande
+# lui-même la confirmation de l'utilisateur, qui revient par un bloc.
+objc2-uniform-type-identifiers = { version = "0.3", default-features = false, features = ["std", "UTType"] }
+block2 = "0.6"
 
-# Windows : impression depuis le lecteur (imprimantes, réglages du pilote, pages envoyées par GDI).
+# Windows : impression depuis le lecteur (imprimantes, réglages du pilote, pages envoyées par GDI) ;
+# lecteur de PDF par défaut (association des PDF, fenêtre « Ouvrir avec », registre).
 # Le même windows-sys que Tauri.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Printing", "Win32_Storage_Xps"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Printing", "Win32_Storage_Xps", "Win32_System_Registry", "Win32_UI_Shell"] }
 
 # Voir https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

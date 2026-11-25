@@ -18,6 +18,7 @@ use crate::fichiers::{self, FichierAEcrire, Nature};
 use crate::images::{self, ImageSource, OptionsImages};
 use crate::imposition::{self, Disposition};
 use crate::impression::{self, Feuille, Imprimante, OptionsImpression, Reglages};
+use crate::lecteur_defaut::{self, Demande, EtatLecteur};
 use crate::libreoffice::{self, Convertisseurs};
 use crate::marques::{self, OptionsMarques, Placement};
 use crate::memoire;
@@ -596,6 +597,20 @@ pub fn imprimantes() -> Result<Vec<Imprimante>, Erreur> {
 /// La feuille telle que l'imprimante la prendra, pour l'aperçu (Windows).
 pub fn feuille_imprimante(options: &OptionsImpression) -> Result<Feuille, Erreur> {
     impression::feuille(options)
+}
+
+/// Automat-PDF ouvre-t-il les PDF du système ? Et peut-il le proposer ?
+pub fn lecteur_par_defaut(app: &AppHandle) -> EtatLecteur {
+    lecteur_defaut::etat(app)
+}
+
+/// Propose de faire d'Automat-PDF le lecteur des PDF : la fenêtre de choix de Windows (ou ses
+/// Paramètres), la confirmation de macOS.
+pub fn devenir_lecteur_par_defaut(
+    app: &AppHandle,
+    fenetre: &WebviewWindow,
+) -> Result<Demande, Erreur> {
+    lecteur_defaut::devenir(app, fenetre)
 }
 
 /// Les réglages du pilote de l'imprimante, dans sa propre fenêtre ; `None` : annulés (Windows).

@@ -249,6 +249,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 name = "automat-pdf"
 version = "0.5.0"
 dependencies = [
+ "block2",
  "flate2",
  "getrandom 0.4.3",
  "hayro",
@@ -260,6 +261,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "objc2-pdf-kit",
+ "objc2-uniform-type-identifiers",
  "reqwest",
  "serde",
  "serde_json",
@@ -2851,6 +2853,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "objc2-quartz-core",
+ "objc2-uniform-type-identifiers",
 ]
 
 [[package]]
@@ -3023,6 +3026,16 @@ dependencies = [
  "objc2-foundation",
  "objc2-quartz-core",
  "objc2-user-notifications",
+]
+
+[[package]]
+name = "objc2-uniform-type-identifiers"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7902ac02859fc1f7045f8b598c63f1ae0cc7efeaa06a9bc9f3d9a3c955974fa4"
+dependencies = [
+ "objc2",
+ "objc2-foundation",
 ]
 
 [[package]]
