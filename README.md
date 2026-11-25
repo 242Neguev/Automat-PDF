@@ -43,6 +43,7 @@ L'installateur Windows (`.exe`) et l'image disque Mac (`.dmg`, une seule pour le
 | **PDF-16** | **Thème sombre** : Automat-PDF suit le mode clair ou sombre de l'ordinateur (Windows comme Mac) et change avec lui, sans redémarrer ; gris de l'Encre d'Eau sèche, textes secondaires au même contraste qu'en clair (5,8) ; aperçus des pages toujours blancs ; logos inversés | ✅ |
 | **PDF-17** | **Lecteur de PDF** : un PDF déposé seul ou choisi sur l'accueil s'ouvre dans le lecteur, comme par **Ouvrir dans le lecteur** en tête du clic droit de l'Explorateur (Windows) ou par « Ouvrir avec » (Mac) ; un outil affiché qui prend les PDF, ou demandé par le clic droit, le reçoit comme avant ; pages à la suite, dessinées par hayro à la largeur affichée quand elles approchent de l'écran ; zoom (largeur, page entière, ⌘ + / − / 0), « Page … sur … », colonne de vignettes ; **recherche** dans le texte (⌘F ou Ctrl+F, sans tenir compte des majuscules ni des accents ; Entrée : résultat suivant), mots trouvés surlignés ; **texte sélectionnable et copiable** (couche de texte invisible, placée mot par mot) ; à côté, les outils qui s'appliquent au PDF, ouverts avec lui d'un clic ; ouverture dans l'application habituelle (pour imprimer) | ✅ |
 | **PDF-18** | **Nouvelle apparence** : fond aux halos de couleur et panneaux de **verre dépoli**, en clair comme en sombre ; une **couleur par groupe d'outils** (cartes de l'accueil, pastilles, panneaux et numéros d'étape de chaque outil, texte foncé au contraste de 7 au moins) ; barre latérale en verre, outils rangés par groupes repliables ; **documents récents** (gardés sur l'ordinateur, avec leur première page) dans la barre latérale, sur l'accueil (« Reprendre ») et en puces dans chaque outil ; sur Mac, **fenêtre transparente** sur le bureau flouté, sans barre de titre (déplacée par sa bande du haut) ; panneaux opaques quand le système demande moins de transparence (`prefers-reduced-transparency`) | ✅ |
+| **PDF-19** | **Éditeur de PDF**, dans le lecteur (bouton **Annoter**), gratuit : **surligner** (en glissant sur les mots, ou un cadre sur une page numérisée), **note** (vraie annotation PDF, modifiable dans Acrobat ou Aperçu), **texte** et **image** (signature, cachet, logo) posés sur la page ; **corriger** un mot ou un montant (ses caractères retirés du fichier, le nouveau texte écrit à sa place : même ligne de base, même taille, même couleur, gras et italique, police standard proche ; un montant garde son bord droit) ; **correcteur blanc** (ce qui est sous le cadre retiré du fichier, puis recouvert de blanc) ; **gomme** ; sélectionner, déplacer, supprimer ; annuler et rétablir ; **Enregistrer le PDF annoté…** : un nouveau PDF à côté de l'original (« … - annoté.pdf »), jamais par-dessus, affiché ensuite dans le lecteur | ✅ |
 
 ## Développer (Mac ou Windows)
 
@@ -100,7 +101,7 @@ Pour essayer l'application sous Windows, suivre la [fiche de test](docs/test-win
    - Rust (dans `~/.cargo`) et Node.js LTS (dans `~/.local/share/automat-pdf-compilation`).
 
    Compter 20 à 40 minutes la première fois, quelques minutes ensuite.
-3. À la fin, le Finder montre l'image disque : `src-tauri/target/universal-apple-darwin/release/bundle/dmg/Automat-PDF_0.4.0_universal.dmg`, une seule pour les Mac Intel et Apple Silicon (ou dans `~/Library/Caches/Automat-PDF-compilation/target/` si le projet est dans iCloud Drive, qui enverrait sinon plusieurs Go de fichiers intermédiaires dans le nuage).
+3. À la fin, le Finder montre l'image disque : `src-tauri/target/universal-apple-darwin/release/bundle/dmg/Automat-PDF_0.5.0_universal.dmg`, une seule pour les Mac Intel et Apple Silicon (ou dans `~/Library/Caches/Automat-PDF-compilation/target/` si le projet est dans iCloud Drive, qui enverrait sinon plusieurs Go de fichiers intermédiaires dans le nuage).
 
 `scripts/compiler-mac.command --natif` compile seulement pour le processeur de ce Mac, deux fois plus vite : pour un essai.
 
@@ -156,9 +157,11 @@ src/                     Interface React + TypeScript (Mantine)
                          ce qui manque pour convertir (Office, LibreOffice), recherche d'une tâche
                          avec les mots de tous les jours, chemins (fichier proposé à côté de l'original),
                          destination des fichiers reçus (outil, lecteur ou question), documents récents,
-                         recherche dans le texte d'un PDF
+                         recherche dans le texte d'un PDF, annotations de l'éditeur (historique pour
+                         annuler, surlignage d'après les mots, mots à corriger, montants)
   pages/commun/reception.ts  Fichiers reçus de l'Explorateur ou du Finder (clic droit, glisser-déposer), confiés aux outils
-  pages/lecteur/         Lecteur de PDF : pages, vignettes, zoom, recherche, couche de texte, outils à côté
+  pages/lecteur/         Lecteur de PDF : pages, vignettes, zoom, recherche, couche de texte, outils à côté ;
+                         éditeur (Annotations.tsx) : barre d'annotation et couche posée sur chaque page
   pages/                 Un dossier par outil (organiser/, mise-en-page/, fusion/, intercaler/, images/,
                          separation/, annoter/, securite/, optimiser/, convertir/), et commun/, partagé :
                          zone de dépôt, étapes numérotées, bouton d'action qui dit ce qu'il manque,
@@ -193,8 +196,11 @@ src-tauri/               Cœur Rust (Tauri)
   src/images.rs          Images en PDF (JPEG repris tels quels, orientation EXIF, transparence)
   src/imposition.rs      Pages par feuille : formulaires PDF placés à l'échelle, annotations incrustées
   src/marques.rs         Surimpressions : numéros, tampon, filigrane, image (signature, cachet)
-  src/caviardage.rs      Caviardage : caractères, pixels, dessins et annotations sous les zones supprimés
-  src/pixels.rs          Pixels des images (8 bits) : noircis pour le caviardage, réduits pour la compression
+  src/caviardage.rs      Caviardage : caractères, pixels, dessins et annotations sous les zones supprimés ;
+                         le même nettoyage, en blanc (correcteur) ou limité aux caractères (correction)
+  src/annotations.rs     Éditeur : surlignages et notes (annotations PDF), texte et images sur la page,
+                         mots corrigés (retirés puis réécrits), correcteur blanc
+  src/pixels.rs          Pixels des images (8 bits) : noircis (caviardage) ou blanchis (correcteur), réduits pour la compression
   src/securite.rs        Mot de passe : chiffrement AES-256 et droits, ou protection retirée
   src/compression.rs     Compression : images ramenées à la résolution utile, objets en double fusionnés
   src/geometrie.rs       Matrices, cadre visible et repère de la page affichée (rotation comprise)
