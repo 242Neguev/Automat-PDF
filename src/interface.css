@@ -560,6 +560,110 @@ html[data-fenetre="verre"][data-mantine-color-scheme="light"] {
   opacity: 0.7;
 }
 
+/* La page droite, dans sa boîte affichée : tournée avec tout ce qu'elle porte (texte, liens,
+   annotations) quand l'affichage pivote. */
+.page-droite {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+/* Onglets des PDF ouverts, au-dessus de l'en-tête du lecteur. */
+.onglets-lecteur {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.onglet-lecteur {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  max-width: 240px;
+  padding: 2px 3px 2px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--automat-verre-bord);
+  background-color: var(--automat-encart);
+}
+.onglet-lecteur:hover {
+  background-color: var(--automat-survol-fond);
+}
+.onglet-lecteur[data-actif] {
+  border-color: var(--mantine-color-eau-6);
+  background-color: var(--automat-actif-fond);
+}
+.onglet-lecteur__nom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--mantine-font-size-sm);
+}
+.onglet-lecteur__nom > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.onglet-lecteur[data-actif] .onglet-lecteur__nom {
+  font-weight: 650;
+}
+
+/* Plein écran : une page à la fois sur fond noir ; les commandes se montrent quand la souris bouge.
+   Sous les infobulles de Mantine (300), au-dessus de ses fenêtres (200). */
+.plein-ecran {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: grid;
+  place-items: center;
+  background: #000;
+  cursor: none;
+  user-select: none;
+}
+.plein-ecran[data-commandes] {
+  cursor: default;
+}
+.plein-ecran__page {
+  position: relative;
+  overflow: hidden;
+  background: white;
+}
+.plein-ecran__page img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.plein-ecran__commandes {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(28, 30, 34, 0.86);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.plein-ecran[data-commandes] .plein-ecran__commandes {
+  opacity: 1;
+  pointer-events: auto;
+}
+.plein-ecran__commandes .mantine-ActionIcon-root {
+  color: white;
+}
+.plein-ecran__commandes .mantine-ActionIcon-root:disabled {
+  color: rgba(255, 255, 255, 0.35);
+  background: transparent;
+}
+
 /* Liens d'une page (vers une autre page, un site, un e-mail), au-dessus de la couche de texte. */
 .lien-pdf {
   position: absolute;

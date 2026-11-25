@@ -269,7 +269,7 @@ pub async fn ouvrir_lien(adresse: String) -> Result<(), Erreur> {
     en_arriere_plan(move || operations::ouvrir_lien(&adresse)).await
 }
 
-/// Oublie le contenu déchiffré d'un PDF : le lecteur est passé à un autre document.
+/// Oublie le contenu déchiffré d'un PDF : son onglet s'est fermé dans le lecteur.
 #[tauri::command]
 pub fn reverrouiller_lecture(chemin: String) {
     operations::reverrouiller_lecture(&chemin);

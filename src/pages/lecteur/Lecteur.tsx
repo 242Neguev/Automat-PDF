@@ -5,7 +5,24 @@
 // permet de sélectionner et de copier le texte, et porte les surlignages de la recherche.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ActionIcon, Alert, Badge, Box, Button, Center, CloseButton, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Text, TextInput, Title, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconChevronDown, IconChevronUp, IconCircleCheck, IconExternalLink, IconFileText, IconFolder, IconLayoutSidebar, IconPencil, IconPlus, IconPrinter, IconSearch, IconZoomIn, IconZoomOut } from "@tabler/icons-react";
+import {
+  IconBook2,
+  IconChevronDown,
+  IconChevronUp,
+  IconCircleCheck,
+  IconExternalLink,
+  IconFileText,
+  IconFolder,
+  IconLayoutSidebar,
+  IconMaximize,
+  IconPencil,
+  IconPlus,
+  IconPrinter,
+  IconRotateClockwise,
+  IconSearch,
+  IconZoomIn,
+  IconZoomOut,
+} from "@tabler/icons-react";
 import { listen } from "@tauri-apps/api/event";
 import { notifications } from "@mantine/notifications";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -21,7 +38,6 @@ import {
   ouvrirFichier,
   ouvrirLien,
   pagesPdf,
-  reverrouillerLecture,
   tailleFichier,
   type DestinationPdf,
   type FormatPage,
@@ -31,6 +47,7 @@ import {
   type NavigationPdf,
   type OptionsImpression,
 } from "../../coeur";
+import { echelleAjustee, hautAffiche, premiereDeRangee, rangees, tourner, transformation, type Disposition, type Rotation } from "../../donnees/affichage";
 import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, sans, zoneDe, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { motsCouverts, occurrences, type Occurrence } from "../../donnees/recherche-texte";
@@ -47,6 +64,7 @@ import ListeCommentaires from "./Commentaires";
 import MotDePasseLecture from "./MotDePasseLecture";
 import ColonneSignets from "./Signets";
 import FenetreImpression from "./Impression";
+import PleinEcran from "./PleinEcran";
 import { MAC } from "../../systeme";
 import { motsDe, textesDe } from "./textes";
 
@@ -58,8 +76,9 @@ const ECHELLE_MIN = 0.25 * TAILLE_REELLE;
 const ECHELLE_MAX = 4 * TAILLE_REELLE;
 /** Marge autour des pages, dans la zone qui défile. */
 const MARGE = 16;
-/** Préférence gardée : la colonne des vignettes affichée ou non. */
+/** Préférences gardées : la colonne des vignettes affichée ou non ; une page ou deux côte à côte. */
 const CLE_VIGNETTES = "automat-pdf.lecteur-vignettes";
+const CLE_DISPOSITION = "automat-pdf.lecteur-disposition";
 /** Images qu'un navigateur affiche telles quelles (pour l'aperçu d'une image posée). */
 const TYPES_IMAGES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", bmp: "image/bmp" };
 
@@ -90,6 +109,23 @@ function lirePreference(): boolean {
   }
 }
 
+function lireDisposition(): Disposition {
+  try {
+    return localStorage.getItem(CLE_DISPOSITION) === "deux" ? "deux" : "une";
+  } catch {
+    return "une";
+  }
+}
+
+/** Où l'on en était dans un document : retrouvé en revenant à son onglet. */
+interface EtatDocument {
+  page: number;
+  fraction: number;
+  mode: Mode;
+  echelle: number;
+  rotation: Rotation;
+}
+
 interface Props {
   /** Le PDF ouvert, ou null. */
   chemin: string | null;
@@ -100,9 +136,13 @@ interface Props {
   onOutil: (definition: DefinitionOutil) => void;
   /** Un autre PDF choisi dans la fenêtre d'ouverture. */
   onChoisir: (chemin: string) => void;
+  /** Les PDF ouverts, en onglets (celui qui s'affiche compris) ; passer à l'un, en fermer un. */
+  ouverts: string[];
+  onOnglet: (chemin: string) => void;
+  onFermer: (chemin: string) => void;
 }
 
-export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: Props) {
+export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouverts, onOnglet, onFermer }: Props) {
   const [formats, setFormats] = useState<FormatPage[] | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   /** Le PDF demande son mot de passe d'ouverture ; puis il a été ouvert avec (déchiffré en mémoire). */
@@ -127,6 +167,10 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   const [saisie, setSaisie] = useState<string | number>("");
   const [hauteur, setHauteur] = useState(600);
   const [vignettes, setVignettes] = useState(lirePreference);
+  /** Affichage : une page ou deux côte à côte, la rotation (le fichier n'est pas modifié), le plein écran. */
+  const [disposition, setDisposition] = useState<Disposition>(lireDisposition);
+  const [rotation, setRotation] = useState<Rotation>(0);
+  const [pleinEcran, setPleinEcran] = useState(false);
   /** Recherche : le texte tapé, ses occurrences dans le document (null : pas de recherche), la courante. */
   const [recherche, setRecherche] = useState("");
   const [resultats, setResultats] = useState<Occurrence[] | null>(null);
@@ -153,6 +197,14 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   const courante_ = useRef(0);
   const echelle_ = useRef(echelle);
   echelle_.current = echelle;
+  const mode_ = useRef(mode);
+  mode_.current = mode;
+  const rotation_ = useRef(rotation);
+  rotation_.current = rotation;
+  /** La page lue et la position dans la page, tenues à jour au défilement ; et l'état de chaque document. */
+  const positionLue = useRef({ page: 0, fraction: 0 });
+  const etats = useRef<Record<string, EtatDocument>>({});
+  const documentAffiche = useRef<string | null>(null);
 
   async function choisir() {
     const choisi = await open({ multiple: false, directory: false, filters: [{ name: t.filtre, extensions: ["pdf"] }] });
@@ -161,14 +213,26 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
 
   // Le document : la taille de chaque page, pour tout placer avant le moindre rendu.
   useEffect(() => {
+    // Un autre document (un autre onglet) : on note où l'on en était dans le précédent, et l'on
+    // retrouve où l'on en était dans celui-ci. Relu avec son mot de passe : il garde son état.
+    const precedent = documentAffiche.current;
+    if (precedent !== chemin) {
+      if (precedent) etats.current[precedent] = { ...positionLue.current, mode: mode_.current, echelle: echelle_.current, rotation: rotation_.current };
+      documentAffiche.current = chemin;
+      const etat = chemin ? etats.current[chemin] : undefined;
+      setMode(etat?.mode ?? "largeur");
+      if (etat?.mode === "libre") setEchelle(etat.echelle);
+      setRotation(etat?.rotation ?? 0);
+      positionLue.current = etat ? { page: etat.page, fraction: etat.fraction } : { page: 0, fraction: 0 };
+      ancre.current = etat ? { page: etat.page, fraction: etat.fraction } : null;
+      setCourante(etat?.page ?? 0);
+      courante_.current = etat?.page ?? 0;
+    }
     setFormats(null);
     setErreur(null);
     setProtege(false);
     setNavigation(null);
     setTaille(null);
-    setCourante(0);
-    courante_.current = 0;
-    setMode("largeur");
     setRecherche("");
     setResultats(null);
     setSelection(null);
@@ -201,19 +265,6 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   // Un autre document : l'avis « ouvert avec son mot de passe » ne le concerne pas.
   useEffect(() => setDeverrouille(false), [chemin]);
 
-  // Le PDF ouvert avec son mot de passe est oublié quand le lecteur passe à un autre document : il
-  // redemandera son mot de passe, comme à sa première ouverture (et comme Acrobat).
-  const ouvertAvecMotDePasse = useRef<string | null>(null);
-  useEffect(() => {
-    const ouvert = chemin;
-    return () => {
-      if (ouvert && ouvertAvecMotDePasse.current === ouvert) {
-        ouvertAvecMotDePasse.current = null;
-        void reverrouillerLecture(ouvert).catch(() => undefined);
-      }
-    };
-  }, [chemin]);
-
   // Hauteur disponible sous la barre de l'application : le lecteur tient dans la fenêtre, seules ses pages défilent.
   useLayoutEffect(() => {
     if (!actif) return;
@@ -226,20 +277,16 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     return () => window.removeEventListener("resize", mesurer);
   }, [actif, formats]);
 
-  /** Échelle qui fait tenir la plus large (ou la plus grande) page dans la zone qui défile. */
+  /** Échelle qui fait tenir la plus large rangée de pages (ou la plus haute page) dans la zone qui défile. */
   const ajuster = useCallback(
     (voulu: Mode) => {
       const zone = defilement.current;
-      if (!zone || !formats || formats.length === 0) return;
-      const largeurMax = Math.max(...formats.map((f) => f.largeur));
-      const hauteurMax = Math.max(...formats.map((f) => f.hauteur));
-      const parLargeur = (zone.clientWidth - 2 * MARGE) / largeurMax;
-      const parHauteur = (zone.clientHeight - 2 * MARGE) / hauteurMax;
-      const voulue = voulu === "page" ? Math.min(parLargeur, parHauteur) : parLargeur;
+      if (!zone || !formats || formats.length === 0 || voulu === "libre") return;
+      const voulue = echelleAjustee(formats, rotation, disposition, { largeur: zone.clientWidth, hauteur: zone.clientHeight }, voulu, MARGE);
       changerEchelle(Math.min(ECHELLE_MAX, Math.max(ECHELLE_MIN, voulue)));
     },
-    // changerEchelle ne lit que des références : seules les pages comptent.
-    [formats],
+    // changerEchelle ne lit que des références : seules les pages et leur disposition comptent.
+    [formats, rotation, disposition],
   );
 
   // Largeur ou page entière : l'échelle suit la taille de la fenêtre (et la colonne des vignettes).
@@ -263,28 +310,30 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     setEchelle(nouvelle);
   }
 
-  // Après un changement d'échelle (ou au retour dans le lecteur) : retour à l'endroit lu.
+  // Après un changement d'échelle, de rotation ou de disposition, au retour dans le lecteur, ou quand
+  // les pages d'un onglet retrouvé arrivent : retour à l'endroit lu.
   useLayoutEffect(() => {
     const zone = defilement.current;
     const voulue = ancre.current;
     if (!zone || !voulue || !actif) return;
-    ancre.current = null;
     const page = pages.current[voulue.page];
     if (!page) return;
+    ancre.current = null;
     const haut = page.getBoundingClientRect().top - zone.getBoundingClientRect().top;
     zone.scrollTop += haut + voulue.fraction * page.offsetHeight;
-  }, [echelle, actif]);
+  }, [echelle, actif, formats, rotation, disposition]);
 
   // En quittant le lecteur, on note la page lue : un écran caché perd sa position de défilement.
   useEffect(() => {
     if (!actif) ancre.current = { page: courante_.current, fraction: 0 };
   }, [actif]);
 
-  /** La page lue : celle qui occupe le tiers haut de la zone (recherche par dichotomie). */
+  /** La page lue : celle qui occupe le tiers haut de la zone (recherche par dichotomie), la première de sa rangée. */
   const suivre = useCallback(() => {
     const zone = defilement.current;
     if (!zone || !formats) return;
-    const repere = zone.getBoundingClientRect().top + zone.clientHeight / 3;
+    const dessus = zone.getBoundingClientRect().top;
+    const repere = dessus + zone.clientHeight / 3;
     let [bas, haut] = [0, formats.length - 1];
     while (bas < haut) {
       const milieu = Math.ceil((bas + haut) / 2);
@@ -292,11 +341,14 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
       if (page && page.getBoundingClientRect().top <= repere) bas = milieu;
       else haut = milieu - 1;
     }
-    if (bas !== courante_.current) {
-      courante_.current = bas;
-      setCourante(bas);
+    const lue = premiereDeRangee(bas, disposition);
+    const element = pages.current[lue];
+    if (element) positionLue.current = { page: lue, fraction: Math.max(0, dessus - element.getBoundingClientRect().top) / Math.max(1, element.offsetHeight) };
+    if (lue !== courante_.current) {
+      courante_.current = lue;
+      setCourante(lue);
     }
-  }, [formats]);
+  }, [formats, disposition]);
 
   /** Fait défiler jusqu'à la page `index`, `decalage` pixels sous son haut. */
   function allerA(index: number, decalage = 0) {
@@ -337,7 +389,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
 
   /** Suit un signet ou un lien : vers une page (et sa hauteur), ou vers un site, après confirmation. */
   function suivreLien(destination: DestinationPdf | null, adresse: string | null) {
-    if (destination) allerA(destination.page, destination.y ? destination.y * echelle : 0);
+    const format = destination ? formats?.[destination.page] : undefined;
+    if (destination) allerA(destination.page, destination.y && format ? hautAffiche(format, 0, destination.y, rotation) * echelle : 0);
     else if (adresse) setLienExterne(adresse);
   }
 
@@ -381,8 +434,10 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
       (mots) => {
         const couverts = motsCouverts(mots, recherche)[occurrence.rang];
         const zone = defilement.current;
-        if (!couverts || !zone) return;
-        allerA(occurrence.page, mots[couverts[0]].y * echelle_.current - zone.clientHeight / 3);
+        const format = formats?.[occurrence.page];
+        if (!couverts || !zone || !format) return;
+        const mot = mots[couverts[0]];
+        allerA(occurrence.page, hautAffiche(format, mot.x, mot.y, rotation_.current) * echelle_.current - zone.clientHeight / 3);
       },
       () => undefined,
     );
@@ -395,12 +450,19 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     montrerResultat(resultats[suivant]);
   }
 
-  // Raccourcis : ⌘ (ou Ctrl) + F, + / − / 0.
+  // Raccourcis : ⌘ (ou Ctrl) + F, + / − / 0, P, L (plein écran) ; Ctrl + Tab : onglet suivant.
   useEffect(() => {
-    if (!actif || !formats) return;
+    if (!actif || !formats || pleinEcran) return;
     const touche = (evenement: KeyboardEvent) => {
+      if (evenement.ctrlKey && evenement.key === "Tab" && ouverts.length > 1 && chemin) {
+        const rang = ouverts.indexOf(chemin);
+        onOnglet(ouverts[(rang + (evenement.shiftKey ? -1 : 1) + ouverts.length) % ouverts.length]);
+        evenement.preventDefault();
+        return;
+      }
       if (!(evenement.metaKey || evenement.ctrlKey)) return;
       if (evenement.key === "f" || evenement.key === "F") champRecherche.current?.focus();
+      else if (evenement.key === "l" || evenement.key === "L") setPleinEcran(true);
       else if (evenement.key === "+" || evenement.key === "=") agrandir();
       else if (evenement.key === "-") reduire();
       else if (evenement.key === "0") setMode("largeur");
@@ -444,7 +506,9 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     setOutil("selection");
     setSelection(annotation.id);
     const tiers = (defilement.current?.clientHeight ?? 0) / 3;
-    allerA(annotation.page, Math.max(0, zoneDe(annotation).y * echelle - tiers));
+    const zone = zoneDe(annotation);
+    const format = formats?.[annotation.page];
+    allerA(annotation.page, format ? Math.max(0, hautAffiche(format, zone.x, zone.y, rotation) * echelle - tiers) : 0);
   }
   function remonter(sens: "annuler" | "retablir") {
     changerHistorique(sens === "annuler" ? annuler : retablir);
@@ -503,7 +567,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
 
   // Raccourcis de l'éditeur : annuler, rétablir, supprimer l'annotation choisie (hors saisie de texte).
   useEffect(() => {
-    if (!actif || !annoter) return;
+    if (!actif || !annoter || pleinEcran) return;
     const touche = (evenement: KeyboardEvent) => {
       const cible = evenement.target as HTMLElement | null;
       if (cible && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA" || cible.isContentEditable)) return;
@@ -519,6 +583,33 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     window.addEventListener("keydown", touche);
     return () => window.removeEventListener("keydown", touche);
   });
+
+  /** Ferme un onglet ; ses annotations non enregistrées restent jusqu'à la fermeture d'Automat-PDF. */
+  function fermerOnglet(document: string) {
+    const enCours = historiques[document]?.present.length ?? 0;
+    if (enCours > 0) notifications.show({ color: "orange", message: t.onglets.gardees(enCours, nomDe(document)), autoClose: 9000 });
+    onFermer(document);
+  }
+
+  /** Un quart de tour de plus pour l'affichage ; on reste sur la page lue. */
+  function pivoter() {
+    ancre.current = { page: courante_.current, fraction: 0 };
+    setRotation((avant) => tourner(avant));
+  }
+
+  /** Une page ou deux côte à côte (préférence gardée) ; on reste sur la page lue. */
+  function basculerDisposition() {
+    ancre.current = { page: courante_.current, fraction: 0 };
+    setDisposition((avant) => {
+      const suivante = avant === "deux" ? "une" : "deux";
+      try {
+        localStorage.setItem(CLE_DISPOSITION, suivante);
+      } catch {
+        // la préférence ne vaut que pour cette fois
+      }
+      return suivante;
+    });
+  }
 
   function basculerVignettes() {
     setVignettes((avant) => {
@@ -549,6 +640,28 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   const aSignets = (navigation?.signets.length ?? 0) > 0;
   return (
     <Stack ref={cadre} gap="md" h={hauteur} data-lecteur>
+      {/* Onglets : les PDF ouverts, dès qu'il y en a deux. Les annotations non enregistrées y sont comptées. */}
+      {ouverts.length > 1 && (
+        <div className="onglets-lecteur" role="tablist" aria-label={t.onglets.titre} data-onglets>
+          {ouverts.map((document) => {
+            const enCours = historiques[document]?.present.length ?? 0;
+            return (
+              <div key={document} className="onglet-lecteur" data-actif={document === chemin || undefined}>
+                <UnstyledButton className="onglet-lecteur__nom" role="tab" aria-selected={document === chemin} title={document} onClick={() => onOnglet(document)} data-onglet={nomDe(document)}>
+                  <IconFileText size={15} stroke={1.7} />
+                  <span>{nomDe(document)}</span>
+                  {enCours > 0 && (
+                    <Badge size="xs" circle color="orange" title={t.onglets.nonEnregistrees(enCours)}>
+                      {enCours}
+                    </Badge>
+                  )}
+                </UnstyledButton>
+                <CloseButton size="sm" radius="xl" aria-label={t.onglets.fermer(nomDe(document))} onClick={() => fermerOnglet(document)} />
+              </div>
+            );
+          })}
+        </div>
+      )}
       {/* En-tête : la première page, le nom du document, et de quoi l'ouvrir ailleurs ou en ouvrir un autre. */}
       <Group justify="space-between" wrap="nowrap" gap="md" align="center">
         <Group gap="md" wrap="nowrap" miw={0} style={{ flex: 1 }}>
@@ -599,6 +712,11 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
           <Tooltip label={impression ? t.impressionEnCours(impression.faites, impression.total) : t.imprimer}>
             <ActionIcon className="bouton-verre" variant="subtle" color="gray" size={36} radius="md" onClick={() => void imprimer()} loading={impression !== null} disabled={!formats} aria-label={t.imprimer} data-imprimer>
               <IconPrinter size={18} stroke={1.8} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={t.pleinEcran.ouvrir}>
+            <ActionIcon className="bouton-verre" variant="subtle" color="gray" size={36} radius="md" onClick={() => setPleinEcran(true)} disabled={!formats} aria-label={t.pleinEcran.ouvrir} data-plein-ecran>
+              <IconMaximize size={18} stroke={1.8} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label={t.applicationHabituelle}>
@@ -681,6 +799,24 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
               <IconZoomIn size={20} stroke={1.6} />
             </ActionIcon>
           </Tooltip>
+          <Tooltip label={t.deuxPages}>
+            <ActionIcon
+              variant={disposition === "deux" ? "light" : "subtle"}
+              color={disposition === "deux" ? "eau" : "gray"}
+              onClick={basculerDisposition}
+              disabled={!formats}
+              aria-label={t.deuxPages}
+              aria-pressed={disposition === "deux"}
+              data-deux-pages
+            >
+              <IconBook2 size={19} stroke={1.6} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={rotation ? t.pivoterDe(rotation) : t.pivoter} multiline w={240}>
+            <ActionIcon variant={rotation ? "light" : "subtle"} color={rotation ? "eau" : "gray"} onClick={pivoter} disabled={!formats} aria-label={t.pivoter} data-pivoter={rotation}>
+              <IconRotateClockwise size={19} stroke={1.6} />
+            </ActionIcon>
+          </Tooltip>
           <SegmentedControl
             size="xs"
             radius="xl"
@@ -752,6 +888,22 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
         />
       )}
 
+      {pleinEcran && chemin && formats && (
+        <PleinEcran
+          chemin={chemin}
+          formats={formats}
+          depart={courante}
+          rotation={rotation}
+          annotations={annotations}
+          images={imagesChargees}
+          onFermer={(page) => {
+            setPleinEcran(false);
+            // Retour à la page vue en dernier, une fois la fenêtre revenue à sa taille.
+            requestAnimationFrame(() => allerA(page));
+          }}
+        />
+      )}
+
       <Modal opened={lienExterne !== null} onClose={() => setLienExterne(null)} title={t.lienExterne.titre} centered>
         <Stack gap="sm">
           <Text size="sm">{t.lienExterne.texte}</Text>
@@ -807,7 +959,6 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
             <MotDePasseLecture
               chemin={chemin}
               onOuvert={() => {
-                ouvertAvecMotDePasse.current = chemin;
                 setDeverrouille(true);
                 setOuverture((n) => n + 1);
                 relire(chemin);
@@ -823,47 +974,53 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
             </Center>
           ) : (
             <Stack align="center" gap={MARGE} p={MARGE} style={{ width: "max-content", minWidth: "100%" }}>
-              {formats.map((format, index) => (
-                <PageLecteur
-                  key={index}
-                  chemin={chemin}
-                  index={index}
-                  format={format}
-                  echelle={echelle}
-                  racine={defilement.current}
-                  requete={resultats && resultats.length > 0 ? recherche : ""}
-                  rangActuel={occurrenceActuelle?.page === index ? occurrenceActuelle.rang : -1}
-                  liens={annoter ? undefined : navigation?.liens[index]}
-                  onLien={(lien) => suivreLien(lien.destination, lien.adresse)}
-                  refPage={(element) => {
-                    pages.current[index] = element;
-                  }}
-                  couche={
-                    annoter || annotations.some((a) => a.page === index)
-                      ? (mots) => (
-                          <CoucheAnnotations
-                            page={index}
-                            echelle={echelle}
-                            annotations={annotations.filter((a) => a.page === index)}
-                            mots={mots}
-                            actif={annoter}
-                            outil={outil}
-                            teinteSurligneur={teinteSurligneur}
-                            teinteTexte={teinteTexte}
-                            taille={tailleTexte}
-                            reglages={reglages}
-                            images={imagesChargees}
-                            selection={selection}
-                            onSelection={setSelection}
-                            onAjouter={ajouterAnnotation}
-                            onModifier={modifierAnnotation}
-                            onSupprimer={supprimerAnnotation}
-                            onEffacer={effacerAnnotations}
-                          />
-                        )
-                      : undefined
-                  }
-                />
+              {rangees(formats.length, disposition).map((rangee) => (
+                <Group key={rangee[0]} gap={MARGE} wrap="nowrap" align="flex-start" justify="center">
+                  {rangee.map((index) => (
+                    <PageLecteur
+                      key={index}
+                      chemin={chemin}
+                      index={index}
+                      format={formats[index]}
+                      echelle={echelle}
+                      rotation={rotation}
+                      racine={defilement.current}
+                      requete={resultats && resultats.length > 0 ? recherche : ""}
+                      rangActuel={occurrenceActuelle?.page === index ? occurrenceActuelle.rang : -1}
+                      liens={annoter ? undefined : navigation?.liens[index]}
+                      onLien={(lien) => suivreLien(lien.destination, lien.adresse)}
+                      refPage={(element) => {
+                        pages.current[index] = element;
+                      }}
+                      couche={
+                        annoter || annotations.some((a) => a.page === index)
+                          ? (mots) => (
+                              <CoucheAnnotations
+                                page={index}
+                                echelle={echelle}
+                                rotation={rotation}
+                                annotations={annotations.filter((a) => a.page === index)}
+                                mots={mots}
+                                actif={annoter}
+                                outil={outil}
+                                teinteSurligneur={teinteSurligneur}
+                                teinteTexte={teinteTexte}
+                                taille={tailleTexte}
+                                reglages={reglages}
+                                images={imagesChargees}
+                                selection={selection}
+                                onSelection={setSelection}
+                                onAjouter={ajouterAnnotation}
+                                onModifier={modifierAnnotation}
+                                onSupprimer={supprimerAnnotation}
+                                onEffacer={effacerAnnotations}
+                              />
+                            )
+                          : undefined
+                      }
+                    />
+                  ))}
+                </Group>
               ))}
             </Stack>
           )}
@@ -963,6 +1120,8 @@ interface PropsPage {
   index: number;
   format: FormatPage;
   echelle: number;
+  /** Rotation de l'affichage : la page est dessinée droite, puis tournée dans sa boîte. */
+  rotation: Rotation;
   racine: HTMLDivElement | null;
   /** Le texte cherché (vide : rien à surligner). */
   requete: string;
@@ -981,7 +1140,7 @@ interface PropsPage {
  * de l'écran. Les mots, invisibles, se sélectionnent et se copient ; ceux que la recherche trouve sont
  * surlignés.
  */
-function PageLecteur({ chemin, index, format, echelle, racine, requete, rangActuel, refPage, couche, liens, onLien }: PropsPage) {
+function PageLecteur({ chemin, index, format, echelle, rotation, racine, requete, rangActuel, refPage, couche, liens, onLien }: PropsPage) {
   const boite = useRef<HTMLDivElement | null>(null);
   const [proche, setProche] = useState(false);
   const [image, setImage] = useState<string | null>(null);
@@ -1026,62 +1185,66 @@ function PageLecteur({ chemin, index, format, echelle, racine, requete, rangActu
 
   const surlignes = useMemo(() => (mots && requete ? motsCouverts(mots, requete) : []), [mots, requete]);
 
+  const couchee = rotation % 180 !== 0;
   return (
     <Box
       ref={(element: HTMLDivElement | null) => {
         boite.current = element;
         refPage(element);
       }}
-      w={largeur}
-      h={hauteur}
+      w={couchee ? hauteur : largeur}
+      h={couchee ? largeur : hauteur}
       pos="relative"
       style={{ flexShrink: 0, background: "white", boxShadow: "var(--automat-ombre-page)" }}
       data-page={index + 1}
+      data-rotation={rotation || undefined}
     >
-      {image ? (
-        <img src={image} alt={t.alt(index + 1)} draggable={false} style={{ width: "100%", height: "100%", display: "block", userSelect: "none" }} />
-      ) : (
-        <Center h="100%">
-          <Loader size="sm" color="gray" />
-        </Center>
-      )}
-      {/* Surlignages et couche de texte : seulement près de l'écran, pour ne pas charger la fenêtre de
-          milliers de mots invisibles. */}
-      {proche &&
-        surlignes.map((couverts, rang) =>
-          couverts.map((i) => <div key={`${rang}-${i}`} className="surlignage" data-actuel={rang === rangActuel || undefined} style={placeDe(mots![i], echelle)} />),
+      <div className="page-droite" style={{ width: largeur, height: hauteur, transform: transformation(rotation, largeur, hauteur) }}>
+        {image ? (
+          <img src={image} alt={t.alt(index + 1)} draggable={false} style={{ width: "100%", height: "100%", display: "block", userSelect: "none" }} />
+        ) : (
+          <Center h="100%">
+            <Loader size="sm" color="gray" />
+          </Center>
         )}
-      {proche && mots && mots.length > 0 && (
-        <div className="couche-texte">
-          {mots.map((mot, i) => {
-            const place = placeDe(mot, echelle);
-            const etirement = place.width / largeurMesuree(mot.texte, place.height);
+        {/* Surlignages et couche de texte : seulement près de l'écran, pour ne pas charger la fenêtre de
+            milliers de mots invisibles. */}
+        {proche &&
+          surlignes.map((couverts, rang) =>
+            couverts.map((i) => <div key={`${rang}-${i}`} className="surlignage" data-actuel={rang === rangActuel || undefined} style={placeDe(mots![i], echelle)} />),
+          )}
+        {proche && mots && mots.length > 0 && (
+          <div className="couche-texte">
+            {mots.map((mot, i) => {
+              const place = placeDe(mot, echelle);
+              const etirement = place.width / largeurMesuree(mot.texte, place.height);
+              return (
+                <Fragment key={i}>
+                  {i > 0 && (mot.debutLigne ? <br /> : " ")}
+                  <span style={{ ...place, width: undefined, fontSize: place.height, transform: `${place.transform ?? ""} scaleX(${etirement})` }}>{mot.texte}</span>
+                </Fragment>
+              );
+            })}
+          </div>
+        )}
+        {onLien &&
+          liens?.map((lien, rang) => {
+            const libelle = lien.adresse ?? (lien.destination ? t.lienPage(lien.destination.page + 1) : "");
             return (
-              <Fragment key={i}>
-                {i > 0 && (mot.debutLigne ? <br /> : " ")}
-                <span style={{ ...place, width: undefined, fontSize: place.height, transform: `${place.transform ?? ""} scaleX(${etirement})` }}>{mot.texte}</span>
-              </Fragment>
+              <button
+                key={`lien-${rang}`}
+                type="button"
+                className="lien-pdf"
+                style={{ left: lien.x * echelle, top: lien.y * echelle, width: lien.largeur * echelle, height: lien.hauteur * echelle }}
+                title={libelle}
+                aria-label={libelle}
+                onClick={() => onLien(lien)}
+                data-lien
+              />
             );
           })}
-        </div>
-      )}
-      {onLien &&
-        liens?.map((lien, rang) => {
-          const libelle = lien.adresse ?? (lien.destination ? t.lienPage(lien.destination.page + 1) : "");
-          return (
-            <button
-              key={`lien-${rang}`}
-              type="button"
-              className="lien-pdf"
-              style={{ left: lien.x * echelle, top: lien.y * echelle, width: lien.largeur * echelle, height: lien.hauteur * echelle }}
-              title={libelle}
-              aria-label={libelle}
-              onClick={() => onLien(lien)}
-              data-lien
-            />
-          );
-        })}
-      {couche?.(mots)}
+        {couche?.(mots)}
+      </div>
     </Box>
   );
 }

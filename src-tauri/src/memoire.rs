@@ -7,7 +7,9 @@ use std::time::SystemTime;
 use crate::erreur::Erreur;
 use crate::fichiers::{self, Nature};
 
-/// Nombre de fichiers gardés en mémoire, du plus récent au plus ancien.
+/// Nombre de fichiers gardés en mémoire, du plus récent au plus ancien. Un PDF déverrouillé (ouvert
+/// avec son mot de passe, dans un onglet du lecteur) passe après les autres : il n'est oublié
+/// qu'au-delà du double, pour ne pas redemander son mot de passe en revenant à son onglet.
 const FICHIERS_GARDES: usize = 8;
 
 struct Entree {
@@ -53,8 +55,19 @@ pub fn pdf(chemin: &str) -> Result<Arc<Vec<u8>>, Erreur> {
             deverrouille: false,
         },
     );
-    entrees.truncate(FICHIERS_GARDES);
+    limiter(&mut entrees);
     Ok(octets)
+}
+
+/// Oublie les fichiers en trop : les plus anciens PDF ordinaires d'abord (voir `FICHIERS_GARDES`).
+fn limiter(entrees: &mut Vec<Entree>) {
+    while entrees.len() > FICHIERS_GARDES {
+        match entrees.iter().rposition(|e| !e.deverrouille) {
+            Some(position) => drop(entrees.remove(position)),
+            None if entrees.len() > 2 * FICHIERS_GARDES => drop(entrees.pop()),
+            None => break,
+        }
+    }
 }
 
 /// Déverrouille un PDF qui demande son mot de passe d'ouverture : son contenu déchiffré remplace,
@@ -85,7 +98,7 @@ pub fn deverrouiller(chemin: &str, mot_de_passe: &str, nom: &str) -> Result<(), 
     Ok(())
 }
 
-/// Oublie le contenu déchiffré d'un PDF quand le lecteur passe à un autre document : comme à sa
+/// Oublie le contenu déchiffré d'un PDF quand son onglet se ferme dans le lecteur : comme à sa
 /// première ouverture, il redemandera son mot de passe.
 pub fn reverrouiller(chemin: &str) {
     entrees()
@@ -139,7 +152,7 @@ mod tests {
             2
         );
         deverrouiller(chemin, "Mars 2026", nom).unwrap();
-        // Un autre document ouvert : il redemande son mot de passe.
+        // Son onglet fermé : il redemande son mot de passe.
         reverrouiller(chemin);
         assert_eq!(
             crate::rendu::ouvrir(pdf(chemin).unwrap(), nom)
@@ -151,5 +164,33 @@ mod tests {
         // Le fichier, lui, reste protégé.
         assert_eq!(std::fs::read(chemin).unwrap(), protege);
         std::fs::remove_dir_all(&dossier).ok();
+    }
+
+    #[test]
+    fn garde_les_pdf_deverrouilles_plus_longtemps_que_les_autres() {
+        let entree = |chemin: String, deverrouille: bool| Entree {
+            chemin,
+            modifie: None,
+            taille: 0,
+            octets: Arc::new(Vec::new()),
+            deverrouille,
+        };
+        // Le PDF déverrouillé est le plus ancien : les PDF ordinaires les plus anciens partent avant lui.
+        let mut entrees: Vec<Entree> = (0..9)
+            .map(|i| entree(format!("ordinaire {i}"), false))
+            .collect();
+        entrees.push(entree("protégé".into(), true));
+        limiter(&mut entrees);
+        let gardes: Vec<&str> = entrees.iter().map(|e| e.chemin.as_str()).collect();
+        assert_eq!(gardes.len(), FICHIERS_GARDES);
+        assert_eq!(gardes[0], "ordinaire 0");
+        assert_eq!(gardes.last(), Some(&"protégé"));
+        // Seulement des PDF déverrouillés : gardés jusqu'au double, les plus récents.
+        let mut entrees: Vec<Entree> = (0..20)
+            .map(|i| entree(format!("protégé {i}"), true))
+            .collect();
+        limiter(&mut entrees);
+        assert_eq!(entrees.len(), 2 * FICHIERS_GARDES);
+        assert_eq!(entrees.last().unwrap().chemin, "protégé 15");
     }
 }

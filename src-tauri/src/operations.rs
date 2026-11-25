@@ -399,7 +399,7 @@ pub fn deverrouiller_lecture(chemin: &str, mot_de_passe: &str) -> Result<(), Err
     memoire::deverrouiller(chemin, mot_de_passe, &nom_de(chemin))
 }
 
-/// Oublie le contenu déchiffré d'un PDF : le lecteur est passé à un autre document.
+/// Oublie le contenu déchiffré d'un PDF : son onglet s'est fermé dans le lecteur.
 pub fn reverrouiller_lecture(chemin: &str) {
     memoire::reverrouiller(chemin);
 }

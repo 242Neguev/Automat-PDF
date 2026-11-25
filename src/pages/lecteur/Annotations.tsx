@@ -54,6 +54,7 @@ import {
   type Teinte,
   type Zone,
 } from "../../donnees/annotations";
+import { versLaPage, type Rotation } from "../../donnees/affichage";
 import { textes } from "../../textes";
 
 const t = textes.lecteur.annotation;
@@ -306,6 +307,8 @@ export function BarreAnnotations(props: PropsBarre) {
 interface PropsCouche {
   page: number;
   echelle: number;
+  /** Rotation de l'affichage : la couche est tournée avec sa page, le pointeur ramené à la page droite. */
+  rotation?: Rotation;
   annotations: Annotation[];
   mots: MotComplet[] | null;
   /** Mode annotation : les gestes créent, choisissent, déplacent ; sinon les annotations se montrent seulement. */
@@ -401,7 +404,7 @@ function trace(annotation: Annotation & { sorte: "forme" | "dessin" }, attributs
  * est vide ; un déplacement ne compte qu'une fois relâché : une seule étape à annuler.
  */
 export function CoucheAnnotations(props: PropsCouche) {
-  const { page, echelle, annotations, actif, outil, selection, onSelection, reglages } = props;
+  const { page, echelle, annotations, actif, outil, selection, onSelection, reglages, rotation = 0 } = props;
   const couche = useRef<HTMLDivElement>(null);
   const [geste, setGeste] = useState<Geste | null>(null);
   /** Texte ou note en cours d'écriture (nouveau, ou existant que l'on modifie). */
@@ -420,8 +423,11 @@ export function CoucheAnnotations(props: PropsCouche) {
   }, [actif]);
 
   const point = (evenement: { clientX: number; clientY: number }): Point => {
-    const rect = couche.current!.getBoundingClientRect();
-    return { x: (evenement.clientX - rect.left) / echelle, y: (evenement.clientY - rect.top) / echelle };
+    // La boîte affichée de la couche (tournée), et sa taille droite : offsetWidth ignore la rotation.
+    const element = couche.current!;
+    const rect = element.getBoundingClientRect();
+    const ici = versLaPage(evenement.clientX - rect.left, evenement.clientY - rect.top, element.offsetWidth, element.offsetHeight, rotation);
+    return { x: ici.x / echelle, y: ici.y / echelle };
   };
 
   /** Largeur sur hauteur d'une image ou d'un tampon, gardée quand on l'agrandit. */

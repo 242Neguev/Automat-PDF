@@ -9,7 +9,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { version } from "../package.json";
 import Accueil, { TuileOutil } from "./Accueil";
 import APropos from "./APropos";
-import { enErreur, lireConfidentialite, recusAuLancement, reglerConfidentialite, signalerOuverture, type Confidentialite, type Recus } from "./coeur";
+import { enErreur, lireConfidentialite, recusAuLancement, reglerConfidentialite, reverrouillerLecture, signalerOuverture, type Confidentialite, type Recus } from "./coeur";
 import { QuestionStatistiques, type Reglage } from "./Confidentialite";
 import { nomDe } from "./donnees/chemins";
 import { destination } from "./donnees/destination";
@@ -40,8 +40,9 @@ export default function App() {
   const [vue, setVue] = useState<Vue>("accueil");
   const [survol, setSurvol] = useState(false);
   const [choix, setChoix] = useState<{ fichiers: string[]; outils: DefinitionOutil[]; depuisAccueil: boolean } | null>(null);
-  /** Le PDF ouvert dans le lecteur, et les derniers ouverts (gardés sur l'ordinateur). */
+  /** Le PDF affiché dans le lecteur, les PDF ouverts en onglets, et les derniers ouverts (gardés sur l'ordinateur). */
   const [lu, setLu] = useState<string | null>(null);
+  const [ouverts, setOuverts] = useState<string[]>([]);
   const [recents, setRecents] = useState<DocumentRecent[]>(() => lireRecents());
   useEffect(() => ecrireRecents(recents), [recents]);
   /**
@@ -106,12 +107,25 @@ export default function App() {
     if (laisses.length > 0) notifications.show({ color: "orange", title: tr.ignores(laisses.length), message: laisses.map(nomDe).join(", "), autoClose: 10000 });
   }
 
-  /** Ouvre un PDF dans le lecteur ; il passe en tête des documents récents. */
+  /** Ouvre un PDF dans le lecteur, dans un nouvel onglet (ou le sien) ; il passe en tête des documents récents. */
   function lire(chemin: string) {
     setChoix(null);
     setLu(chemin);
+    setOuverts((avant) => (avant.includes(chemin) ? avant : [...avant, chemin]));
     setVue("lecteur");
     setRecents((avant) => ajouterRecent(avant, chemin, Date.now()));
+  }
+
+  /**
+   * Ferme l'onglet d'un PDF : le lecteur passe à son voisin. Ouvert avec son mot de passe, le PDF
+   * est oublié : il le redemandera à sa prochaine ouverture (comme Acrobat).
+   */
+  function fermer(chemin: string) {
+    const rang = ouverts.indexOf(chemin);
+    const reste = ouverts.filter((document) => document !== chemin);
+    setOuverts(reste);
+    if (lu === chemin) setLu(reste[Math.min(rang, reste.length - 1)] ?? null);
+    void reverrouillerLecture(chemin).catch(() => undefined);
   }
 
   async function choisirPdf() {
@@ -261,7 +275,16 @@ export default function App() {
           <Accueil groupes={GROUPES} recents={recents} onLire={lire} onOutil={setVue} onFichiers={(fichiers) => recevoir.current(fichiers, null)} />
         </Box>
         <Box display={vue === "lecteur" ? undefined : "none"}>
-          <Lecteur chemin={lu} actif={vue === "lecteur"} outils={OUTILS_PDF} onOutil={(definition) => lu && confier(definition, [lu])} onChoisir={lire} />
+          <Lecteur
+            chemin={lu}
+            actif={vue === "lecteur"}
+            outils={OUTILS_PDF}
+            onOutil={(definition) => lu && confier(definition, [lu])}
+            onChoisir={lire}
+            ouverts={ouverts}
+            onOnglet={setLu}
+            onFermer={fermer}
+          />
         </Box>
         {OUTILS.map(({ cle, icone: Icone, page: Page, accepte }) => (
           <Box key={cle} display={cle === vue ? undefined : "none"} className="page-outil" style={varsTeinte(GROUPE_DE[cle].teinte)}>

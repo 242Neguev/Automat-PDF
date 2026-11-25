@@ -270,7 +270,7 @@ export const ouvrirLien = (adresse: string) => invoke<void>("ouvrir_lien", { adr
 /** Ouvre dans le lecteur un PDF protégé par un mot de passe : déchiffré en mémoire seulement, jamais sur le disque. */
 export const deverrouillerLecture = (chemin: string, motDePasse: string) => invoke<void>("deverrouiller_lecture", { chemin, motDePasse });
 
-/** Oublie le PDF déchiffré : le lecteur est passé à un autre document, qui redemandera son mot de passe. */
+/** Oublie le PDF déchiffré : son onglet s'est fermé ; à sa prochaine ouverture, il redemandera son mot de passe. */
 export const reverrouillerLecture = (chemin: string) => invoke<void>("reverrouiller_lecture", { chemin });
 
 /** Ce que la compression a fait : tailles (octets), images allégées, objets en double retirés. */
