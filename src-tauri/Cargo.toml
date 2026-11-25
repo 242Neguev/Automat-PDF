@@ -52,8 +52,16 @@ reqwest = { version = "0.13", default-features = false, features = ["blocking", 
 # Les mêmes versions que Tauri, réduites aux classes utilisées.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSURL"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSPasteboard", "NSPasteboardItem"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSString", "NSURL"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "NSPrintOperation"] }
+# Impression depuis le lecteur : PDFKit imprime le PDF lui-même (net à toute résolution), par la
+# fenêtre d'impression de macOS (imprimante, pages, copies, recto verso, aperçu).
+objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", "PDFDocument", "objc2-app-kit"] }
+
+# Windows : impression depuis le lecteur, par la fenêtre d'impression de Windows ; les pages,
+# dessinées par hayro, partent à l'imprimante par GDI. Le même windows-sys que Tauri.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_Xps", "Win32_UI_Controls_Dialogs"] }
 
 # Voir https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

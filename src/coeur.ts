@@ -187,6 +187,19 @@ export interface NavigationPdf {
   liens: LienPdf[][];
 }
 
+/**
+ * Imprime le PDF du lecteur tel qu'il s'affiche (déchiffré s'il a été ouvert avec son mot de passe, avec
+ * les annotations en cours), par la fenêtre d'impression du système. `false` : l'utilisateur a annulé.
+ */
+export const imprimerPdf = (chemin: string, annotations: ReturnType<typeof pourLeCoeur>) => invoke<boolean>("imprimer_pdf", { chemin, annotations });
+
+/** Événement du cœur pendant l'envoi des pages à l'imprimante (Windows) : pages envoyées, et sur combien. */
+export const AVANCEMENT_IMPRESSION = "impression-avancement";
+export interface AvancementImpression {
+  faites: number;
+  total: number;
+}
+
 /** Signets et liens d'un PDF. */
 export const navigationPdf = (chemin: string) => invoke<NavigationPdf>("navigation_pdf", { chemin });
 

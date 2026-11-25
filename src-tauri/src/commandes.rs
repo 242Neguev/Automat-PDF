@@ -216,6 +216,18 @@ pub async fn deverrouiller_pdf(
     en_arriere_plan(move || operations::deverrouiller_pdf(&chemin, &mot_de_passe, &sortie)).await
 }
 
+/// Imprime le PDF du lecteur (avec ses annotations en cours) par la fenêtre d'impression du système ;
+/// `false` : l'utilisateur a annulé.
+#[tauri::command]
+pub async fn imprimer_pdf(
+    app: AppHandle,
+    fenetre: tauri::WebviewWindow,
+    chemin: String,
+    annotations: Vec<Annotation>,
+) -> Result<bool, Erreur> {
+    en_arriere_plan(move || operations::imprimer_pdf(&app, &fenetre, &chemin, &annotations)).await
+}
+
 /// Signets et liens d'un PDF, pour le lecteur.
 #[tauri::command]
 pub async fn navigation_pdf(chemin: String) -> Result<Navigation, Erreur> {

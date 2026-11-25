@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, WebviewWindow};
 
 use crate::annotations::{self, Annotation};
 use crate::caviardage::{self, ModeCaviardage, PageACaviarder, Rapport};
@@ -16,6 +17,7 @@ use crate::erreur::Erreur;
 use crate::fichiers::{self, FichierAEcrire, Nature};
 use crate::images::{self, ImageSource, OptionsImages};
 use crate::imposition::{self, Disposition};
+use crate::impression;
 use crate::libreoffice::{self, Convertisseurs};
 use crate::marques::{self, OptionsMarques, Placement};
 use crate::memoire;
@@ -562,6 +564,26 @@ const PAGE_DES_VERSIONS: &str = "https://github.com/242Neguev/Automat-PDF/releas
 /// Ouvre la page de la dernière version publiée dans le navigateur.
 pub fn ouvrir_page_des_versions() -> Result<(), Erreur> {
     ouverture::ouvrir_page(PAGE_DES_VERSIONS)
+}
+
+/// Imprime le PDF du lecteur tel qu'il s'affiche (déchiffré s'il a été ouvert avec son mot de passe,
+/// avec les annotations en cours) ; `false` : l'utilisateur a annulé.
+pub fn imprimer_pdf(
+    app: &AppHandle,
+    fenetre: &WebviewWindow,
+    chemin: &str,
+    annotations: &[Annotation],
+) -> Result<bool, Erreur> {
+    let nom = nom_de(chemin);
+    let mut octets = memoire::pdf(chemin)?;
+    if !annotations.is_empty() {
+        let mut document = pdf::charger(&octets, &nom)?;
+        annotations::annoter(&mut document, annotations, |image| {
+            images::image_decodee(&fichiers::lire(image, Nature::Image)?, &nom_de(image))
+        })?;
+        octets = Arc::new(pdf::ecrire(document)?);
+    }
+    impression::imprimer(app, fenetre, octets, &nom)
 }
 
 /// Signets et liens d'un PDF, pour le lecteur.

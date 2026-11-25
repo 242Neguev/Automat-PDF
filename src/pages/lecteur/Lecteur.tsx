@@ -5,11 +5,15 @@
 // permet de sélectionner et de copier le texte, et porte les surlignages de la recherche.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ActionIcon, Alert, Badge, Box, Button, Center, CloseButton, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Text, TextInput, Title, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconChevronDown, IconChevronUp, IconCircleCheck, IconExternalLink, IconFileText, IconFolder, IconLayoutSidebar, IconPencil, IconPlus, IconSearch, IconZoomIn, IconZoomOut } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronUp, IconCircleCheck, IconExternalLink, IconFileText, IconFolder, IconLayoutSidebar, IconPencil, IconPlus, IconPrinter, IconSearch, IconZoomIn, IconZoomOut } from "@tabler/icons-react";
+import { listen } from "@tauri-apps/api/event";
+import { notifications } from "@mantine/notifications";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   annoterPdf,
+  AVANCEMENT_IMPRESSION,
   enErreur,
+  imprimerPdf,
   lireImage,
   montrerDansDossier,
   MOT_DE_PASSE,
@@ -23,6 +27,7 @@ import {
   type FormatPage,
   type LienPdf,
   type Mot,
+  type AvancementImpression,
   type NavigationPdf,
 } from "../../coeur";
 import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, sans, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
@@ -105,6 +110,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   const [navigation, setNavigation] = useState<NavigationPdf | null>(null);
   const [panneau, setPanneau] = useState<"pages" | "signets">("pages");
   const [lienExterne, setLienExterne] = useState<string | null>(null);
+  /** Impression en cours : pages envoyées à l'imprimante, et sur combien (0 : la fenêtre d'impression est ouverte). */
+  const [impression, setImpression] = useState<AvancementImpression | null>(null);
   /** Taille du fichier, écrite pour l'en-tête (« 3,9 Mo »). */
   const [taille, setTaille] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("largeur");
@@ -292,6 +299,25 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     zone.scrollTop += page.getBoundingClientRect().top - zone.getBoundingClientRect().top - MARGE + decalage;
   }
 
+  // Avancement de l'envoi des pages à l'imprimante (Windows ; sur Mac, macOS montre le sien).
+  useEffect(() => {
+    const arret = listen<AvancementImpression>(AVANCEMENT_IMPRESSION, (evenement) => setImpression(evenement.payload)).catch(() => () => {});
+    return () => void arret.then((arreter) => arreter());
+  }, []);
+
+  /** Imprime le document tel qu'il s'affiche, annotations en cours comprises, par la fenêtre d'impression du système. */
+  async function imprimer() {
+    if (!chemin || !formats || impression) return;
+    setImpression({ faites: 0, total: 0 });
+    try {
+      if (await imprimerPdf(chemin, pourLeCoeur(annotations))) notifications.show({ color: "eau", message: t.imprime, autoClose: 4000 });
+    } catch (e) {
+      signalerErreur(e);
+    } finally {
+      setImpression(null);
+    }
+  }
+
   /** Suit un signet ou un lien : vers une page (et sa hauteur), ou vers un site, après confirmation. */
   function suivreLien(destination: DestinationPdf | null, adresse: string | null) {
     if (destination) allerA(destination.page, destination.y ? destination.y * echelle : 0);
@@ -361,6 +387,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
       else if (evenement.key === "+" || evenement.key === "=") agrandir();
       else if (evenement.key === "-") reduire();
       else if (evenement.key === "0") setMode("largeur");
+      else if (evenement.key === "p" || evenement.key === "P") void imprimer();
       else return;
       evenement.preventDefault();
     };
@@ -543,6 +570,11 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
           <Tooltip label={t.montrer}>
             <ActionIcon className="bouton-verre" variant="subtle" color="gray" size={36} radius="md" onClick={() => void montrerDansDossier(chemin)} aria-label={t.montrer}>
               <IconFolder size={18} stroke={1.8} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={impression ? t.impressionEnCours(impression.faites, impression.total) : t.imprimer}>
+            <ActionIcon className="bouton-verre" variant="subtle" color="gray" size={36} radius="md" onClick={() => void imprimer()} loading={impression !== null} disabled={!formats} aria-label={t.imprimer} data-imprimer>
+              <IconPrinter size={18} stroke={1.8} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label={t.applicationHabituelle}>

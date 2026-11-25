@@ -15,6 +15,7 @@ mod fichiers;
 mod geometrie;
 mod images;
 mod imposition;
+mod impression;
 mod libreoffice;
 #[cfg(target_os = "macos")]
 mod mail;
@@ -226,6 +227,7 @@ pub fn run() {
             commandes::deverrouiller_lecture,
             commandes::reverrouiller_lecture,
             commandes::navigation_pdf,
+            commandes::imprimer_pdf,
             commandes::ouvrir_lien,
             commandes::compresser_pdf,
             commandes::taille_fichier,
