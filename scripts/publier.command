@@ -164,7 +164,10 @@ fi
 etape "Dépendances de l'interface (npm ci)"
 npm ci --no-fund --no-audit || echec "npm ci a échoué."
 
-sortie="$racine/dist-publication/$version$([ "$essai" = 1 ] && echo "-essai")"
+sortie="$racine/dist-publication/$version"
+# Un if, pas « $([ … ] && echo …) » : sous set -e, cette affectation, en échec hors essai, arrêtait le script
+# sans un mot.
+if [ "$essai" = 1 ]; then sortie="$sortie-essai"; fi
 rm -rf "$sortie" && mkdir -p "$sortie"
 fichiers=()
 signature_de() { tr -d '\n' < "$1"; }
