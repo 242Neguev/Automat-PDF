@@ -17,8 +17,16 @@
   WriteRegStr SHCTX "${AUTOMATPDF_CLASSES}\${EXT}\shell\AutomatPDF\shell\${RANG}${OUTIL}\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" --outil ${OUTIL} $\"%1$\""
 !macroend
 
+; En tête du sous-menu des PDF : le PDF s'ouvre dans le lecteur, sans outil demandé
+; (« Automat-PDF.exe "fichier.pdf" »), comme par « Ouvrir avec » sur Mac.
+!macro AutomatPdfLire EXT
+  WriteRegStr SHCTX "${AUTOMATPDF_CLASSES}\${EXT}\shell\AutomatPDF\shell\0lire" "MUIVerb" "Ouvrir dans le lecteur"
+  WriteRegStr SHCTX "${AUTOMATPDF_CLASSES}\${EXT}\shell\AutomatPDF\shell\0lire\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
+!macroend
+
 !macro NSIS_HOOK_POSTINSTALL
   !insertmacro AutomatPdfSousMenu ".pdf"
+  !insertmacro AutomatPdfLire ".pdf"
   !insertmacro AutomatPdfAction ".pdf" "1" "organiser" "Organiser les pages"
   !insertmacro AutomatPdfAction ".pdf" "2" "fusionner" "Fusionner"
   !insertmacro AutomatPdfAction ".pdf" "3" "compresser" "Compresser"
