@@ -1,5 +1,6 @@
 // Accès typé aux commandes du cœur Rust (voir src-tauri/src/commandes.rs).
 import { invoke } from "@tauri-apps/api/core";
+import type { pourLeCoeur } from "./donnees/annotations";
 
 export interface Erreur {
   message: string;
@@ -113,6 +114,10 @@ export interface Placement {
 /** Enregistre dans `sortie` le PDF avec une image posée sur les pages choisies (vide : toutes). */
 export const apposerImage = (chemin: string, image: string, placement: Placement, pages: number[], sortie: string) =>
   invoke<void>("apposer_image", { chemin, image, placement, pages, sortie });
+
+/** Enregistre dans `sortie` le PDF annoté dans le lecteur (surlignages, notes, texte, images). */
+export const annoterPdf = (chemin: string, annotations: ReturnType<typeof pourLeCoeur>, sortie: string) =>
+  invoke<void>("annoter_pdf", { chemin, annotations, sortie });
 
 /** Zone à noircir, en fractions de la page affichée, depuis son coin en haut à gauche. */
 export interface Zone {

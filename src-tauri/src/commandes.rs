@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::annotations::Annotation;
 use crate::caviardage::{ModeCaviardage, PageACaviarder, Rapport};
 use crate::compression::{Bilan, Niveau};
 use crate::confidentialite::Confidentialite;
@@ -159,6 +160,16 @@ pub async fn apposer_image(
 ) -> Result<(), Erreur> {
     en_arriere_plan(move || operations::apposer_image(&chemin, &image, placement, &pages, &sortie))
         .await
+}
+
+/// Enregistre le PDF avec les annotations faites dans le lecteur.
+#[tauri::command]
+pub async fn annoter_pdf(
+    chemin: String,
+    annotations: Vec<Annotation>,
+    sortie: String,
+) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::annoter_pdf(&chemin, &annotations, &sortie)).await
 }
 
 /// Contenu brut d'une image, pour l'afficher telle quelle.

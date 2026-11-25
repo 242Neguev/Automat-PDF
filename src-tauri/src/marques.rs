@@ -113,12 +113,12 @@ pub struct Placement {
 }
 
 /// Une ressource à ajouter à une page : catégorie (Font, XObject…), début de son nom, objet.
-type Ressource<'a> = (&'a str, &'a str, Object);
+pub(crate) type Ressource<'a> = (&'a str, &'a str, Object);
 
 /// Ajoute un dessin par-dessus une page. Les ressources reçoivent des noms libres sur cette page ;
 /// `dessin` les reçoit, dans l'ordre, et écrit dans le repère de la page affichée (origine en bas
 /// à gauche, en points). Le contenu d'origine, encadré par « q … Q », n'est pas modifié.
-fn surimprimer(
+pub(crate) fn surimprimer(
     document: &mut Document,
     page: ObjectId,
     ressources: &[Ressource],

@@ -1,3 +1,4 @@
+mod annotations;
 #[cfg(target_os = "macos")]
 mod applescript;
 mod caviardage;
@@ -217,6 +218,7 @@ pub fn run() {
             commandes::marquer_pdf,
             commandes::apercu_marques,
             commandes::apposer_image,
+            commandes::annoter_pdf,
             commandes::caviarder_pdf,
             commandes::proteger_pdf,
             commandes::deverrouiller_pdf,

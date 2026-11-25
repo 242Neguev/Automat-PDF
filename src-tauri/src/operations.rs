@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 
+use crate::annotations::{self, Annotation};
 use crate::caviardage::{self, ModeCaviardage, PageACaviarder, Rapport};
 use crate::compression::{self, Bilan, Niveau};
 use crate::confidentialite::{self, Confidentialite};
@@ -350,6 +351,17 @@ pub fn apposer_image(
     let mut document = pdf::charger(&octets, &nom_de(chemin))?;
     let image = images::image_decodee(&fichiers::lire(image, Nature::Image)?, &nom_de(image))?;
     marques::apposer(&mut document, image, placement, pages)?;
+    fichiers::enregistrer(sortie, &pdf::ecrire(document)?)
+}
+
+/// Enregistre dans `sortie` le PDF annoté dans le lecteur : surlignages et notes (annotations PDF),
+/// texte et images (dans le contenu des pages).
+pub fn annoter_pdf(chemin: &str, annotations: &[Annotation], sortie: &str) -> Result<(), Erreur> {
+    let octets = memoire::pdf(chemin)?;
+    let mut document = pdf::charger(&octets, &nom_de(chemin))?;
+    annotations::annoter(&mut document, annotations, |image| {
+        images::image_decodee(&fichiers::lire(image, Nature::Image)?, &nom_de(image))
+    })?;
     fichiers::enregistrer(sortie, &pdf::ecrire(document)?)
 }
 

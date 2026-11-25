@@ -501,3 +501,78 @@ html[data-fenetre="verre"][data-mantine-color-scheme="light"] {
   border-color: var(--mantine-color-eau-5);
   background-color: var(--automat-actif-fond);
 }
+
+/* Éditeur de PDF (annotations) : la couche posée sur chaque page du lecteur, au-dessus du texte.
+   Positions et tailles viennent des points de la page ; les couleurs, de celles du cœur. */
+.couche-annotations {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+.couche-annotations[data-outil="surligner"] {
+  cursor: text;
+}
+.couche-annotations[data-outil="note"],
+.couche-annotations[data-outil="texte"] {
+  cursor: crosshair;
+}
+.annotation-surlignage {
+  position: absolute;
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+}
+.annotation-note {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #8c6b0d;
+  background: #ffd133;
+  color: #5c4508;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+.annotation-texte {
+  position: absolute;
+  white-space: pre;
+  line-height: 1.2;
+  font-family: Helvetica, Arial, sans-serif;
+}
+.annotation-image {
+  position: absolute;
+}
+.annotation-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.couche-annotations [data-selectionnee] {
+  outline: 1.5px dashed var(--mantine-color-eau-6);
+  outline-offset: 2px;
+  cursor: move;
+}
+.poignee-annotation {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 2px solid white;
+  background: var(--mantine-color-eau-6);
+  cursor: nwse-resize;
+}
+.annotation-en-ecriture {
+  position: absolute;
+  z-index: 3;
+}
+.annotation-en-ecriture textarea {
+  background: rgba(255, 255, 255, 0.88);
+  outline: 1.5px dashed var(--mantine-color-eau-6);
+  outline-offset: 2px;
+}

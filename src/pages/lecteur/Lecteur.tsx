@@ -3,12 +3,13 @@
 // Les pages sont les images que dessine le cœur (hayro), comme les vignettes : demandées quand elles
 // approchent, à la largeur affichée. Par-dessus, une couche de texte invisible, placée mot par mot,
 // permet de sélectionner et de copier le texte, et porte les surlignages de la recherche.
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActionIcon, Alert, Box, Center, CloseButton, Group, Loader, NumberInput, SegmentedControl, Stack, Text, TextInput, Title, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconChevronDown, IconChevronUp, IconExternalLink, IconFileText, IconFolder, IconLayoutSidebar, IconPlus, IconSearch, IconZoomIn, IconZoomOut } from "@tabler/icons-react";
-import { open } from "@tauri-apps/plugin-dialog";
-import { enErreur, montrerDansDossier, ouvrirFichier, pagesPdf, tailleFichier, type FormatPage, type Mot } from "../../coeur";
-import { nomDe } from "../../donnees/chemins";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ActionIcon, Alert, Badge, Box, Button, Center, CloseButton, Group, Loader, NumberInput, SegmentedControl, Stack, Text, TextInput, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import { IconChevronDown, IconChevronUp, IconCircleCheck, IconExternalLink, IconFileText, IconFolder, IconLayoutSidebar, IconPencil, IconPlus, IconSearch, IconZoomIn, IconZoomOut } from "@tabler/icons-react";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { annoterPdf, enErreur, lireImage, montrerDansDossier, ouvrirFichier, pagesPdf, tailleFichier, type FormatPage, type Mot } from "../../coeur";
+import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
+import { aCote, nomDe } from "../../donnees/chemins";
 import { motsCouverts, occurrences, type Occurrence } from "../../donnees/recherche-texte";
 import { formaterTaille } from "../../donnees/tailles";
 import { GROUPE_DE, type DefinitionOutil } from "../../outils";
@@ -16,7 +17,9 @@ import { textes } from "../../textes";
 import { varsTeinte } from "../../theme";
 import Vignette from "../commun/Vignette";
 import { imagePage } from "../commun/vignettes";
+import { signalerErreur } from "../commun/signalerErreur";
 import { ZoneDepot } from "../commun/ZoneFichier";
+import { BarreAnnotations, CoucheAnnotations, type ImageChargee, type OutilAnnotation } from "./Annotations";
 import { motsDe, textesDe } from "./textes";
 
 const t = textes.lecteur;
@@ -29,6 +32,25 @@ const ECHELLE_MAX = 4 * TAILLE_REELLE;
 const MARGE = 16;
 /** Préférence gardée : la colonne des vignettes affichée ou non. */
 const CLE_VIGNETTES = "automat-pdf.lecteur-vignettes";
+/** Images qu'un navigateur affiche telles quelles (pour l'aperçu d'une image posée). */
+const TYPES_IMAGES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", bmp: "image/bmp" };
+
+/** Même fichier, aux barres et aux majuscules près. */
+const memeFichier = (a: string, b: string) => a.replace(/\\/g, "/").toLowerCase() === b.replace(/\\/g, "/").toLowerCase();
+
+/** Lit une image choisie : son adresse dans la page, et sa largeur sur sa hauteur. */
+async function chargerImage(chemin: string): Promise<ImageChargee> {
+  const octets = await lireImage(chemin);
+  const extension = chemin.split(".").pop()?.toLowerCase() ?? "";
+  const adresse = URL.createObjectURL(new Blob([octets], { type: TYPES_IMAGES[extension] ?? "application/octet-stream" }));
+  const proportion = await new Promise<number>((resoudre, rejeter) => {
+    const image = new Image();
+    image.onload = () => resoudre(image.naturalWidth / Math.max(1, image.naturalHeight));
+    image.onerror = () => rejeter(new Error(textes.lecteur.illisible));
+    image.src = adresse;
+  });
+  return { adresse, proportion };
+}
 
 type Mode = "largeur" | "page" | "libre";
 
@@ -68,6 +90,18 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   const [recherche, setRecherche] = useState("");
   const [resultats, setResultats] = useState<Occurrence[] | null>(null);
   const [actuel, setActuel] = useState(0);
+  /** Éditeur : le mode annotation, l'outil et ses réglages, et les annotations de chaque document ouvert. */
+  const [annoter, setAnnoter] = useState(false);
+  const [outil, setOutil] = useState<OutilAnnotation>("surligner");
+  const [teinteSurligneur, setTeinteSurligneur] = useState<Teinte>("jaune");
+  const [teinteTexte, setTeinteTexte] = useState<Teinte>("noir");
+  const [tailleTexte, setTailleTexte] = useState(12);
+  const [historiques, setHistoriques] = useState<Record<string, Historique>>({});
+  const [selection, setSelection] = useState<string | null>(null);
+  const [imagesChargees, setImagesChargees] = useState<Record<string, ImageChargee>>({});
+  const [enregistrement, setEnregistrement] = useState(false);
+  /** Le PDF annoté qui vient d'être enregistré (et qui s'affiche). */
+  const [enregistre, setEnregistre] = useState<string | null>(null);
   const cadre = useRef<HTMLDivElement>(null);
   const defilement = useRef<HTMLDivElement>(null);
   const champRecherche = useRef<HTMLInputElement>(null);
@@ -93,6 +127,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     setMode("largeur");
     setRecherche("");
     setResultats(null);
+    setSelection(null);
+    setEnregistre((avant) => (avant && chemin && memeFichier(avant, chemin) ? avant : null));
     if (!chemin) return;
     let actuelDoc = true;
     pagesPdf(chemin).then(
@@ -279,6 +315,94 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     changerEchelle(Math.max(ECHELLE_MIN, echelle / 1.25));
   }
 
+  // Éditeur : les annotations du document ouvert, avec leur historique (annuler, rétablir).
+  const historique = (chemin && historiques[chemin]) || HISTORIQUE_VIDE;
+  const annotations = historique.present;
+
+  function changerHistorique(transformer: (avant: Historique) => Historique) {
+    if (!chemin) return;
+    setHistoriques((avant) => ({ ...avant, [chemin]: transformer(avant[chemin] ?? HISTORIQUE_VIDE) }));
+  }
+  const ajouterAnnotation = (annotation: Annotation) => changerHistorique((h) => appliquer(h, [...h.present, annotation]));
+  const modifierAnnotation = (annotation: Annotation) => changerHistorique((h) => appliquer(h, h.present.map((a) => (a.id === annotation.id ? annotation : a))));
+  function supprimerAnnotation(id: string) {
+    changerHistorique((h) => appliquer(h, h.present.filter((a) => a.id !== id)));
+    setSelection(null);
+  }
+  function remonter(sens: "annuler" | "retablir") {
+    changerHistorique(sens === "annuler" ? annuler : retablir);
+    setSelection(null);
+  }
+
+  /** Change d'outil ; « Image » demande d'abord l'image, posée au milieu de la page lue. */
+  async function choisirOutil(nouvel: OutilAnnotation) {
+    if (nouvel !== "image") {
+      setOutil(nouvel);
+      if (nouvel !== "selection") setSelection(null);
+      return;
+    }
+    const choisi = await open({ multiple: false, directory: false, filters: [{ name: t.annotation.images, extensions: Object.keys(TYPES_IMAGES) }] });
+    if (typeof choisi !== "string" || !formats) return;
+    try {
+      const image = imagesChargees[choisi] ?? (await chargerImage(choisi));
+      setImagesChargees((avant) => ({ ...avant, [choisi]: image }));
+      const page = courante_.current;
+      const format = formats[page];
+      const largeur = Math.min(format.largeur * 0.3, 200);
+      const hauteur = largeur / image.proportion;
+      const id = nouvelId();
+      ajouterAnnotation({ id, sorte: "image", page, chemin: choisi, zone: { x: (format.largeur - largeur) / 2, y: (format.hauteur - hauteur) / 2, largeur, hauteur } });
+      setSelection(id);
+      setOutil("selection");
+    } catch (e) {
+      signalerErreur(e);
+    }
+  }
+
+  /** Enregistre un nouveau PDF avec les annotations, à côté de l'original, puis l'affiche. */
+  async function enregistrerAnnote() {
+    if (!chemin || annotations.length === 0) return;
+    const sortie = await save({ defaultPath: aCote(chemin, nomAnnote(nomDe(chemin))), filters: [{ name: t.filtre, extensions: ["pdf"] }] });
+    if (!sortie) return;
+    if (memeFichier(sortie, chemin)) {
+      signalerErreur({ message: t.annotation.memeFichier });
+      return;
+    }
+    setEnregistrement(true);
+    try {
+      await annoterPdf(chemin, pourLeCoeur(annotations), sortie);
+      const source = chemin;
+      setHistoriques(({ [source]: _enregistrees, ...autres }) => autres);
+      setSelection(null);
+      setAnnoter(false);
+      setEnregistre(sortie);
+      onChoisir(sortie);
+    } catch (e) {
+      signalerErreur(e);
+    } finally {
+      setEnregistrement(false);
+    }
+  }
+
+  // Raccourcis de l'éditeur : annuler, rétablir, supprimer l'annotation choisie (hors saisie de texte).
+  useEffect(() => {
+    if (!actif || !annoter) return;
+    const touche = (evenement: KeyboardEvent) => {
+      const cible = evenement.target as HTMLElement | null;
+      if (cible && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA" || cible.isContentEditable)) return;
+      const commande = evenement.metaKey || evenement.ctrlKey;
+      const lettre = evenement.key.toLowerCase();
+      if (commande && lettre === "z") remonter(evenement.shiftKey ? "retablir" : "annuler");
+      else if (commande && lettre === "y") remonter("retablir");
+      else if ((evenement.key === "Delete" || evenement.key === "Backspace") && selection) supprimerAnnotation(selection);
+      else if (evenement.key === "Escape") setSelection(null);
+      else return;
+      evenement.preventDefault();
+    };
+    window.addEventListener("keydown", touche);
+    return () => window.removeEventListener("keydown", touche);
+  });
+
   function basculerVignettes() {
     setVignettes((avant) => {
       try {
@@ -321,6 +445,24 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
           </Box>
         </Group>
         <Group gap={6} wrap="nowrap">
+          <Tooltip label={t.annotation.annoterAide}>
+            <Button
+              radius="xl"
+              color="eau"
+              variant={annoter ? "filled" : "light"}
+              leftSection={<IconPencil size={17} stroke={1.8} />}
+              rightSection={!annoter && annotations.length > 0 ? <Badge size="sm" circle color="orange">{annotations.length}</Badge> : undefined}
+              onClick={() => {
+                setAnnoter((avant) => !avant);
+                setSelection(null);
+              }}
+              disabled={!formats}
+              aria-pressed={annoter}
+              data-annoter
+            >
+              {t.annotation.annoter}
+            </Button>
+          </Tooltip>
           <Tooltip label={t.vignettes}>
             <ActionIcon className="bouton-verre" variant="subtle" color="gray" size={36} radius="md" onClick={basculerVignettes} aria-label={t.vignettes} aria-pressed={vignettes}>
               <IconLayoutSidebar size={18} stroke={1.8} />
@@ -431,6 +573,42 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
         </Group>
       </Group>
 
+      {annoter && (
+        <BarreAnnotations
+          outil={outil}
+          onOutil={(nouvel) => void choisirOutil(nouvel)}
+          teinteSurligneur={teinteSurligneur}
+          onTeinteSurligneur={setTeinteSurligneur}
+          teinteTexte={teinteTexte}
+          onTeinteTexte={setTeinteTexte}
+          taille={tailleTexte}
+          onTaille={setTailleTexte}
+          nombre={annotations.length}
+          peutAnnuler={historique.passe.length > 0}
+          peutRetablir={historique.futur.length > 0}
+          onAnnuler={() => remonter("annuler")}
+          onRetablir={() => remonter("retablir")}
+          selection={selection !== null}
+          onSupprimer={() => selection && supprimerAnnotation(selection)}
+          enregistrement={enregistrement}
+          onEnregistrer={() => void enregistrerAnnote()}
+          onTerminer={() => {
+            setAnnoter(false);
+            setSelection(null);
+          }}
+        />
+      )}
+      {enregistre && chemin && memeFichier(enregistre, chemin) && (
+        <Alert color="teal" icon={<IconCircleCheck size={20} />} title={t.annotation.enregistre} withCloseButton onClose={() => setEnregistre(null)} py={8} data-annote-enregistre>
+          <Group justify="space-between" gap="sm" wrap="wrap">
+            <Text size="sm">{t.annotation.enregistreDetail(nomDe(enregistre))}</Text>
+            <Button size="xs" variant="default" leftSection={<IconFolder size={15} />} onClick={() => void montrerDansDossier(enregistre).catch(signalerErreur)}>
+              {textes.resultat.montrer}
+            </Button>
+          </Group>
+        </Alert>
+      )}
+
       <Group align="stretch" gap="md" wrap="nowrap" style={{ flex: 1, minHeight: 0 }}>
         {vignettes && formats && formats.length > 1 && <ColonneVignettes chemin={chemin} nombre={formats.length} courante={courante} onPage={(index) => allerA(index)} />}
 
@@ -458,6 +636,29 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
                   refPage={(element) => {
                     pages.current[index] = element;
                   }}
+                  couche={
+                    annoter || annotations.some((a) => a.page === index)
+                      ? (mots) => (
+                          <CoucheAnnotations
+                            page={index}
+                            echelle={echelle}
+                            annotations={annotations.filter((a) => a.page === index)}
+                            mots={mots}
+                            actif={annoter}
+                            outil={outil}
+                            teinteSurligneur={teinteSurligneur}
+                            teinteTexte={teinteTexte}
+                            taille={tailleTexte}
+                            images={imagesChargees}
+                            selection={selection}
+                            onSelection={setSelection}
+                            onAjouter={ajouterAnnotation}
+                            onModifier={modifierAnnotation}
+                            onSupprimer={supprimerAnnotation}
+                          />
+                        )
+                      : undefined
+                  }
                 />
               ))}
             </Stack>
@@ -559,6 +760,8 @@ interface PropsPage {
   /** Rang, dans cette page, de l'occurrence sur laquelle on est (−1 : aucune). */
   rangActuel: number;
   refPage: (element: HTMLDivElement | null) => void;
+  /** Couche de l'éditeur (annotations), posée au-dessus du texte ; reçoit les mots de la page. */
+  couche?: (mots: Mot[] | null) => ReactNode;
 }
 
 /**
@@ -566,7 +769,7 @@ interface PropsPage {
  * de l'écran. Les mots, invisibles, se sélectionnent et se copient ; ceux que la recherche trouve sont
  * surlignés.
  */
-function PageLecteur({ chemin, index, format, echelle, racine, requete, rangActuel, refPage }: PropsPage) {
+function PageLecteur({ chemin, index, format, echelle, racine, requete, rangActuel, refPage, couche }: PropsPage) {
   const boite = useRef<HTMLDivElement | null>(null);
   const [proche, setProche] = useState(false);
   const [image, setImage] = useState<string | null>(null);
@@ -650,6 +853,7 @@ function PageLecteur({ chemin, index, format, echelle, racine, requete, rangActu
           })}
         </div>
       )}
+      {couche?.(mots)}
     </Box>
   );
 }
