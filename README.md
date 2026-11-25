@@ -44,6 +44,7 @@ L'installateur Windows (`.exe`) et l'image disque Mac (`.dmg`, une seule pour le
 | **PDF-17** | **Lecteur de PDF** : un PDF déposé seul ou choisi sur l'accueil s'ouvre dans le lecteur, comme par **Ouvrir dans le lecteur** en tête du clic droit de l'Explorateur (Windows) ou par « Ouvrir avec » (Mac) ; un outil affiché qui prend les PDF, ou demandé par le clic droit, le reçoit comme avant ; pages à la suite, dessinées par hayro à la largeur affichée quand elles approchent de l'écran ; zoom (largeur, page entière, ⌘ + / − / 0), « Page … sur … », colonne de vignettes ; **recherche** dans le texte (⌘F ou Ctrl+F, sans tenir compte des majuscules ni des accents ; Entrée : résultat suivant), mots trouvés surlignés ; **texte sélectionnable et copiable** (couche de texte invisible, placée mot par mot) ; à côté, les outils qui s'appliquent au PDF, ouverts avec lui d'un clic ; ouverture dans l'application habituelle (pour imprimer) | ✅ |
 | **PDF-18** | **Nouvelle apparence** : fond aux halos de couleur et panneaux de **verre dépoli**, en clair comme en sombre ; une **couleur par groupe d'outils** (cartes de l'accueil, pastilles, panneaux et numéros d'étape de chaque outil, texte foncé au contraste de 7 au moins) ; barre latérale en verre, outils rangés par groupes repliables ; **documents récents** (gardés sur l'ordinateur, avec leur première page) dans la barre latérale, sur l'accueil (« Reprendre ») et en puces dans chaque outil ; sur Mac, **fenêtre transparente** sur le bureau flouté, sans barre de titre (déplacée par sa bande du haut) ; panneaux opaques quand le système demande moins de transparence (`prefers-reduced-transparency`) | ✅ |
 | **PDF-19** | **Éditeur de PDF**, dans le lecteur (bouton **Annoter**), gratuit : **surligner** (en glissant sur les mots, ou un cadre sur une page numérisée), **note** (vraie annotation PDF, modifiable dans Acrobat ou Aperçu), **texte** et **image** (signature, cachet, logo) posés sur la page ; **corriger** un mot ou un montant (ses caractères retirés du fichier, le nouveau texte écrit à sa place : même ligne de base, même taille, même couleur, gras et italique, police standard proche ; un montant garde son bord droit) ; **correcteur blanc** (ce qui est sous le cadre retiré du fichier, puis recouvert de blanc) ; **gomme** ; sélectionner, déplacer, supprimer ; annuler et rétablir ; **Enregistrer le PDF annoté…** : un nouveau PDF à côté de l'original (« … - annoté.pdf »), jamais par-dessus, affiché ensuite dans le lecteur | ✅ |
+| **PDF-20** | **Lecteur complet**, au niveau d'Adobe Reader, gratuit : **PDF protégés** par un mot de passe (déchiffrés en mémoire seulement, tant que leur onglet est ouvert) ; **signets** en panneau et **liens** cliquables (un site s'ouvre après confirmation) ; **impression** depuis le lecteur, annotations en cours comprises : sous Windows, fenêtre d'impression d'Automat-PDF avec **aperçu**, imprimante, pages, copies, **couleur ou noir et blanc** (garanti), recto verso, taille, orientation, papier, réglages du pilote ; sur Mac, fenêtre de macOS ; **commentaires** de Reader : souligner, barrer, formes (rectangle, ellipse, ligne, flèche), dessin à main levée, tampons prêts datés (APPROUVÉ, PAYÉ, REÇU…), vraies annotations PDF ; **liste des commentaires** (aller à, supprimer), y compris ceux d'un **PDF reçu** (auteur, date ; texte modifiable, suppression, appliqués à la copie en mémoire et gardés par le PDF annoté) ; **affichage** : deux pages côte à côte, rotation, plein écran ; **onglets** (page, zoom et rotation gardés pour chacun) ; **lecteur de PDF par défaut** proposé, au choix de l'utilisateur (fenêtre de choix de Windows, confirmation de macOS) | ✅ |
 
 ## Développer (Mac ou Windows)
 
@@ -101,7 +102,7 @@ Pour essayer l'application sous Windows, suivre la [fiche de test](docs/test-win
    - Rust (dans `~/.cargo`) et Node.js LTS (dans `~/.local/share/automat-pdf-compilation`).
 
    Compter 20 à 40 minutes la première fois, quelques minutes ensuite.
-3. À la fin, le Finder montre l'image disque : `src-tauri/target/universal-apple-darwin/release/bundle/dmg/Automat-PDF_0.5.0_universal.dmg`, une seule pour les Mac Intel et Apple Silicon (ou dans `~/Library/Caches/Automat-PDF-compilation/target/` si le projet est dans iCloud Drive, qui enverrait sinon plusieurs Go de fichiers intermédiaires dans le nuage).
+3. À la fin, le Finder montre l'image disque : `src-tauri/target/universal-apple-darwin/release/bundle/dmg/Automat-PDF_0.6.0_universal.dmg`, une seule pour les Mac Intel et Apple Silicon (ou dans `~/Library/Caches/Automat-PDF-compilation/target/` si le projet est dans iCloud Drive, qui enverrait sinon plusieurs Go de fichiers intermédiaires dans le nuage).
 
 `scripts/compiler-mac.command --natif` compile seulement pour le processeur de ce Mac, deux fois plus vite : pour un essai.
 
@@ -158,10 +159,15 @@ src/                     Interface React + TypeScript (Mantine)
                          avec les mots de tous les jours, chemins (fichier proposé à côté de l'original),
                          destination des fichiers reçus (outil, lecteur ou question), documents récents,
                          recherche dans le texte d'un PDF, annotations de l'éditeur (historique pour
-                         annuler, surlignage d'après les mots, mots à corriger, montants)
+                         annuler, surlignage d'après les mots, mots à corriger, montants, retouches des
+                         commentaires d'un PDF reçu), signets, impression (pages, aperçu de la feuille),
+                         affichage (deux pages, rotation), lecteur par défaut
   pages/commun/reception.ts  Fichiers reçus de l'Explorateur ou du Finder (clic droit, glisser-déposer), confiés aux outils
-  pages/lecteur/         Lecteur de PDF : pages, vignettes, zoom, recherche, couche de texte, outils à côté ;
-                         éditeur (Annotations.tsx) : barre d'annotation et couche posée sur chaque page
+  pages/lecteur/         Lecteur de PDF : pages, vignettes, zoom, recherche, couche de texte, outils à côté,
+                         onglets, deux pages, rotation ; mot de passe (MotDePasseLecture.tsx), signets
+                         (Signets.tsx), impression (Impression.tsx), plein écran (PleinEcran.tsx), lecteur
+                         par défaut (LecteurParDefaut.tsx) ; éditeur (Annotations.tsx) : barre d'annotation
+                         et couche posée sur chaque page ; liste des commentaires (Commentaires.tsx)
   pages/                 Un dossier par outil (organiser/, mise-en-page/, fusion/, intercaler/, images/,
                          separation/, annoter/, securite/, optimiser/, convertir/), et commun/, partagé :
                          zone de dépôt, étapes numérotées, bouton d'action qui dit ce qu'il manque,
@@ -198,20 +204,28 @@ src-tauri/               Cœur Rust (Tauri)
   src/marques.rs         Surimpressions : numéros, tampon, filigrane, image (signature, cachet)
   src/caviardage.rs      Caviardage : caractères, pixels, dessins et annotations sous les zones supprimés ;
                          le même nettoyage, en blanc (correcteur) ou limité aux caractères (correction)
-  src/annotations.rs     Éditeur : surlignages et notes (annotations PDF), texte et images sur la page,
-                         mots corrigés (retirés puis réécrits), correcteur blanc
+  src/annotations.rs     Éditeur : surlignages, soulignements, ratures, notes, formes, dessins et tampons
+                         (annotations PDF), texte et images sur la page, mots corrigés (retirés puis
+                         réécrits), correcteur blanc
+  src/commentaires.rs    Commentaires d'un PDF reçu : listés (auteur, date, texte, place), supprimés ou
+                         changés (avec leur bulle et leurs réponses)
+  src/navigation.rs      Signets et liens d'un PDF ; adresses de sites et d'e-mails seules ouvertes
+  src/impression.rs      Impression : PDFKit (Mac) ; imprimantes, réglages du pilote et pages par GDI (Windows)
+  src/lecteur_defaut.rs  Lecteur de PDF par défaut : qui ouvre les PDF, fenêtre de choix du système
   src/pixels.rs          Pixels des images (8 bits) : noircis (caviardage) ou blanchis (correcteur), réduits pour la compression
   src/securite.rs        Mot de passe : chiffrement AES-256 et droits, ou protection retirée
   src/compression.rs     Compression : images ramenées à la résolution utile, objets en double fusionnés
   src/geometrie.rs       Matrices, cadre visible et repère de la page affichée (rotation comprise)
   src/police.rs          Helvetica standard en codage WinAnsi (accents), largeurs pour aligner
-  src/memoire.rs         Derniers PDF ouverts gardés en mémoire pour les vignettes
+  src/memoire.rs         Derniers PDF ouverts gardés en mémoire pour les vignettes ; PDF déchiffré avec son
+                         mot de passe, ou retouché (commentaires), en mémoire seulement
   src/fichiers.rs        Lecture contrôlée des fichiers choisis, écriture des dossiers de résultats
   src/ouverture.rs       Fichier créé ouvert dans l'application habituelle, ou affiché dans son dossier
   src/confidentialite.rs Réglages de confidentialité ; signal d'ouverture des statistiques anonymes, avec l'accord de l'utilisateur
   scripts/               Scripts PowerShell intégrés au programme (Outlook, Office), en ASCII
   scripts/macos/         Scripts AppleScript intégrés au programme (Mail ; Word, Excel et PowerPoint), en ASCII
-  windows/clic-droit.nsh Sous-menu du clic droit, posé et retiré par l'installateur NSIS (pas par le MSI)
+  windows/clic-droit.nsh Sous-menu du clic droit et inscription parmi les lecteurs de PDF (« Ouvrir avec »),
+                         posés et retirés par l'installateur NSIS (pas par le MSI)
   Info.plist             Mac : services du clic droit, raison donnée pour piloter Office et Mail, langue
   tauri.macos.conf.json  Mac : fenêtre transparente sans barre de titre (la reprendre en entier si celle de
                          tauri.conf.json change), « Ouvrir avec » (PDF, images, documents Office), signature, image disque
