@@ -3,6 +3,7 @@
 //! texte invisible des scans passés à la reconnaissance de caractères ; les mots, les colonnes et
 //! les lignes sont reconstitués d'après les écarts, quel que soit l'ordre d'écriture du PDF.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use hayro::hayro_interpret::font::Glyph;
@@ -15,6 +16,7 @@ use hayro::hayro_syntax::page::Page;
 use hayro::vello_cpu::kurbo::{Affine, BezPath, Point, Rect};
 use serde::Serialize;
 
+use crate::contenu::{Police, police_nommee};
 use crate::erreur::Erreur;
 use crate::rendu::ouvrir;
 
@@ -28,12 +30,16 @@ struct Caractere {
     /// Position de la ligne (vers le bas).
     ligne: f64,
     taille: f64,
+    police: Arc<Police>,
+    couleur: [u8; 3],
 }
 
 /// Appareil qui, au lieu de dessiner, relève les caractères.
 #[derive(Default)]
 struct Releve {
     caracteres: Vec<Caractere>,
+    /// Police de chaque fonte rencontrée (Arial quand hayro n'en donne pas le nom).
+    polices: HashMap<u128, Arc<Police>>,
 }
 
 impl<'a> Device<'a> for Releve {
@@ -51,7 +57,7 @@ impl<'a> Device<'a> for Releve {
         glyphe: &Glyph<'a>,
         transform: Affine,
         glyph_transform: Affine,
-        _: &Paint<'a>,
+        peinture: &Paint<'a>,
         _: &GlyphDrawMode,
     ) {
         let texte = match glyphe.as_unicode() {
@@ -87,6 +93,33 @@ impl<'a> Device<'a> for Releve {
         };
         let (debut, ligne) = tourner(origine);
         let (fin, _) = tourner(arrivee);
+        // Police et couleur, comme les relève contenu.rs : pour réécrire un mot à l'identique.
+        let police = match glyphe {
+            Glyph::Outline(contour) => self
+                .polices
+                .entry(contour.font_cache_key())
+                .or_insert_with(|| {
+                    let donnees = contour.font_data();
+                    let mut police = donnees
+                        .as_ref()
+                        .and_then(|d| d.postscript_name.as_deref())
+                        .map_or_else(|| police_nommee("Arial"), police_nommee);
+                    if let Some(donnees) = donnees {
+                        police.gras |= donnees.weight.is_some_and(|poids| poids >= 600);
+                        police.italique |= donnees.is_italic;
+                    }
+                    Arc::new(police)
+                })
+                .clone(),
+            Glyph::Type3(_) => Arc::new(police_nommee("Arial")),
+        };
+        let couleur = match peinture {
+            Paint::Color(couleur) => {
+                let [rouge, vert, bleu, _] = couleur.to_rgba().to_rgba8();
+                [rouge, vert, bleu]
+            }
+            Paint::Pattern(_) => [0, 0, 0],
+        };
         self.caracteres.push(Caractere {
             texte,
             sens,
@@ -94,6 +127,8 @@ impl<'a> Device<'a> for Releve {
             fin: fin.max(debut),
             ligne,
             taille,
+            police,
+            couleur,
         });
     }
 }
@@ -218,6 +253,12 @@ pub struct Mot {
     pub sens: u8,
     /// Premier mot d'une ligne.
     pub debut_ligne: bool,
+    /// Police du mot, nommée comme un traitement de texte (« Arial », « Times New Roman »), et sa
+    /// couleur : de quoi le réécrire à l'identique dans l'éditeur.
+    pub famille: String,
+    pub gras: bool,
+    pub italique: bool,
+    pub couleur: [u8; 3],
 }
 
 /// Les mots de la page `page` (à partir de 0), ligne par ligne dans l'ordre de lecture.
@@ -287,6 +328,10 @@ fn mot(caracteres: &[&Caractere], debut_ligne: bool) -> Option<Mot> {
         taille,
         sens: premier.sens,
         debut_ligne,
+        famille: premier.police.famille.clone(),
+        gras: premier.police.gras,
+        italique: premier.police.italique,
+        couleur: premier.couleur,
     })
 }
 

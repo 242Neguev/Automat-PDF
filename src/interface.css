@@ -586,3 +586,46 @@ html[data-fenetre="verre"][data-mantine-color-scheme="light"] {
   outline: 1.5px dashed #c92a2a;
   outline-offset: 2px;
 }
+/* Corriger : le mot visé est entouré ; la correction couvre l'ancien texte de blanc et écrit le nouveau
+   par-dessus, dans une police proche (le PDF, lui, n'a plus l'ancien). Correcteur : un cadre blanc. */
+.couche-annotations[data-outil="corriger"] {
+  cursor: text;
+}
+.couche-annotations[data-outil="correcteur"] {
+  cursor: crosshair;
+}
+.mot-a-corriger {
+  position: absolute;
+  border-radius: 3px;
+  outline: 1.5px solid var(--mantine-color-eau-6);
+  background: rgba(30, 110, 114, 0.08);
+  pointer-events: none;
+}
+.annotation-correction {
+  position: absolute;
+  background: white;
+}
+.annotation-correction .texte-corrige {
+  position: absolute;
+  white-space: pre;
+  line-height: 1;
+}
+.annotation-blanc {
+  position: absolute;
+  background: white;
+}
+.couche-annotations[data-outil] .annotation-blanc {
+  outline: 1px dashed rgba(34, 37, 42, 0.4);
+}
+.correction-en-ecriture {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 3px;
+  outline: 1.5px solid var(--mantine-color-eau-6);
+  background: white;
+  line-height: 1;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}

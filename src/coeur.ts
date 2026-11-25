@@ -176,6 +176,11 @@ export interface Mot {
   taille: number;
   sens: number;
   debutLigne: boolean;
+  /** Police du mot, nommée comme un traitement de texte (« Arial »), et sa couleur : pour le corriger. */
+  famille: string;
+  gras: boolean;
+  italique: boolean;
+  couleur: [number, number, number];
 }
 
 /** Les mots d'une page (à partir de 0), ligne par ligne dans l'ordre de lecture. */

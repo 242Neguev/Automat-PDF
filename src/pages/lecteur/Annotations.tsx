@@ -3,16 +3,20 @@
 // affichée (comme les mots), converties en pixels par l'échelle du lecteur.
 import { useEffect, useRef, useState, type PointerEvent as EvenementPointeur, type ReactNode } from "react";
 import { ActionIcon, Box, Button, ColorSwatch, Group, NumberInput, Popover, Text, Textarea, Tooltip } from "@mantine/core";
-import { IconArrowBackUp, IconArrowForwardUp, IconCheck, IconDeviceFloppy, IconEraser, IconHighlight, IconMessageCircle, IconPhoto, IconPointer, IconTrash, IconTypography } from "@tabler/icons-react";
+import { IconArrowBackUp, IconArrowForwardUp, IconCheck, IconCursorText, IconDeviceFloppy, IconEraser, IconHighlight, IconSquare, IconMessageCircle, IconPhoto, IconPointer, IconTrash, IconTypography } from "@tabler/icons-react";
 import {
+  correctionDe,
   INTERLIGNE,
+  motsDeLaLigne,
   nouvelId,
+  policeCss,
   RVB,
   TEINTES_SURLIGNEUR,
   TEINTES_TEXTE,
+  zoneEntre,
   zonesSurlignees,
   type Annotation,
-  type MotPlace,
+  type MotComplet,
   type Point,
   type Teinte,
   type Zone,
@@ -21,7 +25,7 @@ import { textes } from "../../textes";
 
 const t = textes.lecteur.annotation;
 
-export type OutilAnnotation = "selection" | "surligner" | "note" | "texte" | "image" | "gomme";
+export type OutilAnnotation = "selection" | "surligner" | "note" | "texte" | "image" | "corriger" | "correcteur" | "gomme";
 
 const ICONES: Record<OutilAnnotation, typeof IconPointer> = {
   selection: IconPointer,
@@ -29,9 +33,11 @@ const ICONES: Record<OutilAnnotation, typeof IconPointer> = {
   note: IconMessageCircle,
   texte: IconTypography,
   image: IconPhoto,
+  corriger: IconCursorText,
+  correcteur: IconSquare,
   gomme: IconEraser,
 };
-const ORDRE: OutilAnnotation[] = ["selection", "surligner", "note", "texte", "image", "gomme"];
+const ORDRE: OutilAnnotation[] = ["selection", "surligner", "note", "texte", "image", "corriger", "correcteur", "gomme"];
 
 export const couleur = (teinte: Teinte, opacite = 1) => `rgba(${RVB[teinte].join(", ")}, ${opacite})`;
 
@@ -162,7 +168,7 @@ interface PropsCouche {
   page: number;
   echelle: number;
   annotations: Annotation[];
-  mots: MotPlace[] | null;
+  mots: MotComplet[] | null;
   /** Mode annotation : les gestes créent, choisissent, déplacent ; sinon les annotations se montrent seulement. */
   actif: boolean;
   outil: OutilAnnotation;
@@ -183,6 +189,8 @@ interface PropsCouche {
 type Geste =
   | { sorte: "surligner"; debut: Point; courant: Point }
   | { sorte: "gommer"; effacees: string[] }
+  | { sorte: "corriger"; debut: Point; courant: Point }
+  | { sorte: "correcteur"; debut: Point; courant: Point }
   | { sorte: "deplacer"; annotation: Annotation; debut: Point; courant: Point }
   | { sorte: "taille"; annotation: Annotation & { sorte: "image" }; debut: Point; courant: Point };
 
@@ -192,7 +200,11 @@ function decaler(annotation: Annotation, dx: number, dy: number): Annotation {
     case "surlignage":
       return { ...annotation, zones: annotation.zones.map((z) => ({ ...z, x: z.x + dx, y: z.y + dy })) };
     case "image":
+    case "blanc":
       return { ...annotation, zone: { ...annotation.zone, x: annotation.zone.x + dx, y: annotation.zone.y + dy } };
+    // Une correction reste à la place du texte qu'elle remplace.
+    case "correction":
+      return annotation;
     default:
       return { ...annotation, x: annotation.x + dx, y: annotation.y + dy };
   }
@@ -216,6 +228,8 @@ export function CoucheAnnotations(props: PropsCouche) {
   const [brouillon, setBrouillon] = useState<Annotation | null>(null);
   // Le dernier brouillon validé : un clic ailleurs puis la perte du focus ne le valident qu'une fois.
   const valide = useRef<Annotation | null>(null);
+  /** Outil Corriger : les mots sous le pointeur, entourés avant le clic. */
+  const [survol, setSurvol] = useState<number[]>([]);
 
   // Hors du mode annotation, rien ne reste en cours.
   useEffect(() => {
@@ -239,6 +253,12 @@ export function CoucheAnnotations(props: PropsCouche) {
     return [...new Set(ids)];
   }
 
+  /** Abandonne le brouillon (Échap) : la perte du focus qui suit ne le valide pas. */
+  function abandonner() {
+    valide.current = brouillon;
+    setBrouillon(null);
+  }
+
   function valider(annotation: Annotation | null) {
     if (!annotation || valide.current === annotation) return;
     valide.current = annotation;
@@ -249,6 +269,8 @@ export function CoucheAnnotations(props: PropsCouche) {
       if (existante) props.onSupprimer(annotation.id);
       return;
     }
+    // Une correction qui ne change rien n'est pas gardée.
+    if (annotation.sorte === "correction" && !existante && annotation.texte === annotation.ancien) return;
     if (existante) props.onModifier(annotation);
     else props.onAjouter(annotation);
     onSelection(annotation.id);
@@ -274,6 +296,11 @@ export function CoucheAnnotations(props: PropsCouche) {
       evenement.preventDefault();
       // Le point cliqué est le milieu de la première ligne.
       setBrouillon({ id: nouvelId(), sorte: "texte", page, x: ici.x, y: ici.y - (INTERLIGNE * props.taille) / 2, texte: "", taille: props.taille, teinte: props.teinteTexte });
+    } else if (outil === "corriger" || outil === "correcteur") {
+      evenement.preventDefault();
+      evenement.currentTarget.setPointerCapture(evenement.pointerId);
+      setGeste({ sorte: outil, debut: ici, courant: ici });
+      setSurvol([]);
     } else if (outil === "gomme") {
       evenement.preventDefault();
       evenement.currentTarget.setPointerCapture(evenement.pointerId);
@@ -284,7 +311,15 @@ export function CoucheAnnotations(props: PropsCouche) {
   }
 
   function pointeurMouvement(evenement: EvenementPointeur<HTMLElement>) {
-    if (!geste) return;
+    if (!geste) {
+      // Corriger : on voit quel mot le clic prendra.
+      if (actif && outil === "corriger" && props.mots) {
+        const ici = point(evenement);
+        const mots = motsDeLaLigne(props.mots, ici, ici);
+        if (mots.join() !== survol.join()) setSurvol(mots);
+      }
+      return;
+    }
     if (geste.sorte === "gommer") {
       const nouvelles = touchees(evenement).filter((id) => !geste.effacees.includes(id));
       if (nouvelles.length > 0) setGeste({ sorte: "gommer", effacees: [...geste.effacees, ...nouvelles] });
@@ -301,6 +336,18 @@ export function CoucheAnnotations(props: PropsCouche) {
       return;
     }
     const { debut, courant } = geste;
+    if (geste.sorte === "corriger") {
+      const rangs = motsDeLaLigne(props.mots ?? [], debut, courant);
+      if (rangs.length > 0) setBrouillon(correctionDe(props.mots!, rangs, page));
+      setGeste(null);
+      return;
+    }
+    if (geste.sorte === "correcteur") {
+      const zone = zoneEntre(debut, courant);
+      if (zone.largeur > 2 && zone.hauteur > 2) props.onAjouter({ id: nouvelId(), sorte: "blanc", page, zone });
+      setGeste(null);
+      return;
+    }
     if (geste.sorte === "surligner") {
       const zones = zonesSurlignees(props.mots ?? [], debut, courant);
       if (zones.length > 0) props.onAjouter({ id: nouvelId(), sorte: "surlignage", page, teinte: props.teinteSurligneur, zones });
@@ -330,7 +377,8 @@ export function CoucheAnnotations(props: PropsCouche) {
 
   /** L'annotation telle qu'elle s'affiche : pendant un geste, à sa place provisoire. */
   function affichee(annotation: Annotation): Annotation {
-    if (!geste || geste.sorte === "surligner" || geste.sorte === "gommer" || geste.annotation.id !== annotation.id) return annotation;
+    if (!geste || geste.sorte === "surligner" || geste.sorte === "gommer" || geste.sorte === "corriger" || geste.sorte === "correcteur" || geste.annotation.id !== annotation.id)
+      return annotation;
     const { debut, courant } = geste;
     return geste.sorte === "deplacer"
       ? decaler(annotation, courant.x - debut.x, courant.y - debut.y)
@@ -344,6 +392,12 @@ export function CoucheAnnotations(props: PropsCouche) {
   const effacees = geste?.sorte === "gommer" ? geste.effacees : [];
   const visibles = annotations.filter((a) => a.id !== brouillon?.id && !effacees.includes(a.id));
   const apercu = geste?.sorte === "surligner" ? zonesSurlignees(props.mots ?? [], geste.debut, geste.courant) : [];
+  // Corriger : les mots que le geste prend ; correcteur : le cadre tracé.
+  const motsVises = geste?.sorte === "corriger" ? motsDeLaLigne(props.mots ?? [], geste.debut, geste.courant) : actif && outil === "corriger" ? survol : [];
+  const cadreBlanc = geste?.sorte === "correcteur" ? zoneEntre(geste.debut, geste.courant) : null;
+  /** Haut d'une ligne de texte affichée en hauteur de ligne 1 (ligne de base à 0,84 de la taille). */
+  const hautDeLigne = (ligne: number, taille: number) => ligne - 0.84 * taille;
+  const rvb = (c: [number, number, number]) => `rgb(${c.join(", ")})`;
 
   function rendu(brute: Annotation): ReactNode {
     const annotation = affichee(brute);
@@ -404,6 +458,54 @@ export function CoucheAnnotations(props: PropsCouche) {
             {annotation.texte}
           </div>
         );
+      case "correction":
+        return (
+          <div
+            key={annotation.id}
+            data-annotation-id={annotation.id}
+            className="annotation-correction"
+            data-selectionnee={choisie}
+            title={`« ${annotation.ancien} » → « ${annotation.texte} »`}
+            onPointerDown={
+              enSelection
+                ? (evenement) => {
+                    evenement.stopPropagation();
+                    onSelection(annotation.id);
+                  }
+                : undefined
+            }
+            onDoubleClick={() => actif && outil !== "gomme" && setBrouillon(annotation)}
+            style={{ left: px(annotation.zone.x) - 1, top: px(annotation.zone.y) - 1, width: px(annotation.zone.largeur) + 2, height: px(annotation.zone.hauteur) + 2, pointerEvents: touchables ? "auto" : "none" }}
+          >
+            <span
+              className="texte-corrige"
+              style={{
+                top: px(hautDeLigne(annotation.ligne, annotation.taille) - annotation.zone.y) + 1,
+                ...(annotation.droite ? { right: 1 } : { left: 1 }),
+                fontSize: px(annotation.taille),
+                fontFamily: policeCss(annotation.famille),
+                fontWeight: annotation.gras ? 700 : 400,
+                fontStyle: annotation.italique ? "italic" : "normal",
+                color: rvb(annotation.couleur),
+              }}
+            >
+              {annotation.texte}
+            </span>
+          </div>
+        );
+      case "blanc":
+        return (
+          <div
+            key={annotation.id}
+            data-annotation-id={annotation.id}
+            className="annotation-blanc"
+            data-selectionnee={choisie}
+            onPointerDown={enSelection ? prise() : undefined}
+            onPointerMove={pointeurMouvement}
+            onPointerUp={pointeurHaut}
+            style={{ left: px(annotation.zone.x), top: px(annotation.zone.y), width: px(annotation.zone.largeur), height: px(annotation.zone.hauteur), pointerEvents: touchables ? "auto" : "none" }}
+          />
+        );
       case "image": {
         const image = props.images[annotation.chemin];
         return (
@@ -438,6 +540,43 @@ export function CoucheAnnotations(props: PropsCouche) {
       style={{ pointerEvents: actif && outil !== "selection" ? "auto" : "none" }}
     >
       {visibles.map(rendu)}
+      {motsVises.map((rang) => {
+        const mot = props.mots![rang];
+        return <div key={`vise-${rang}`} className="mot-a-corriger" style={{ left: px(mot.x) - 2, top: px(mot.y) - 1, width: px(mot.longueur) + 4, height: px(mot.taille) + 2 }} />;
+      })}
+      {cadreBlanc && <div className="annotation-blanc" data-trace style={{ left: px(cadreBlanc.x), top: px(cadreBlanc.y), width: px(cadreBlanc.largeur), height: px(cadreBlanc.hauteur) }} />}
+      {brouillon?.sorte === "correction" && (() => {
+        const largeur = Math.max(px(brouillon.zone.largeur) + 48, 120);
+        return (
+          <input
+            autoFocus
+            className="correction-en-ecriture"
+            aria-label={t.outils.corriger.titre}
+            value={brouillon.texte}
+            onChange={(evenement) => setBrouillon({ ...brouillon, texte: evenement.currentTarget.value })}
+            onBlur={() => valider(brouillon)}
+            onKeyDown={(evenement) => {
+              if (evenement.key === "Enter") valider(brouillon);
+              else if (evenement.key === "Escape") abandonner();
+            }}
+            onFocus={(evenement) => evenement.currentTarget.select()}
+            onPointerDown={(evenement) => evenement.stopPropagation()}
+            style={{
+              left: brouillon.droite ? px(brouillon.fin) - largeur + 3 : px(brouillon.x) - 3,
+              top: px(hautDeLigne(brouillon.ligne, brouillon.taille)) - 3,
+              width: largeur,
+              height: px(brouillon.taille) + 6,
+              fontSize: px(brouillon.taille),
+              fontFamily: policeCss(brouillon.famille),
+              fontWeight: brouillon.gras ? 700 : 400,
+              fontStyle: brouillon.italique ? "italic" : "normal",
+              color: rvb(brouillon.couleur),
+              textAlign: brouillon.droite ? "right" : "left",
+            }}
+            data-correction-en-ecriture
+          />
+        );
+      })()}
       {apercu.map((zone: Zone, rang) => (
         <div key={`apercu-${rang}`} className="annotation-surlignage" style={{ left: px(zone.x), top: px(zone.y), width: px(zone.largeur), height: px(zone.hauteur), background: couleur(props.teinteSurligneur, 0.5) }} />
       ))}

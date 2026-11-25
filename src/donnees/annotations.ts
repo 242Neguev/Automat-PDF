@@ -42,17 +42,56 @@ export interface MotPlace {
   debutLigne: boolean;
 }
 
+/** Un mot avec son texte, sa police et sa couleur : de quoi le corriger. */
+export interface MotComplet extends MotPlace {
+  texte: string;
+  sens: number;
+  famille: string;
+  gras: boolean;
+  italique: boolean;
+  couleur: [number, number, number];
+}
+
 export type Annotation =
   | { id: string; sorte: "surlignage"; page: number; teinte: Teinte; zones: Zone[] }
   | { id: string; sorte: "note"; page: number; x: number; y: number; texte: string }
   | { id: string; sorte: "texte"; page: number; x: number; y: number; texte: string; taille: number; teinte: Teinte }
-  | { id: string; sorte: "image"; page: number; zone: Zone; chemin: string };
+  | { id: string; sorte: "image"; page: number; zone: Zone; chemin: string }
+  | {
+      id: string;
+      sorte: "correction";
+      page: number;
+      /** L'ancien texte : sa boîte, ses bords gauche et droit, sa ligne de base. */
+      zone: Zone;
+      x: number;
+      fin: number;
+      ligne: number;
+      /** Pour l'aperçu et pour revenir en arrière (pas envoyé au cœur). */
+      ancien: string;
+      texte: string;
+      taille: number;
+      famille: string;
+      gras: boolean;
+      italique: boolean;
+      couleur: [number, number, number];
+      /** Garder le bord droit (montant dans une colonne). */
+      droite: boolean;
+    }
+  | { id: string; sorte: "blanc"; page: number; zone: Zone };
 
-/** Ce que le cœur reçoit : les annotations sans leur identifiant, en laissant de côté les vides. */
+/** Ce que le cœur reçoit : les annotations sans leur identifiant (ni l'ancien texte d'une
+ * correction), en laissant de côté les vides. Une correction vide efface le mot. */
 export function pourLeCoeur(annotations: Annotation[]) {
   return annotations
     .filter((a) => (a.sorte === "texte" ? a.texte.trim() !== "" : a.sorte === "surlignage" ? a.zones.length > 0 : true))
-    .map(({ id: _id, ...reste }) => reste);
+    .map((annotation) => {
+      if (annotation.sorte === "correction") {
+        const { id: _id, ancien: _ancien, ...reste } = annotation;
+        return reste;
+      }
+      const { id: _id, ...reste } = annotation;
+      return reste;
+    });
 }
 
 let compteur = 0;
@@ -145,6 +184,67 @@ export function zonesSurlignees(mots: MotPlace[], debut: Point, fin: Point, port
   }
   fermer();
   return zones;
+}
+
+/**
+ * Mots à corriger quand on clique (ou glisse) de `debut` à `fin` : du mot sous le premier point
+ * jusqu'à celui sous le second, sur la seule ligne du premier, écrits de gauche à droite. Rien si
+ * le geste ne part pas d'un mot.
+ */
+export function motsDeLaLigne(mots: MotComplet[], debut: Point, fin: Point, portee = 6): number[] {
+  const premier = motProche(mots, debut, portee);
+  if (premier === null || mots[premier].sens !== 0) return [];
+  let premierDeLigne = premier;
+  while (premierDeLigne > 0 && !mots[premierDeLigne].debutLigne) premierDeLigne--;
+  let dernierDeLigne = premier;
+  while (dernierDeLigne + 1 < mots.length && !mots[dernierDeLigne + 1].debutLigne) dernierDeLigne++;
+  const ligne = mots.slice(premierDeLigne, dernierDeLigne + 1);
+  const second = premierDeLigne + (motProche(ligne, fin, Number.POSITIVE_INFINITY) ?? premier - premierDeLigne);
+  const [a, b] = premier <= second ? [premier, second] : [second, premier];
+  return Array.from({ length: b - a + 1 }, (_, i) => a + i);
+}
+
+/** Un montant : des chiffres, avec leurs séparateurs, un signe, une devise. Il garde son bord droit. */
+export function estMontant(texte: string): boolean {
+  const sansDevise = texte.trim().replace(/\s*([A-Z]{2,4}|€|\$|£|%)$/u, "").replace(/^([A-Z]{2,4}|€|\$|£)\s*/u, "");
+  return /\d/.test(sansDevise) && /^[-+−(]?[\d\s\u00a0\u202f.,'’]+\)?$/u.test(sansDevise);
+}
+
+/** Correction de ces mots, prête à être écrite : le nouveau texte est d'abord l'ancien. */
+export function correctionDe(mots: MotComplet[], rangs: number[], page: number): Annotation & { sorte: "correction" } {
+  const choisis = rangs.map((rang) => mots[rang]);
+  const gauche = Math.min(...choisis.map((m) => m.x));
+  const droite = Math.max(...choisis.map((m) => m.x + m.longueur));
+  const haut = Math.min(...choisis.map((m) => m.y));
+  const bas = Math.max(...choisis.map((m) => m.y + m.taille));
+  const premier = choisis[0];
+  const ancien = choisis.map((m) => m.texte).join(" ");
+  return {
+    id: nouvelId(),
+    sorte: "correction",
+    page,
+    zone: { x: gauche, y: haut, largeur: droite - gauche, hauteur: bas - haut },
+    x: gauche,
+    fin: droite,
+    ligne: premier.y + 0.8 * premier.taille,
+    ancien,
+    texte: ancien,
+    taille: premier.taille,
+    famille: premier.famille,
+    gras: premier.gras,
+    italique: premier.italique,
+    couleur: premier.couleur,
+    droite: estMontant(ancien),
+  };
+}
+
+/** Police d'affichage proche, comme le cœur la choisit (police.rs, Famille::de). */
+export function policeCss(famille: string): string {
+  const nom = famille.toLowerCase();
+  if (["courier", "mono", "consolas", "console"].some((m) => nom.includes(m))) return '"Courier New", Courier, monospace';
+  if (!nom.includes("sans") && ["times", "georgia", "garamond", "cambria", "serif", "book", "palatino", "century", "roman"].some((m) => nom.includes(m)))
+    return '"Times New Roman", Times, serif';
+  return "Arial, Helvetica, sans-serif";
 }
 
 /** Nom proposé pour le PDF annoté : « Contrat.pdf » → « Contrat - annoté.pdf ». */

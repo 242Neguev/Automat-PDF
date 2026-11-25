@@ -5,6 +5,10 @@
 //!   apparence : visibles partout, et modifiables dans Acrobat ou Aperçu.
 //! - Texte et images s'écrivent dans le contenu de la page, comme Numéros et tampon et Signature
 //!   ou cachet.
+//! - Correction d'un mot ou d'un montant : ses caractères sont retirés du fichier (comme le fait
+//!   Masquer des passages), puis le nouveau texte est écrit à sa place, dans une police standard
+//!   proche, à la même taille et dans la même couleur.
+//! - Correcteur blanc : tout ce qui est sous la zone est retiré du fichier, puis recouvert de blanc.
 //!
 //! Les positions viennent du lecteur : en points de la page affichée (rotation et recadrage
 //! compris), depuis son coin en haut à gauche, comme les mots de `texte::mots`.
@@ -12,11 +16,12 @@
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream, StringFormat, dictionary};
 use serde::Deserialize;
 
+use crate::caviardage::{self, Nettoyage, Rect};
 use crate::erreur::Erreur;
 use crate::geometrie::{Cadre, Matrice, boite};
 use crate::images::ImagePdf;
 use crate::marques::{self, Placement};
-use crate::police;
+use crate::police::{self, Famille};
 
 /// Interligne du texte écrit, en tailles de police (le lecteur affiche le même).
 pub const INTERLIGNE: f64 = 1.2;
@@ -102,6 +107,25 @@ pub enum Annotation {
         zone: Zone,
         chemin: String,
     },
+    /// Mot ou montant corrigé. `zone` couvre l'ancien texte ; `x` et `fin` sont ses bords gauche
+    /// et droit, `ligne` sa ligne de base ; `droite` : le nouveau texte garde le bord droit
+    /// (montant dans une colonne). Police et couleur : celles de l'ancien texte.
+    Correction {
+        page: usize,
+        zone: Zone,
+        x: f64,
+        fin: f64,
+        ligne: f64,
+        texte: String,
+        taille: f64,
+        famille: String,
+        gras: bool,
+        italique: bool,
+        couleur: [u8; 3],
+        droite: bool,
+    },
+    /// Correcteur blanc : ce qui est sous la zone est retiré du fichier, puis recouvert de blanc.
+    Blanc { page: usize, zone: Zone },
 }
 
 impl Annotation {
@@ -110,7 +134,9 @@ impl Annotation {
             Annotation::Surlignage { page, .. }
             | Annotation::Note { page, .. }
             | Annotation::Texte { page, .. }
-            | Annotation::Image { page, .. } => *page,
+            | Annotation::Image { page, .. }
+            | Annotation::Correction { page, .. }
+            | Annotation::Blanc { page, .. } => *page,
         }
     }
 }
@@ -338,6 +364,163 @@ fn ecrire(
     )
 }
 
+/// Zone de la page affichée (depuis le haut) dans le repère de la page.
+fn en_page(vers_page: Matrice, hauteur: f64, zone: &Zone) -> Rect {
+    let (haut, bas) = (hauteur - zone.y, hauteur - zone.y - zone.hauteur);
+    boite(
+        vers_page,
+        &[
+            (zone.x, haut),
+            (zone.x + zone.largeur, haut),
+            (zone.x, bas),
+            (zone.x + zone.largeur, bas),
+        ],
+    )
+}
+
+/// Zones recouvertes de blanc, sans rien retirer dessous : quand le contenu ne se nettoie pas
+/// (formulaire PDF, image dans le flux du texte).
+fn couvrir_de_blanc(
+    document: &mut Document,
+    page: ObjectId,
+    hauteur: f64,
+    zones: &[Zone],
+) -> Result<(), Erreur> {
+    marques::surimprimer(document, page, &[], |_| {
+        let mut dessin = String::from("1 g\n");
+        for zone in zones {
+            dessin.push_str(&format!(
+                "{:.2} {:.2} {:.2} {:.2} re f\n",
+                zone.x,
+                hauteur - zone.y - zone.hauteur,
+                zone.largeur,
+                zone.hauteur
+            ));
+        }
+        dessin
+    })
+}
+
+/// Bande à nettoyer pour corriger un mot : au milieu de la hauteur de ses lettres, rentrée sur les
+/// côtés. Elle touche les caractères du mot (leur boîte va de la descente à la montée de la police),
+/// pas ceux d'à côté ni ceux des lignes du dessus et du dessous.
+fn bande(x: f64, fin: f64, ligne: f64, taille: f64) -> Zone {
+    Zone {
+        x: x + 0.4,
+        y: ligne - 0.55 * taille,
+        largeur: (fin - x - 0.8).max(0.1),
+        hauteur: 0.4 * taille,
+    }
+}
+
+/// Retire ce qu'il faut sous les correcteurs et sous les mots corrigés, puis écrit les corrections.
+/// Le nettoyage réécrit le contenu de la page : il passe avant les autres annotations, qui restent
+/// ainsi par-dessus.
+fn corriger(document: &mut Document, annotations: &[Annotation]) -> Result<(), Erreur> {
+    let pages: Vec<ObjectId> = document.get_pages().into_values().collect();
+    for (index, &page) in pages.iter().enumerate() {
+        let blancs: Vec<Zone> = annotations
+            .iter()
+            .filter_map(|a| match a {
+                Annotation::Blanc { page, zone } if *page == index => Some(*zone),
+                _ => None,
+            })
+            .collect();
+        let corrections: Vec<&Annotation> = annotations
+            .iter()
+            .filter(|a| matches!(a, Annotation::Correction { page, .. } if *page == index))
+            .collect();
+        if blancs.is_empty() && corrections.is_empty() {
+            continue;
+        }
+        let dictionnaire = document
+            .get_dictionary(page)
+            .map_err(|_| Erreur::simple("Une page n'a pas pu être lue."))?
+            .clone();
+        let cadre = Cadre::de_page(document, &dictionnaire);
+        let (_, hauteur) = cadre.taille_vue();
+        let vers_page = cadre.depuis_vue();
+        if !blancs.is_empty() {
+            let zones: Vec<Rect> = blancs
+                .iter()
+                .map(|z| en_page(vers_page, hauteur, z))
+                .collect();
+            if caviardage::nettoyer_page(document, page, &zones, Nettoyage::Blanc).is_none() {
+                couvrir_de_blanc(document, page, hauteur, &blancs)?;
+            }
+        }
+        if corrections.is_empty() {
+            continue;
+        }
+        let mut bandes = Vec::new();
+        let mut couvertures = Vec::new();
+        for correction in &corrections {
+            if let Annotation::Correction {
+                zone,
+                x,
+                fin,
+                ligne,
+                taille,
+                ..
+            } = correction
+            {
+                bandes.push(en_page(
+                    vers_page,
+                    hauteur,
+                    &bande(*x, *fin, *ligne, *taille),
+                ));
+                couvertures.push(*zone);
+            }
+        }
+        if caviardage::nettoyer_page(document, page, &bandes, Nettoyage::Texte).is_none() {
+            couvrir_de_blanc(document, page, hauteur, &couvertures)?;
+        }
+        for correction in corrections {
+            if let Annotation::Correction {
+                x,
+                fin,
+                ligne,
+                texte,
+                taille,
+                famille,
+                gras,
+                italique,
+                couleur,
+                droite,
+                ..
+            } = correction
+            {
+                if texte.trim().is_empty() {
+                    continue;
+                }
+                let famille = Famille::de(famille);
+                let taille = taille.clamp(2.0, 300.0);
+                let depart = if *droite {
+                    fin - famille.largeur(texte, *gras, taille)
+                } else {
+                    *x
+                };
+                let base = hauteur - ligne;
+                let [r, v, b] = couleur.map(|c| f64::from(c) / 255.0);
+                let police = Object::Dictionary(police::police_standard(famille, *gras, *italique));
+                marques::surimprimer(
+                    document,
+                    page,
+                    &[("Font", "AutomatCorrection", police)],
+                    |noms| {
+                        format!(
+                            "{r:.3} {v:.3} {b:.3} rg BT /{} {taille:.2} Tf 1 0 0 1 {depart:.2} {base:.2} Tm {} Tj ET\n",
+                            noms[0],
+                            police::chaine(texte)
+                        )
+                    },
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Écrit les annotations dans le document. `image` lit et prépare une image d'après son chemin.
 pub(crate) fn annoter(
     document: &mut Document,
@@ -345,6 +528,17 @@ pub(crate) fn annoter(
     image: impl Fn(&str) -> Result<ImagePdf, Erreur>,
 ) -> Result<(), Erreur> {
     let pages: Vec<ObjectId> = document.get_pages().into_values().collect();
+    if let Some(absente) = annotations
+        .iter()
+        .map(Annotation::page)
+        .find(|&p| p >= pages.len())
+    {
+        return Err(Erreur::simple(format!(
+            "La page {} n'existe pas dans ce PDF.",
+            absente + 1
+        )));
+    }
+    corriger(document, annotations)?;
     for annotation in annotations {
         let index = annotation.page();
         let &page = pages.get(index).ok_or_else(|| {
@@ -381,6 +575,8 @@ pub(crate) fn annoter(
                 };
                 marques::apposer(document, image(chemin)?, placement, &[index])?;
             }
+            // Déjà faits, avant le reste.
+            Annotation::Correction { .. } | Annotation::Blanc { .. } => {}
         }
     }
     Ok(())
@@ -654,18 +850,172 @@ mod tests {
         assert!(erreur.message.contains("page 6"), "{}", erreur.message);
     }
 
+    /// Correction du mot `ancien` de la page 1, comme l'interface la construit d'après les mots.
+    fn correction(
+        source: &[u8],
+        ancien: &str,
+        texte: &str,
+        droite: bool,
+    ) -> (texte::Mot, Annotation) {
+        let mots = texte::mots(Arc::new(source.to_vec()), "essai.pdf", 0).unwrap();
+        let mot = mots
+            .into_iter()
+            .find(|m| m.texte == ancien)
+            .expect("le mot à corriger");
+        let annotation = Annotation::Correction {
+            page: 0,
+            zone: Zone {
+                x: mot.x,
+                y: mot.y,
+                largeur: mot.longueur,
+                hauteur: mot.taille,
+            },
+            x: mot.x,
+            fin: mot.x + mot.longueur,
+            ligne: mot.y + 0.8 * mot.taille,
+            texte: texte.into(),
+            taille: mot.taille,
+            famille: mot.famille.clone(),
+            gras: mot.gras,
+            italique: mot.italique,
+            couleur: mot.couleur,
+            droite,
+        };
+        (mot, annotation)
+    }
+
+    #[test]
+    fn corrige_un_mot_a_sa_place_sans_toucher_ses_voisins() {
+        let source = pdf_herite(1, "Total");
+        let (ancien, annotation) = correction(&source, "1", "42", false);
+        let sortie = annote(&source, &[annotation]);
+        let mots = texte::mots(Arc::new(sortie), "essai.pdf", 0).unwrap();
+        let textes: Vec<&str> = mots.iter().map(|m| m.texte.as_str()).collect();
+        assert_eq!(
+            textes,
+            vec!["Total", "42"],
+            "l'ancien mot a disparu du fichier, son voisin reste"
+        );
+        let nouveau = &mots[1];
+        assert!(
+            (nouveau.x - ancien.x).abs() < 0.5 && (nouveau.y - ancien.y).abs() < 0.5,
+            "à la place de l'ancien"
+        );
+        assert!((nouveau.taille - ancien.taille).abs() < 0.1);
+        assert_eq!(nouveau.couleur, ancien.couleur);
+    }
+
+    /// Une ligne de bulletin : « Net à payer » à gauche, le montant « 389 250 » seul plus à droite.
+    fn pdf_montant() -> Vec<u8> {
+        use lopdf::dictionary;
+        let mut document = Document::with_version("1.5");
+        let police = document.add_object(dictionary! {
+            "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica", "Encoding" => "WinAnsiEncoding",
+        });
+        let contenu =
+            "BT /F1 12 Tf 72 700 Td (Net a payer :) Tj ET BT /F1 12 Tf 420 700 Td (389 250) Tj ET";
+        let flux = document.add_object(Stream::new(Dictionary::new(), contenu.as_bytes().to_vec()));
+        let page = document.add_object(dictionary! {
+            "Type" => "Page", "Contents" => flux,
+            "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+            "Resources" => dictionary! { "Font" => dictionary! { "F1" => police } },
+        });
+        let arbre = document.add_object(dictionary! { "Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1 });
+        document
+            .get_dictionary_mut(page)
+            .unwrap()
+            .set("Parent", arbre);
+        let catalogue = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => arbre });
+        document.trailer.set("Root", catalogue);
+        let mut octets = Vec::new();
+        document.save_to(&mut octets).unwrap();
+        octets
+    }
+
+    #[test]
+    fn garde_le_bord_droit_d_un_montant() {
+        let source = pdf_montant();
+        let mots = texte::mots(Arc::new(source.clone()), "essai.pdf", 0).unwrap();
+        let (milliers, unites) = (
+            mots.iter().find(|m| m.texte == "389").unwrap(),
+            mots.iter().find(|m| m.texte == "250").unwrap(),
+        );
+        // Les deux mots du montant, choisis ensemble, deviennent « 1 389 250 », aligné à droite.
+        let bord = unites.x + unites.longueur;
+        let annotation = Annotation::Correction {
+            page: 0,
+            zone: Zone {
+                x: milliers.x,
+                y: milliers.y,
+                largeur: bord - milliers.x,
+                hauteur: milliers.taille,
+            },
+            x: milliers.x,
+            fin: bord,
+            ligne: milliers.y + 0.8 * milliers.taille,
+            texte: "1 389 250".into(),
+            taille: milliers.taille,
+            famille: milliers.famille.clone(),
+            gras: milliers.gras,
+            italique: milliers.italique,
+            couleur: milliers.couleur,
+            droite: true,
+        };
+        let sortie = annote(&source, &[annotation]);
+        let apres = texte::mots(Arc::new(sortie), "essai.pdf", 0).unwrap();
+        let textes: Vec<&str> = apres.iter().map(|m| m.texte.as_str()).collect();
+        assert_eq!(textes, vec!["Net", "a", "payer", ":", "1", "389", "250"]);
+        let dernier = apres.last().unwrap();
+        assert!(
+            (dernier.x + dernier.longueur - bord).abs() < 0.5,
+            "bord droit {} au lieu de {bord}",
+            dernier.x + dernier.longueur
+        );
+    }
+
+    #[test]
+    fn le_correcteur_blanc_retire_et_recouvre() {
+        let source = pdf_herite(1, "Effacer");
+        let mots = texte::mots(Arc::new(source.clone()), "essai.pdf", 0).unwrap();
+        let mot = &mots[0];
+        let zone = Zone {
+            x: mot.x - 2.0,
+            y: mot.y - 2.0,
+            largeur: mot.longueur + 4.0,
+            hauteur: mot.taille + 4.0,
+        };
+        let sortie = annote(&source, &[Annotation::Blanc { page: 0, zone }]);
+        let restants: Vec<String> = texte::mots(Arc::new(sortie.clone()), "essai.pdf", 0)
+            .unwrap()
+            .into_iter()
+            .map(|m| m.texte)
+            .collect();
+        assert_eq!(
+            restants,
+            vec!["1".to_string()],
+            "le mot sous le correcteur a disparu du fichier"
+        );
+        let (x, y) = (
+            (mot.x + mot.longueur / 2.0) as u32,
+            (mot.y + mot.taille / 2.0) as u32,
+        );
+        assert_eq!(pixel(&sortie, 0, (x, y)), [255, 255, 255]);
+    }
+
     #[test]
     fn lit_les_annotations_envoyees_par_l_interface() {
         let json = r#"[
             {"sorte": "surlignage", "page": 0, "teinte": "jaune", "zones": [{"x": 1, "y": 2, "largeur": 3, "hauteur": 4}]},
             {"sorte": "note", "page": 1, "x": 5, "y": 6, "texte": "Vu"},
             {"sorte": "texte", "page": 0, "x": 7, "y": 8, "texte": "Payé", "taille": 12, "teinte": "marine"},
-            {"sorte": "image", "page": 2, "zone": {"x": 1, "y": 1, "largeur": 9, "hauteur": 9}, "chemin": "C:\\cachet.png"}
+            {"sorte": "image", "page": 2, "zone": {"x": 1, "y": 1, "largeur": 9, "hauteur": 9}, "chemin": "C:\\cachet.png"},
+            {"sorte": "correction", "page": 3, "zone": {"x": 1, "y": 1, "largeur": 9, "hauteur": 9}, "x": 1, "fin": 10, "ligne": 8, "texte": "12", "taille": 9, "famille": "Times New Roman", "gras": false, "italique": false, "couleur": [0, 0, 0], "droite": true},
+            {"sorte": "blanc", "page": 4, "zone": {"x": 1, "y": 1, "largeur": 9, "hauteur": 9}}
         ]"#;
         let lues: Vec<Annotation> = serde_json::from_str(json).unwrap();
         assert_eq!(
             lues.iter().map(Annotation::page).collect::<Vec<_>>(),
-            vec![0, 1, 0, 2]
+            vec![0, 1, 0, 2, 3, 4]
         );
         assert_eq!(
             lues[2],

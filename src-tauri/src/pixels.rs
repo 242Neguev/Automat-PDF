@@ -105,8 +105,9 @@ impl Pixels {
         })
     }
 
-    /// Noircit les pixels couverts par les zones ; l'image est dessinée par `ctm` (carré unité).
-    pub fn noircir(&mut self, ctm: Matrice, zones: &[Rect]) {
+    /// Peint en noir (caviardage) ou en blanc (correcteur) les pixels couverts par les zones ;
+    /// l'image est dessinée par `ctm` (carré unité).
+    pub fn couvrir(&mut self, ctm: Matrice, zones: &[Rect], blanc: bool) {
         let inverse = ctm.inverse();
         for zone in zones {
             let [u0, v0, u1, v1] = boite(
@@ -130,10 +131,15 @@ impl Pixels {
                 for colonne in colonnes.clone() {
                     let debut = (ligne * self.largeur + colonne) * self.composantes;
                     let pixel = &mut self.pixels[debut..debut + self.composantes];
+                    // Quatre composantes : CMJN, où le noir est K à fond et le blanc, rien.
                     if self.composantes == 4 {
-                        pixel.copy_from_slice(&[0, 0, 0, 255]);
+                        pixel.copy_from_slice(if blanc {
+                            &[0, 0, 0, 0]
+                        } else {
+                            &[0, 0, 0, 255]
+                        });
                     } else {
-                        pixel.fill(0);
+                        pixel.fill(if blanc { 255 } else { 0 });
                     }
                 }
             }

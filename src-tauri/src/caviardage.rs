@@ -56,7 +56,20 @@ pub struct Rapport {
 }
 
 /// Rectangle dans le repère de la page : x0, y0, x1, y1.
-type Rect = [f64; 4];
+pub(crate) type Rect = [f64; 4];
+
+/// Ce que `nettoyer_page` retire sous les zones, et ce qu'elle y pose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Nettoyage {
+    /// Caviardage : tout ce qui est dessous (caractères, dessins couverts, pixels des images,
+    /// annotations), puis des zones noires.
+    Noir,
+    /// Correcteur blanc de l'éditeur : la même chose, sous des zones blanches.
+    Blanc,
+    /// Correction d'un mot dans l'éditeur : seulement les caractères ; dessins, images, fond et
+    /// annotations restent.
+    Texte,
+}
 
 /// Résolution des pages remplacées par leur image.
 const RESOLUTION: u32 = 200;
@@ -372,9 +385,15 @@ fn afficher(
     Affichage::Remplace(nouveaux)
 }
 
-/// Nettoie une page : retire ce qui est sous les zones, puis les noircit. `None` si c'est
-/// impossible (la page n'a alors pas été modifiée).
-fn nettoyer_page(document: &mut Document, page: ObjectId, zones: &[Rect]) -> Option<()> {
+/// Nettoie une page : retire ce qui est sous les zones, puis les noircit (ou les blanchit, ou les
+/// laisse : voir `Nettoyage`). `None` si c'est impossible (la page n'a alors pas été modifiée).
+pub(crate) fn nettoyer_page(
+    document: &mut Document,
+    page: ObjectId,
+    zones: &[Rect],
+    nettoyage: Nettoyage,
+) -> Option<()> {
+    let tout = nettoyage != Nettoyage::Texte;
     let page_dict = document.get_dictionary(page).ok()?.clone();
     let mut ressources = dictionnaire(document, &page_dict, b"Resources")
         .cloned()
@@ -478,14 +497,18 @@ fn nettoyer_page(document: &mut Document, page: ObjectId, zones: &[Rect]) -> Opt
                     && let Ok(flux) = resoudre(document, reference).as_stream()
                 {
                     match flux.dict.get(b"Subtype").and_then(Object::as_name).ok() {
-                        Some(b"Image") => {
+                        Some(b"Image") if tout => {
                             let cadre =
                                 boite(etat.ctm, &[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]);
                             if zones.iter().any(|zone| intersecte(zone, &cadre)) {
                                 if !images.contains_key(&nom) {
                                     images.insert(nom.clone(), Pixels::de(document, flux)?);
                                 }
-                                images.get_mut(&nom)?.noircir(etat.ctm, zones);
+                                images.get_mut(&nom)?.couvrir(
+                                    etat.ctm,
+                                    zones,
+                                    nettoyage == Nettoyage::Blanc,
+                                );
                             }
                         }
                         Some(b"Form") => {
@@ -519,7 +542,7 @@ fn nettoyer_page(document: &mut Document, page: ObjectId, zones: &[Rect]) -> Opt
                     }
                 }
             }
-            "BI" => {
+            "BI" if tout => {
                 let cadre = boite(etat.ctm, &[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]);
                 if zones.iter().any(|zone| intersecte(zone, &cadre)) {
                     return None;
@@ -542,7 +565,7 @@ fn nettoyer_page(document: &mut Document, page: ObjectId, zones: &[Rect]) -> Opt
             "S" | "s" | "f" | "F" | "f*" | "B" | "B*" | "b" | "b*" => {
                 let etendue = boite(Matrice::IDENTITE, &chemin);
                 let couvert =
-                    !chemin.is_empty() && zones.iter().any(|zone| contient(zone, &etendue));
+                    tout && !chemin.is_empty() && zones.iter().any(|zone| contient(zone, &etendue));
                 chemin.clear();
                 if couvert {
                     sortie.push(Operation::new("n", Vec::new()));
@@ -572,10 +595,16 @@ fn nettoyer_page(document: &mut Document, page: ObjectId, zones: &[Rect]) -> Opt
     // Contenu d'origine fermé (ses « q » en trop ne déplacent pas les zones noires), puis les zones.
     sortie.push(Operation::new("Q", Vec::new()));
     let mut contenu = Content { operations: sortie }.encode().ok()?;
-    for zone in zones {
+    let gris = match nettoyage {
+        Nettoyage::Noir => Some(0),
+        Nettoyage::Blanc => Some(1),
+        Nettoyage::Texte => None,
+    };
+    for zone in zones.iter().filter(|_| gris.is_some()) {
         contenu.extend_from_slice(
             format!(
-                "\nq 0 g {:.3} {:.3} {:.3} {:.3} re f Q",
+                "\nq {} g {:.3} {:.3} {:.3} {:.3} re f Q",
+                gris.unwrap_or(0),
                 zone[0],
                 zone[1],
                 zone[2] - zone[0],
@@ -604,7 +633,9 @@ fn nettoyer_page(document: &mut Document, page: ObjectId, zones: &[Rect]) -> Opt
                         .ok()
                         .and_then(|a| a.get(b"Rect").ok())
                         .and_then(|r| crate::geometrie::rectangle(document, r));
-                    cadre.is_none_or(|cadre| !zones.iter().any(|zone| intersecte(zone, &cadre)))
+                    !tout
+                        || cadre
+                            .is_none_or(|cadre| !zones.iter().any(|zone| intersecte(zone, &cadre)))
                 })
                 .cloned()
                 .collect()
@@ -706,8 +737,8 @@ pub fn caviarder(
             Erreur::simple(format!("La page {} n'a pas pu être lue.", choix.page + 1))
         })?;
         let zones = zones_page(&Cadre::de_page(&document, page_dict), &choix.zones);
-        let nettoyee =
-            mode == ModeCaviardage::Texte && nettoyer_page(&mut document, page, &zones).is_some();
+        let nettoyee = mode == ModeCaviardage::Texte
+            && nettoyer_page(&mut document, page, &zones, Nettoyage::Noir).is_some();
         if !nettoyee {
             let rendu = rendu::pixels_page(octets.clone(), nom, choix.page, RESOLUTION)?;
             page_en_image(&mut document, page, rendu, &choix.zones)?;
