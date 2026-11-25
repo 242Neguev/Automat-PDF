@@ -5,6 +5,8 @@
 export type Teinte = "jaune" | "vert" | "rose" | "bleu" | "noir" | "rouge" | "marine";
 export const TEINTES_SURLIGNEUR: Teinte[] = ["jaune", "vert", "rose", "bleu"];
 export const TEINTES_TEXTE: Teinte[] = ["noir", "marine", "rouge"];
+/** Couleurs des traits : soulignement, rature, formes, dessin. */
+export const TEINTES_TRAIT: Teinte[] = ["rouge", "marine", "noir"];
 
 /** Les mêmes couleurs que le cœur (annotations.rs), pour l'aperçu. */
 export const RVB: Record<Teinte, [number, number, number]> = {
@@ -25,6 +27,25 @@ export interface Point {
   x: number;
   y: number;
 }
+
+export type Forme = "rectangle" | "ellipse" | "ligne" | "fleche";
+
+export type MotTampon = "approuve" | "paye" | "recu" | "vu" | "copie" | "confidentiel" | "annule" | "urgent";
+
+/** Les tampons prêts : leur mot et leur encre, les mêmes que le cœur (annotations.rs, MotTampon). */
+export const TAMPONS: Record<MotTampon, { texte: string; rvb: [number, number, number] }> = {
+  approuve: { texte: "APPROUVÉ", rvb: [23, 122, 64] },
+  paye: { texte: "PAYÉ", rvb: [26, 61, 140] },
+  recu: { texte: "REÇU", rvb: [26, 61, 140] },
+  vu: { texte: "VU", rvb: [26, 61, 140] },
+  copie: { texte: "COPIE", rvb: [84, 89, 97] },
+  confidentiel: { texte: "CONFIDENTIEL", rvb: [199, 31, 31] },
+  annule: { texte: "ANNULÉ", rvb: [199, 31, 31] },
+  urgent: { texte: "URGENT", rvb: [199, 31, 31] },
+};
+
+/** Longueur des branches d'une flèche, selon l'épaisseur du trait (comme le cœur). */
+export const branche = (epaisseur: number) => Math.min(epaisseur * 3 + 6, 40);
 
 export interface Zone {
   x: number;
@@ -53,7 +74,8 @@ export interface MotComplet extends MotPlace {
 }
 
 export type Annotation =
-  | { id: string; sorte: "surlignage"; page: number; teinte: Teinte; zones: Zone[] }
+  /** `extrait` : le texte surligné, gardé dans le commentaire du PDF (absent pour un cadre tracé). */
+  | { id: string; sorte: "surlignage"; page: number; teinte: Teinte; zones: Zone[]; extrait?: string }
   | { id: string; sorte: "note"; page: number; x: number; y: number; texte: string }
   | { id: string; sorte: "texte"; page: number; x: number; y: number; texte: string; taille: number; teinte: Teinte }
   | { id: string; sorte: "image"; page: number; zone: Zone; chemin: string }
@@ -77,13 +99,26 @@ export type Annotation =
       /** Garder le bord droit (montant dans une colonne). */
       droite: boolean;
     }
-  | { id: string; sorte: "blanc"; page: number; zone: Zone };
+  | { id: string; sorte: "blanc"; page: number; zone: Zone }
+  | { id: string; sorte: "soulignage"; page: number; teinte: Teinte; zones: Zone[]; extrait?: string }
+  | { id: string; sorte: "barre"; page: number; teinte: Teinte; zones: Zone[]; extrait?: string }
+  /** Rectangle ou ellipse entre deux coins opposés ; ligne ou flèche de `debut` à `fin`. */
+  | { id: string; sorte: "forme"; page: number; forme: Forme; debut: Point; fin: Point; teinte: Teinte; epaisseur: number }
+  /** Un trait à main levée. */
+  | { id: string; sorte: "dessin"; page: number; points: Point[]; teinte: Teinte; epaisseur: number }
+  | { id: string; sorte: "tampon"; page: number; zone: Zone; mot: MotTampon; date: string | null };
 
 /** Ce que le cœur reçoit : les annotations sans leur identifiant (ni l'ancien texte d'une
  * correction), en laissant de côté les vides. Une correction vide efface le mot. */
 export function pourLeCoeur(annotations: Annotation[]) {
   return annotations
-    .filter((a) => (a.sorte === "texte" ? a.texte.trim() !== "" : a.sorte === "surlignage" ? a.zones.length > 0 : true))
+    .filter((a) => {
+      if (a.sorte === "texte") return a.texte.trim() !== "";
+      if (a.sorte === "surlignage" || a.sorte === "soulignage" || a.sorte === "barre") return a.zones.length > 0;
+      if (a.sorte === "dessin") return a.points.length >= 2;
+      if (a.sorte === "forme") return Math.hypot(a.fin.x - a.debut.x, a.fin.y - a.debut.y) >= 1;
+      return true;
+    })
     .map((annotation) => {
       if (annotation.sorte === "correction") {
         const { id: _id, ancien: _ancien, ...reste } = annotation;
@@ -154,19 +189,32 @@ export function motProche(mots: MotPlace[], point: Point, portee: number): numbe
   return meilleur;
 }
 
+/** Premier et dernier mots parcourus en glissant de `debut` à `fin`, si le geste part d'un mot. */
+function motsParcourus(mots: MotPlace[], debut: Point, fin: Point, portee: number): [number, number] | null {
+  const premier = motProche(mots, debut, portee);
+  if (premier === null) return null;
+  const dernier = motProche(mots, fin, Number.POSITIVE_INFINITY) ?? premier;
+  return premier <= dernier ? [premier, dernier] : [dernier, premier];
+}
+
+/** Le texte surligné (souligné, barré) en glissant de `debut` à `fin` ; vide pour un cadre tracé. */
+export function extraitSurligne(mots: MotComplet[], debut: Point, fin: Point, portee = 12): string {
+  const bornes = motsParcourus(mots, debut, fin, portee);
+  return bornes ? mots.slice(bornes[0], bornes[1] + 1).map((mot) => mot.texte).join(" ") : "";
+}
+
 /**
  * Zones à surligner quand on glisse de `debut` à `fin` : si le geste part d'un mot, les mots
  * parcourus dans l'ordre de lecture, une zone par ligne ; sinon le cadre tracé (page numérisée,
  * dessin, tableau).
  */
 export function zonesSurlignees(mots: MotPlace[], debut: Point, fin: Point, portee = 12): Zone[] {
-  const premier = motProche(mots, debut, portee);
-  if (premier === null) {
+  const bornes = motsParcourus(mots, debut, fin, portee);
+  if (!bornes) {
     const cadre = zoneEntre(debut, fin);
     return cadre.largeur > 2 && cadre.hauteur > 2 ? [cadre] : [];
   }
-  const dernier = motProche(mots, fin, Number.POSITIVE_INFINITY) ?? premier;
-  const [a, b] = premier <= dernier ? [premier, dernier] : [dernier, premier];
+  const [a, b] = bornes;
   const zones: Zone[] = [];
   let ligne: MotPlace[] = [];
   const fermer = () => {
@@ -257,4 +305,62 @@ export function nomAnnote(nom: string): string {
 export function sans(annotations: Annotation[], effacees: Iterable<string>): Annotation[] {
   const ids = new Set(effacees);
   return ids.size === 0 ? annotations : annotations.filter((a) => !ids.has(a.id));
+}
+
+/** Zone d'un tampon posé d'un clic, centrée sur le point : assez large pour son mot. */
+export function zoneTampon(mot: MotTampon, centre: Point): Zone {
+  const hauteur = 54;
+  const largeur = Math.max(110, TAMPONS[mot].texte.length * 17 + 40);
+  return { x: centre.x - largeur / 2, y: centre.y - hauteur / 2, largeur, hauteur };
+}
+
+/** Date du jour pour un tampon : « 25/11/2026 ». */
+export function dateDuJour(maintenant = new Date()): string {
+  const deux = (n: number) => String(n).padStart(2, "0");
+  return `${deux(maintenant.getDate())}/${deux(maintenant.getMonth() + 1)}/${maintenant.getFullYear()}`;
+}
+
+/** Le trait prolongé jusqu'au point, s'il s'est assez éloigné du dernier : un dessin plus léger, aussi net. */
+export function prolonger(points: Point[], point: Point, ecart = 0.75): Point[] {
+  const dernier = points[points.length - 1];
+  return !dernier || Math.hypot(point.x - dernier.x, point.y - dernier.y) >= ecart ? [...points, point] : points;
+}
+
+/** Rectangle qui contient l'annotation, en points de la page : pour la retrouver et la montrer. */
+export function zoneDe(annotation: Annotation): Zone {
+  switch (annotation.sorte) {
+    case "surlignage":
+    case "soulignage":
+    case "barre": {
+      const xs = annotation.zones.flatMap((z) => [z.x, z.x + z.largeur]);
+      const ys = annotation.zones.flatMap((z) => [z.y, z.y + z.hauteur]);
+      return zoneEntre({ x: Math.min(...xs), y: Math.min(...ys) }, { x: Math.max(...xs), y: Math.max(...ys) });
+    }
+    case "forme":
+      return zoneEntre(annotation.debut, annotation.fin);
+    case "dessin": {
+      const xs = annotation.points.map((p) => p.x);
+      const ys = annotation.points.map((p) => p.y);
+      return zoneEntre({ x: Math.min(...xs), y: Math.min(...ys) }, { x: Math.max(...xs), y: Math.max(...ys) });
+    }
+    case "image":
+    case "blanc":
+    case "correction":
+    case "tampon":
+      return annotation.zone;
+    case "note":
+      return { x: annotation.x, y: annotation.y, largeur: 20, hauteur: 20 };
+    case "texte":
+      return { x: annotation.x, y: annotation.y, largeur: annotation.taille * 8, hauteur: annotation.taille * INTERLIGNE };
+  }
+}
+
+/** Les annotations dans l'ordre de lecture : page après page, de haut en bas, puis de gauche à droite. */
+export function ordreDeLecture(annotations: Annotation[]): Annotation[] {
+  const places = new Map(annotations.map((a) => [a.id, zoneDe(a)]));
+  return [...annotations].sort((a, b) => {
+    const [za, zb] = [places.get(a.id)!, places.get(b.id)!];
+    // Sur une même ligne (à quelques points près), la plus à gauche d'abord.
+    return a.page - b.page || (Math.abs(za.y - zb.y) > 4 ? za.y - zb.y : za.x - zb.x);
+  });
 }

@@ -9,12 +9,17 @@
 //!   Masquer des passages), puis le nouveau texte est écrit à sa place, dans une police standard
 //!   proche, à la même taille et dans la même couleur.
 //! - Correcteur blanc : tout ce qui est sous la zone est retiré du fichier, puis recouvert de blanc.
+//! - Commentaires (0.6.0) : passages soulignés ou barrés, formes (rectangle, ellipse, ligne, flèche),
+//!   dessin à main levée et tampons prêts (APPROUVÉ, PAYÉ…) deviennent de vraies annotations PDF
+//!   (Underline, StrikeOut, Square, Circle, Line, Ink, Stamp), avec leur apparence, dessinée dans le
+//!   sens de la page affichée.
 //!
 //! Les positions viennent du lecteur : en points de la page affichée (rotation et recadrage
 //! compris), depuis son coin en haut à gauche, comme les mots de `texte::mots`.
 
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream, StringFormat, dictionary};
 use serde::Deserialize;
+use std::f64::consts::FRAC_PI_6;
 
 use crate::caviardage::{self, Nettoyage, Rect};
 use crate::erreur::Erreur;
@@ -75,15 +80,85 @@ impl Teinte {
     }
 }
 
+/// Point de la page affichée, en points, depuis son coin en haut à gauche.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Forme tracée sur la page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Forme {
+    Rectangle,
+    Ellipse,
+    Ligne,
+    Fleche,
+}
+
+/// Mot d'un tampon prêt à poser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MotTampon {
+    Approuve,
+    Paye,
+    Recu,
+    Vu,
+    Copie,
+    Confidentiel,
+    Annule,
+    Urgent,
+}
+
+impl MotTampon {
+    fn texte(self) -> &'static str {
+        match self {
+            MotTampon::Approuve => "APPROUVÉ",
+            MotTampon::Paye => "PAYÉ",
+            MotTampon::Recu => "REÇU",
+            MotTampon::Vu => "VU",
+            MotTampon::Copie => "COPIE",
+            MotTampon::Confidentiel => "CONFIDENTIEL",
+            MotTampon::Annule => "ANNULÉ",
+            MotTampon::Urgent => "URGENT",
+        }
+    }
+
+    /// Encre du tampon : vert pour approuvé ; bleu pour payé, reçu et vu ; gris pour une copie ;
+    /// rouge pour le reste. Les mêmes que le lecteur (`TAMPONS`).
+    fn rvb(self) -> [f64; 3] {
+        match self {
+            MotTampon::Approuve => [0.09, 0.48, 0.25],
+            MotTampon::Paye | MotTampon::Recu | MotTampon::Vu => [0.1, 0.24, 0.55],
+            MotTampon::Copie => [0.33, 0.35, 0.38],
+            MotTampon::Confidentiel | MotTampon::Annule | MotTampon::Urgent => [0.78, 0.12, 0.12],
+        }
+    }
+
+    /// Nom de tampon standard (/Name), pour un lecteur de PDF qui n'afficherait pas l'apparence.
+    fn nom_pdf(self) -> &'static str {
+        match self {
+            MotTampon::Approuve => "Approved",
+            MotTampon::Confidentiel => "Confidential",
+            MotTampon::Annule => "NotApproved",
+            _ => "Final",
+        }
+    }
+}
+
 /// Une annotation du lecteur ; `page` compte à partir de 0.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "sorte", rename_all = "lowercase")]
 pub enum Annotation {
-    /// Passages surlignés : une zone par ligne.
+    /// Passages surlignés : une zone par ligne ; `extrait` : le texte surligné, gardé dans le
+    /// commentaire (comme Acrobat), vide pour un cadre tracé sur une page numérisée.
     Surlignage {
         page: usize,
         teinte: Teinte,
         zones: Vec<Zone>,
+        #[serde(default)]
+        extrait: Option<String>,
     },
     /// Note : une icône à cet endroit, et son texte, qui s'ouvre au clic dans les lecteurs de PDF.
     Note {
@@ -126,6 +201,46 @@ pub enum Annotation {
     },
     /// Correcteur blanc : ce qui est sous la zone est retiré du fichier, puis recouvert de blanc.
     Blanc { page: usize, zone: Zone },
+    /// Passages soulignés : une zone par ligne, et le texte souligné.
+    Soulignage {
+        page: usize,
+        teinte: Teinte,
+        zones: Vec<Zone>,
+        #[serde(default)]
+        extrait: Option<String>,
+    },
+    /// Passages barrés : une zone par ligne, et le texte barré.
+    Barre {
+        page: usize,
+        teinte: Teinte,
+        zones: Vec<Zone>,
+        #[serde(default)]
+        extrait: Option<String>,
+    },
+    /// Forme tracée de `debut` à `fin` : deux coins opposés, ou les deux bouts d'une ligne.
+    Forme {
+        page: usize,
+        forme: Forme,
+        debut: Point,
+        fin: Point,
+        teinte: Teinte,
+        epaisseur: f64,
+    },
+    /// Dessin à main levée : un trait, par les points du geste.
+    Dessin {
+        page: usize,
+        points: Vec<Point>,
+        teinte: Teinte,
+        epaisseur: f64,
+    },
+    /// Tampon prêt (APPROUVÉ, PAYÉ…) dans la zone, avec la date si elle est donnée.
+    Tampon {
+        page: usize,
+        zone: Zone,
+        mot: MotTampon,
+        #[serde(default)]
+        date: Option<String>,
+    },
 }
 
 impl Annotation {
@@ -136,7 +251,12 @@ impl Annotation {
             | Annotation::Texte { page, .. }
             | Annotation::Image { page, .. }
             | Annotation::Correction { page, .. }
-            | Annotation::Blanc { page, .. } => *page,
+            | Annotation::Blanc { page, .. }
+            | Annotation::Soulignage { page, .. }
+            | Annotation::Barre { page, .. }
+            | Annotation::Forme { page, .. }
+            | Annotation::Dessin { page, .. }
+            | Annotation::Tampon { page, .. } => *page,
         }
     }
 }
@@ -220,12 +340,16 @@ fn apparence(
 /// colore en mode « produit » : le texte dessous reste lisible.
 fn surligner(
     document: &mut Document,
-    page: ObjectId,
-    vers_page: Matrice,
-    hauteur: f64,
+    plan: &Plan,
     teinte: Teinte,
     zones: &[Zone],
+    extrait: Option<&str>,
 ) -> Result<(), Erreur> {
+    let Plan {
+        page,
+        vers_page,
+        hauteur,
+    } = *plan;
     let zones: Vec<&Zone> = zones
         .iter()
         .filter(|z| z.largeur > 0.0 && z.hauteur > 0.0)
@@ -262,15 +386,382 @@ fn surligner(
     let etat = dictionary! { "Type" => "ExtGState", "BM" => "Multiply", "ca" => 0.5 };
     let ressources = dictionary! { "ExtGState" => dictionary! { "Surligneur" => etat } };
     let vue = apparence(document, rectangle, ressources, trace);
+    let mut annotation = dictionary! {
+        "Type" => "Annot",
+        "Subtype" => "Highlight",
+        "Rect" => nombres(rectangle),
+        "QuadPoints" => nombres(quadrilateres),
+        "C" => nombres(teinte.rvb()),
+        "F" => 4,
+        "AP" => vue,
+    };
+    garder_extrait(&mut annotation, extrait);
+    rattacher(document, page, annotation)
+}
+
+/// Le texte surligné, souligné ou barré, en contenu du commentaire : les lecteurs de PDF le
+/// montrent dans leur liste des commentaires.
+fn garder_extrait(annotation: &mut Dictionary, extrait: Option<&str>) {
+    if let Some(extrait) = extrait.map(str::trim).filter(|e| !e.is_empty()) {
+        annotation.set("Contents", texte_pdf(extrait));
+    }
+}
+
+/// Une page où écrire une annotation : son objet, le passage de la page affichée (axe vertical vers
+/// le haut) au repère de la page, et la hauteur de la page affichée.
+#[derive(Clone, Copy)]
+struct Plan {
+    page: ObjectId,
+    vers_page: Matrice,
+    hauteur: f64,
+}
+
+/// Couleur RVB en opérateur de contenu, de trait ou de remplissage.
+fn encre([r, v, b]: [f64; 3], remplissage: bool) -> String {
+    format!(
+        "{r:.3} {v:.3} {b:.3} {}",
+        if remplissage { "rg" } else { "RG" }
+    )
+}
+
+/// Rectangle de la page affichée (axe vertical vers le haut), dans le repère de la page.
+fn cadre_page(plan: &Plan, [gauche, bas, droite, haut]: [f64; 4]) -> [f64; 4] {
+    boite(
+        plan.vers_page,
+        &[(gauche, bas), (droite, bas), (gauche, haut), (droite, haut)],
+    )
+}
+
+/// Passages soulignés ou barrés : une annotation Underline ou StrikeOut, un quadrilatère par zone,
+/// et son apparence : un trait sous les mots, ou au travers, de l'épaisseur des lettres.
+fn rayer(
+    document: &mut Document,
+    plan: &Plan,
+    teinte: Teinte,
+    zones: &[Zone],
+    barre: bool,
+    extrait: Option<&str>,
+) -> Result<(), Erreur> {
+    let zones: Vec<&Zone> = zones
+        .iter()
+        .filter(|z| z.largeur > 0.0 && z.hauteur > 0.0)
+        .collect();
+    if zones.is_empty() {
+        return Ok(());
+    }
+    let mut quadrilateres = Vec::new();
+    let mut points = Vec::new();
+    let mut trace = format!(
+        "q {} {} 0 J\n",
+        plan.vers_page.operateur(),
+        teinte.operateur(false)
+    );
+    for zone in zones {
+        let (haut, bas) = (plan.hauteur - zone.y, plan.hauteur - zone.y - zone.hauteur);
+        for (x, y) in [
+            (zone.x, haut),
+            (zone.x + zone.largeur, haut),
+            (zone.x, bas),
+            (zone.x + zone.largeur, bas),
+        ] {
+            let (px, py) = plan.vers_page.point(x, y);
+            quadrilateres.extend([px, py]);
+            points.push((px, py));
+        }
+        // Juste sous la ligne de base, ou au milieu des minuscules.
+        let y = plan.hauteur - zone.y - zone.hauteur * if barre { 0.55 } else { 0.9 };
+        let epaisseur = (zone.hauteur * 0.07).max(0.6);
+        trace.push_str(&format!(
+            "{epaisseur:.2} w {:.2} {y:.2} m {:.2} {y:.2} l S\n",
+            zone.x,
+            zone.x + zone.largeur
+        ));
+    }
+    trace.push_str("Q\n");
+    let rectangle = boite(Matrice::IDENTITE, &points);
+    let vue = apparence(document, rectangle, Dictionary::new(), trace);
+    let mut annotation = dictionary! {
+        "Type" => "Annot",
+        "Subtype" => if barre { "StrikeOut" } else { "Underline" },
+        "Rect" => nombres(rectangle),
+        "QuadPoints" => nombres(quadrilateres),
+        "C" => nombres(teinte.rvb()),
+        "F" => 4,
+        "AP" => vue,
+    };
+    garder_extrait(&mut annotation, extrait);
+    rattacher(document, plan.page, annotation)
+}
+
+/// Longueur des branches d'une flèche, selon l'épaisseur du trait.
+fn branche(epaisseur: f64) -> f64 {
+    (epaisseur * 3.0 + 6.0).min(40.0)
+}
+
+/// Ellipse inscrite dans le rectangle : quatre courbes de Bézier.
+fn ellipse(gauche: f64, bas: f64, droite: f64, haut: f64) -> String {
+    let (cx, cy) = ((gauche + droite) / 2.0, (bas + haut) / 2.0);
+    let (rx, ry) = ((droite - gauche) / 2.0, (haut - bas) / 2.0);
+    let (kx, ky) = (rx * 0.5523, ry * 0.5523);
+    let mut chemin = format!("{:.2} {cy:.2} m\n", cx + rx);
+    for [a, b, c, d, e, f] in [
+        [cx + rx, cy + ky, cx + kx, cy + ry, cx, cy + ry],
+        [cx - kx, cy + ry, cx - rx, cy + ky, cx - rx, cy],
+        [cx - rx, cy - ky, cx - kx, cy - ry, cx, cy - ry],
+        [cx + kx, cy - ry, cx + rx, cy - ky, cx + rx, cy],
+    ] {
+        chemin.push_str(&format!("{a:.2} {b:.2} {c:.2} {d:.2} {e:.2} {f:.2} c\n"));
+    }
+    chemin.push_str("h S\n");
+    chemin
+}
+
+/// Forme tracée : une annotation Square, Circle ou Line (avec une pointe de flèche), et son
+/// apparence.
+fn tracer(
+    document: &mut Document,
+    plan: &Plan,
+    forme: Forme,
+    (debut, fin): (Point, Point),
+    teinte: Teinte,
+    epaisseur: f64,
+) -> Result<(), Erreur> {
+    let w = epaisseur.clamp(0.5, 20.0);
+    let (x0, y0, x1, y1) = (debut.x, plan.hauteur - debut.y, fin.x, plan.hauteur - fin.y);
+    if (x1 - x0).hypot(y1 - y0) < 1.0 {
+        return Ok(());
+    }
+    let (gauche, droite, bas, haut) = (x0.min(x1), x0.max(x1), y0.min(y1), y0.max(y1));
+    let mut dessin = format!(
+        "q {} {} {w:.2} w 1 J 1 j\n",
+        plan.vers_page.operateur(),
+        teinte.operateur(false)
+    );
+    let mut ligne = None;
+    let sous_type = match forme {
+        Forme::Rectangle => {
+            dessin.push_str(&format!(
+                "{gauche:.2} {bas:.2} {:.2} {:.2} re S\n",
+                droite - gauche,
+                haut - bas
+            ));
+            "Square"
+        }
+        Forme::Ellipse => {
+            dessin.push_str(&ellipse(gauche, bas, droite, haut));
+            "Circle"
+        }
+        Forme::Ligne | Forme::Fleche => {
+            dessin.push_str(&format!("{x0:.2} {y0:.2} m {x1:.2} {y1:.2} l S\n"));
+            if forme == Forme::Fleche {
+                // Deux branches à 30° de part et d'autre de la ligne, au bout.
+                let retour = (y0 - y1).atan2(x0 - x1);
+                let longueur = branche(w);
+                let bout = |ecart: f64| {
+                    (
+                        x1 + longueur * (retour + ecart).cos(),
+                        y1 + longueur * (retour + ecart).sin(),
+                    )
+                };
+                let ((ax, ay), (bx, by)) = (bout(-FRAC_PI_6), bout(FRAC_PI_6));
+                dessin.push_str(&format!(
+                    "{ax:.2} {ay:.2} m {x1:.2} {y1:.2} l {bx:.2} {by:.2} l S\n"
+                ));
+            }
+            ligne = Some((plan.vers_page.point(x0, y0), plan.vers_page.point(x1, y1)));
+            "Line"
+        }
+    };
+    dessin.push_str("Q\n");
+    let marge = w + if forme == Forme::Fleche {
+        branche(w)
+    } else {
+        0.0
+    };
+    let rectangle = cadre_page(
+        plan,
+        [gauche - marge, bas - marge, droite + marge, haut + marge],
+    );
+    let vue = apparence(document, rectangle, Dictionary::new(), dessin);
+    let mut annotation = dictionary! {
+        "Type" => "Annot",
+        "Subtype" => sous_type,
+        "Rect" => nombres(rectangle),
+        "C" => nombres(teinte.rvb()),
+        "BS" => dictionary! { "W" => Object::Real(w as f32) },
+        "F" => 4,
+        "AP" => vue,
+    };
+    if let Some(((ax, ay), (bx, by))) = ligne {
+        annotation.set("L", nombres([ax, ay, bx, by]));
+        let pointe = if forme == Forme::Fleche {
+            "OpenArrow"
+        } else {
+            "None"
+        };
+        annotation.set(
+            "LE",
+            Object::Array(vec![
+                Object::Name(b"None".to_vec()),
+                Object::Name(pointe.as_bytes().to_vec()),
+            ]),
+        );
+    }
+    rattacher(document, plan.page, annotation)
+}
+
+/// Points d'un dessin gardés au plus (un geste de plusieurs secondes en donne quelques centaines).
+const POINTS_MAX: usize = 4000;
+
+/// Dessin à main levée : une annotation Ink, par les points du geste, et son apparence.
+fn dessiner(
+    document: &mut Document,
+    plan: &Plan,
+    points: &[Point],
+    teinte: Teinte,
+    epaisseur: f64,
+) -> Result<(), Erreur> {
+    let points: Vec<(f64, f64)> = points
+        .iter()
+        .take(POINTS_MAX)
+        .map(|p| (p.x, plan.hauteur - p.y))
+        .collect();
+    if points.len() < 2 {
+        return Ok(());
+    }
+    let w = epaisseur.clamp(0.5, 20.0);
+    let mut dessin = format!(
+        "q {} {} {w:.2} w 1 J 1 j\n{:.2} {:.2} m\n",
+        plan.vers_page.operateur(),
+        teinte.operateur(false),
+        points[0].0,
+        points[0].1
+    );
+    for (x, y) in &points[1..] {
+        dessin.push_str(&format!("{x:.2} {y:.2} l\n"));
+    }
+    dessin.push_str("S Q\n");
+    let [gauche, bas, droite, haut] = boite(Matrice::IDENTITE, &points);
+    let rectangle = cadre_page(plan, [gauche - w, bas - w, droite + w, haut + w]);
+    let trait_page: Vec<f64> = points
+        .iter()
+        .flat_map(|&(x, y)| {
+            let (px, py) = plan.vers_page.point(x, y);
+            [px, py]
+        })
+        .collect();
+    let vue = apparence(document, rectangle, Dictionary::new(), dessin);
     rattacher(
         document,
-        page,
+        plan.page,
         dictionary! {
             "Type" => "Annot",
-            "Subtype" => "Highlight",
+            "Subtype" => "Ink",
             "Rect" => nombres(rectangle),
-            "QuadPoints" => nombres(quadrilateres),
+            "InkList" => Object::Array(vec![nombres(trait_page)]),
             "C" => nombres(teinte.rvb()),
+            "BS" => dictionary! { "W" => Object::Real(w as f32) },
+            "F" => 4,
+            "AP" => vue,
+        },
+    )
+}
+
+/// Rectangle aux coins arrondis, tracé (pas rempli).
+fn rectangle_arrondi(x: f64, y: f64, l: f64, h: f64, r: f64) -> String {
+    let r = r.min(l / 2.0).min(h / 2.0);
+    let k = r * 0.5523;
+    format!(
+        "{a:.2} {y:.2} m {b:.2} {y:.2} l {c1:.2} {y:.2} {d:.2} {e1:.2} {d:.2} {e:.2} c \
+         {d:.2} {f:.2} l {d:.2} {f1:.2} {c1:.2} {g:.2} {b:.2} {g:.2} c \
+         {a:.2} {g:.2} l {a1:.2} {g:.2} {x:.2} {f1:.2} {x:.2} {f:.2} c \
+         {x:.2} {e:.2} l {x:.2} {e1:.2} {a1:.2} {y:.2} {a:.2} {y:.2} c h S\n",
+        a = x + r,
+        a1 = x + r - k,
+        b = x + l - r,
+        c1 = x + l - r + k,
+        d = x + l,
+        e = y + r,
+        e1 = y + r - k,
+        f = y + h - r,
+        f1 = y + h - r + k,
+        g = y + h,
+    )
+}
+
+/// Tampon prêt : une annotation Stamp. Son apparence : un cadre aux coins arrondis, le mot en
+/// capitales grasses et, dessous, la date ; à l'encre de son mot.
+fn tamponner(
+    document: &mut Document,
+    plan: &Plan,
+    zone: &Zone,
+    mot: MotTampon,
+    date: Option<&str>,
+) -> Result<(), Erreur> {
+    let (l, h) = (zone.largeur, zone.hauteur);
+    if l < 8.0 || h < 6.0 {
+        return Ok(());
+    }
+    // Coin bas gauche, dans la page affichée (axe vertical vers le haut).
+    let (x, y) = (zone.x, plan.hauteur - zone.y - h);
+    let texte = mot.texte();
+    let date = date.map(str::trim).filter(|d| !d.is_empty());
+    let couleur = mot.rvb();
+    let bord = (h * 0.06).clamp(0.8, 4.0);
+    let utile = l - 2.0 * bord - 0.24 * h;
+    let taille = (h * if date.is_some() { 0.42 } else { 0.56 })
+        .min(utile / police::largeur(texte, true, 1.0).max(0.001));
+    let base = if date.is_some() {
+        y + h * 0.42
+    } else {
+        y + (h - 0.72 * taille) / 2.0
+    };
+    let mut dessin = format!(
+        "q {} {} {} {bord:.2} w\n",
+        plan.vers_page.operateur(),
+        encre(couleur, false),
+        encre(couleur, true)
+    );
+    dessin.push_str(&rectangle_arrondi(
+        x + bord / 2.0,
+        y + bord / 2.0,
+        l - bord,
+        h - bord,
+        h.min(l) * 0.14,
+    ));
+    dessin.push_str(&format!(
+        "BT /F1 {taille:.2} Tf {:.2} {base:.2} Td {} Tj ET\n",
+        x + (l - police::largeur(texte, true, taille)) / 2.0,
+        police::chaine(texte)
+    ));
+    if let Some(date) = date {
+        let petite = (h * 0.2).min(utile / police::largeur(date, true, 1.0).max(0.001));
+        dessin.push_str(&format!(
+            "BT /F1 {petite:.2} Tf {:.2} {:.2} Td {} Tj ET\n",
+            x + (l - police::largeur(date, true, petite)) / 2.0,
+            y + h * 0.15,
+            police::chaine(date)
+        ));
+    }
+    dessin.push_str("Q\n");
+    let rectangle = cadre_page(plan, [x, y, x + l, y + h]);
+    let ressources =
+        dictionary! { "Font" => dictionary! { "F1" => Object::Dictionary(police::police(true)) } };
+    let vue = apparence(document, rectangle, ressources, dessin);
+    let contenu = match date {
+        Some(date) => format!("{texte} {date}"),
+        None => texte.to_string(),
+    };
+    rattacher(
+        document,
+        plan.page,
+        dictionary! {
+            "Type" => "Annot",
+            "Subtype" => "Stamp",
+            "Name" => mot.nom_pdf(),
+            "Rect" => nombres(rectangle),
+            "Contents" => texte_pdf(&contenu),
+            "C" => nombres(couleur),
             "F" => 4,
             "AP" => vue,
         },
@@ -521,6 +1012,14 @@ fn corriger(document: &mut Document, annotations: &[Annotation]) -> Result<(), E
     Ok(())
 }
 
+fn plan(page: ObjectId, vers_page: Matrice, hauteur: f64) -> Plan {
+    Plan {
+        page,
+        vers_page,
+        hauteur,
+    }
+}
+
 /// Écrit les annotations dans le document. `image` lit et prépare une image d'après son chemin.
 pub(crate) fn annoter(
     document: &mut Document,
@@ -552,9 +1051,18 @@ pub(crate) fn annoter(
         let (largeur, hauteur) = cadre.taille_vue();
         let vers_page = cadre.depuis_vue();
         match annotation {
-            Annotation::Surlignage { teinte, zones, .. } => {
-                surligner(document, page, vers_page, hauteur, *teinte, zones)?
-            }
+            Annotation::Surlignage {
+                teinte,
+                zones,
+                extrait,
+                ..
+            } => surligner(
+                document,
+                &plan(page, vers_page, hauteur),
+                *teinte,
+                zones,
+                extrait.as_deref(),
+            )?,
             Annotation::Note { x, y, texte, .. } => {
                 noter(document, page, vers_page, hauteur, (*x, *y), texte)?
             }
@@ -575,6 +1083,68 @@ pub(crate) fn annoter(
                 };
                 marques::apposer(document, image(chemin)?, placement, &[index])?;
             }
+            Annotation::Soulignage {
+                teinte,
+                zones,
+                extrait,
+                ..
+            } => rayer(
+                document,
+                &plan(page, vers_page, hauteur),
+                *teinte,
+                zones,
+                false,
+                extrait.as_deref(),
+            )?,
+            Annotation::Barre {
+                teinte,
+                zones,
+                extrait,
+                ..
+            } => rayer(
+                document,
+                &plan(page, vers_page, hauteur),
+                *teinte,
+                zones,
+                true,
+                extrait.as_deref(),
+            )?,
+            Annotation::Forme {
+                forme,
+                debut,
+                fin,
+                teinte,
+                epaisseur,
+                ..
+            } => tracer(
+                document,
+                &plan(page, vers_page, hauteur),
+                *forme,
+                (*debut, *fin),
+                *teinte,
+                *epaisseur,
+            )?,
+            Annotation::Dessin {
+                points,
+                teinte,
+                epaisseur,
+                ..
+            } => dessiner(
+                document,
+                &plan(page, vers_page, hauteur),
+                points,
+                *teinte,
+                *epaisseur,
+            )?,
+            Annotation::Tampon {
+                zone, mot, date, ..
+            } => tamponner(
+                document,
+                &plan(page, vers_page, hauteur),
+                zone,
+                *mot,
+                date.as_deref(),
+            )?,
             // Déjà faits, avant le reste.
             Annotation::Correction { .. } | Annotation::Blanc { .. } => {}
         }
@@ -658,6 +1228,7 @@ mod tests {
                 page: 0,
                 teinte: Teinte::Jaune,
                 zones: vec![zone],
+                extrait: None,
             }],
         );
         let annotations = annotations_de(&sortie, 0);
@@ -672,6 +1243,10 @@ mod tests {
             .as_array()
             .unwrap();
         assert_eq!(quadrilateres.len(), 8, "un quadrilatère par zone");
+        assert!(
+            !annotations[0].has(b"Contents"),
+            "un cadre tracé n'a pas de texte"
+        );
         // Haut gauche de la zone : (300, 842 − 300) sur la page, qui n'est pas tournée.
         let premier: Vec<f32> = quadrilateres[..2]
             .iter()
@@ -705,6 +1280,7 @@ mod tests {
                     largeur: 100.0,
                     hauteur: 30.0,
                 }],
+                extrait: None,
             }],
         );
         let (largeur, hauteur, _) =
@@ -1005,18 +1581,45 @@ mod tests {
     #[test]
     fn lit_les_annotations_envoyees_par_l_interface() {
         let json = r#"[
-            {"sorte": "surlignage", "page": 0, "teinte": "jaune", "zones": [{"x": 1, "y": 2, "largeur": 3, "hauteur": 4}]},
+            {"sorte": "surlignage", "page": 0, "teinte": "jaune", "zones": [{"x": 1, "y": 2, "largeur": 3, "hauteur": 4}], "extrait": "le total"},
             {"sorte": "note", "page": 1, "x": 5, "y": 6, "texte": "Vu"},
             {"sorte": "texte", "page": 0, "x": 7, "y": 8, "texte": "Payé", "taille": 12, "teinte": "marine"},
             {"sorte": "image", "page": 2, "zone": {"x": 1, "y": 1, "largeur": 9, "hauteur": 9}, "chemin": "C:\\cachet.png"},
             {"sorte": "correction", "page": 3, "zone": {"x": 1, "y": 1, "largeur": 9, "hauteur": 9}, "x": 1, "fin": 10, "ligne": 8, "texte": "12", "taille": 9, "famille": "Times New Roman", "gras": false, "italique": false, "couleur": [0, 0, 0], "droite": true},
-            {"sorte": "blanc", "page": 4, "zone": {"x": 1, "y": 1, "largeur": 9, "hauteur": 9}}
+            {"sorte": "blanc", "page": 4, "zone": {"x": 1, "y": 1, "largeur": 9, "hauteur": 9}},
+            {"sorte": "soulignage", "page": 5, "teinte": "rouge", "zones": [{"x": 1, "y": 2, "largeur": 3, "hauteur": 4}]},
+            {"sorte": "barre", "page": 5, "teinte": "noir", "zones": [{"x": 1, "y": 2, "largeur": 3, "hauteur": 4}]},
+            {"sorte": "forme", "page": 6, "forme": "fleche", "debut": {"x": 1, "y": 2}, "fin": {"x": 30, "y": 40}, "teinte": "marine", "epaisseur": 2},
+            {"sorte": "dessin", "page": 6, "points": [{"x": 1, "y": 2}, {"x": 3, "y": 4}], "teinte": "rouge", "epaisseur": 1},
+            {"sorte": "tampon", "page": 7, "zone": {"x": 1, "y": 1, "largeur": 110, "hauteur": 54}, "mot": "confidentiel", "date": null},
+            {"sorte": "tampon", "page": 7, "zone": {"x": 1, "y": 1, "largeur": 110, "hauteur": 54}, "mot": "paye", "date": "25/11/2026"}
         ]"#;
         let lues: Vec<Annotation> = serde_json::from_str(json).unwrap();
         assert_eq!(
             lues.iter().map(Annotation::page).collect::<Vec<_>>(),
-            vec![0, 1, 0, 2, 3, 4]
+            vec![0, 1, 0, 2, 3, 4, 5, 5, 6, 6, 7, 7]
         );
+        assert_eq!(
+            lues[8],
+            Annotation::Forme {
+                page: 6,
+                forme: Forme::Fleche,
+                debut: Point { x: 1.0, y: 2.0 },
+                fin: Point { x: 30.0, y: 40.0 },
+                teinte: Teinte::Marine,
+                epaisseur: 2.0
+            }
+        );
+        assert!(
+            matches!(&lues[11], Annotation::Tampon { mot: MotTampon::Paye, date: Some(date), .. } if date == "25/11/2026")
+        );
+        assert!(
+            matches!(&lues[0], Annotation::Surlignage { extrait: Some(extrait), .. } if extrait == "le total")
+        );
+        assert!(matches!(
+            &lues[6],
+            Annotation::Soulignage { extrait: None, .. }
+        ));
         assert_eq!(
             lues[2],
             Annotation::Texte {
@@ -1028,5 +1631,165 @@ mod tests {
                 teinte: Teinte::Marine
             }
         );
+    }
+
+    fn sous_types(octets: &[u8], page: usize) -> Vec<String> {
+        annotations_de(octets, page)
+            .iter()
+            .map(|a| {
+                String::from_utf8_lossy(a.get(b"Subtype").unwrap().as_name().unwrap()).into_owned()
+            })
+            .collect()
+    }
+
+    fn rougeatre([r, v, b]: [u8; 3]) -> bool {
+        r > 140 && v < 120 && b < 120
+    }
+
+    #[test]
+    fn souligne_et_barre_les_mots() {
+        let zone = Zone {
+            x: 300.0,
+            y: 300.0,
+            largeur: 120.0,
+            hauteur: 40.0,
+        };
+        let sortie = annote(
+            &pdf_herite(1, "Bonjour"),
+            &[
+                Annotation::Soulignage {
+                    page: 0,
+                    teinte: Teinte::Rouge,
+                    zones: vec![zone],
+                    extrait: Some("Le délai de paiement".into()),
+                },
+                Annotation::Barre {
+                    page: 0,
+                    teinte: Teinte::Rouge,
+                    zones: vec![zone],
+                    extrait: Some("  ".into()),
+                },
+            ],
+        );
+        assert_eq!(sous_types(&sortie, 0), vec!["Underline", "StrikeOut"]);
+        let annotations = annotations_de(&sortie, 0);
+        // Le texte souligné, dans le commentaire (comme Acrobat) ; rien pour un extrait blanc.
+        assert_eq!(
+            lopdf::decode_text_string(annotations[0].get(b"Contents").unwrap()).unwrap(),
+            "Le délai de paiement"
+        );
+        assert!(!annotations[1].has(b"Contents"));
+        // Le soulignement à 0,9 de la hauteur (y = 336), la rature au milieu des lettres (y = 322).
+        assert!(rougeatre(pixel(&sortie, 0, (360, 336))), "soulignement");
+        assert!(rougeatre(pixel(&sortie, 0, (360, 322))), "rature");
+        assert_eq!(
+            pixel(&sortie, 0, (360, 306)),
+            [255, 255, 255],
+            "au-dessus, rien"
+        );
+    }
+
+    #[test]
+    fn trace_les_formes_et_la_fleche() {
+        let forme = |forme, (x0, y0), (x1, y1)| Annotation::Forme {
+            page: 0,
+            forme,
+            debut: Point { x: x0, y: y0 },
+            fin: Point { x: x1, y: y1 },
+            teinte: Teinte::Rouge,
+            epaisseur: 4.0,
+        };
+        let sortie = annote(
+            &pdf_herite(1, "Formes"),
+            &[
+                forme(Forme::Rectangle, (100.0, 100.0), (200.0, 160.0)),
+                forme(Forme::Ellipse, (300.0, 100.0), (400.0, 160.0)),
+                forme(Forme::Fleche, (100.0, 300.0), (300.0, 300.0)),
+                forme(Forme::Ligne, (100.0, 400.0), (100.4, 400.3)),
+            ],
+        );
+        assert_eq!(
+            sous_types(&sortie, 0),
+            vec!["Square", "Circle", "Line"],
+            "une ligne de moins d'un point n'est pas gardée"
+        );
+        assert!(
+            rougeatre(pixel(&sortie, 0, (100, 130))),
+            "bord gauche du rectangle"
+        );
+        assert_eq!(
+            pixel(&sortie, 0, (150, 130)),
+            [255, 255, 255],
+            "intérieur du rectangle"
+        );
+        assert!(
+            rougeatre(pixel(&sortie, 0, (399, 130))),
+            "bord droit de l'ellipse"
+        );
+        assert_eq!(
+            pixel(&sortie, 0, (350, 130)),
+            [255, 255, 255],
+            "intérieur de l'ellipse"
+        );
+        assert!(rougeatre(pixel(&sortie, 0, (200, 300))), "la flèche");
+        assert!(
+            rougeatre(pixel(&sortie, 0, (292, 296))),
+            "une branche de la pointe"
+        );
+        let fleche = &annotations_de(&sortie, 0)[2];
+        let bouts = fleche.get(b"LE").unwrap().as_array().unwrap();
+        assert_eq!(bouts[1].as_name().unwrap(), b"OpenArrow");
+    }
+
+    #[test]
+    fn dessine_a_main_levee() {
+        let points = [(100.0, 400.0), (150.0, 420.0), (200.0, 400.0)]
+            .map(|(x, y)| Point { x, y })
+            .to_vec();
+        let sortie = annote(
+            &pdf_herite(1, "Dessin"),
+            &[Annotation::Dessin {
+                page: 0,
+                points,
+                teinte: Teinte::Marine,
+                epaisseur: 3.0,
+            }],
+        );
+        assert_eq!(sous_types(&sortie, 0), vec!["Ink"]);
+        let encre = &annotations_de(&sortie, 0)[0];
+        let traits = encre.get(b"InkList").unwrap().as_array().unwrap();
+        assert_eq!(traits[0].as_array().unwrap().len(), 6, "trois points");
+        let [r, _, b] = pixel(&sortie, 0, (150, 420));
+        assert!(b > r + 40, "bleu marine au milieu du trait, vu {r} … {b}");
+    }
+
+    #[test]
+    fn pose_un_tampon_avec_la_date_meme_sur_une_page_tournee() {
+        let zone = Zone {
+            x: 60.0,
+            y: 60.0,
+            largeur: 200.0,
+            hauteur: 70.0,
+        };
+        for source in [pdf_herite(1, "Tampon"), page_tournee()] {
+            let sortie = annote(
+                &source,
+                &[Annotation::Tampon {
+                    page: 0,
+                    zone,
+                    mot: MotTampon::Paye,
+                    date: Some("25/11/2026".into()),
+                }],
+            );
+            assert_eq!(sous_types(&sortie, 0), vec!["Stamp"]);
+            let tampon = &annotations_de(&sortie, 0)[0];
+            let contenu = lopdf::decode_text_string(tampon.get(b"Contents").unwrap()).unwrap();
+            assert_eq!(contenu, "PAYÉ 25/11/2026");
+            // Le cadre, à gauche de la zone affichée, est à l'encre bleue du tampon.
+            let [r, _, b] = pixel(&sortie, 0, (61, 95));
+            assert!(b > 100 && r < 90, "bord bleu attendu, vu {r} … {b}");
+            // Les lettres, au milieu, aussi ; hors de la zone, rien.
+            assert_eq!(pixel(&sortie, 0, (300, 95)), [255, 255, 255]);
+        }
     }
 }

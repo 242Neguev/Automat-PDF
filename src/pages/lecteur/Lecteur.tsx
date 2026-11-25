@@ -31,7 +31,7 @@ import {
   type NavigationPdf,
   type OptionsImpression,
 } from "../../coeur";
-import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, sans, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
+import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, sans, zoneDe, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { motsCouverts, occurrences, type Occurrence } from "../../donnees/recherche-texte";
 import { formaterTaille } from "../../donnees/tailles";
@@ -42,7 +42,8 @@ import Vignette from "../commun/Vignette";
 import { imagePage, relire } from "../commun/vignettes";
 import { signalerErreur } from "../commun/signalerErreur";
 import { ZoneDepot } from "../commun/ZoneFichier";
-import { BarreAnnotations, CoucheAnnotations, type ImageChargee, type OutilAnnotation } from "./Annotations";
+import { BarreAnnotations, CoucheAnnotations, type ImageChargee, type OutilAnnotation, type ReglagesCommentaires } from "./Annotations";
+import ListeCommentaires from "./Commentaires";
 import MotDePasseLecture from "./MotDePasseLecture";
 import ColonneSignets from "./Signets";
 import FenetreImpression from "./Impression";
@@ -136,6 +137,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   const [teinteSurligneur, setTeinteSurligneur] = useState<Teinte>("jaune");
   const [teinteTexte, setTeinteTexte] = useState<Teinte>("noir");
   const [tailleTexte, setTailleTexte] = useState(12);
+  const [reglages, setReglages] = useState<ReglagesCommentaires>({ teinteTrait: "rouge", forme: "rectangle", epaisseur: 2, tampon: "approuve", avecDate: true });
   const [historiques, setHistoriques] = useState<Record<string, Historique>>({});
   const [selection, setSelection] = useState<string | null>(null);
   const [imagesChargees, setImagesChargees] = useState<Record<string, ImageChargee>>({});
@@ -437,6 +439,13 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     changerHistorique((h) => appliquer(h, sans(h.present, ids)));
     setSelection(null);
   }
+  /** Liste des commentaires : mène à celui-ci (son haut au tiers de la zone) et le choisit. */
+  function allerAuCommentaire(annotation: Annotation) {
+    setOutil("selection");
+    setSelection(annotation.id);
+    const tiers = (defilement.current?.clientHeight ?? 0) / 3;
+    allerA(annotation.page, Math.max(0, zoneDe(annotation).y * echelle - tiers));
+  }
   function remonter(sens: "annuler" | "retablir") {
     changerHistorique(sens === "annuler" ? annuler : retablir);
     setSelection(null);
@@ -697,6 +706,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
           onTeinteTexte={setTeinteTexte}
           taille={tailleTexte}
           onTaille={setTailleTexte}
+          reglages={reglages}
+          onReglages={setReglages}
           nombre={annotations.length}
           peutAnnuler={historique.passe.length > 0}
           peutRetablir={historique.futur.length > 0}
@@ -840,6 +851,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
                             teinteSurligneur={teinteSurligneur}
                             teinteTexte={teinteTexte}
                             taille={tailleTexte}
+                            reglages={reglages}
                             images={imagesChargees}
                             selection={selection}
                             onSelection={setSelection}
@@ -857,36 +869,41 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
           )}
         </Box>
 
-        {/* Les outils qui s'appliquent à ce PDF : des cartes de verre, avec la pastille de leur groupe. */}
-        <Stack gap={8} w={272} style={{ overflow: "auto", flexShrink: 0 }} data-outils-lecteur>
-          <div>
-            <Text fw={750} size="lg">
-              {t.outils}
-            </Text>
-            <Text size="xs" c="dimmed">
-              {t.outilsAide}
-            </Text>
-          </div>
-          {outils.map((definition) => {
-            const Icone = definition.icone;
-            const { titre, description } = textes.outils[definition.cle];
-            return (
-              <UnstyledButton key={definition.cle} className="carte-action" onClick={() => onOutil(definition)} disabled={!formats} data-action={definition.cle}>
-                <span className="pastille" style={varsTeinte(GROUPE_DE[definition.cle].teinte)}>
-                  <Icone size={17} stroke={1.8} />
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <Text fw={650} size="sm" lh={1.25}>
-                    {titre}
-                  </Text>
-                  <Text size="xs" c="dimmed" lineClamp={1}>
-                    {description}
-                  </Text>
-                </div>
-              </UnstyledButton>
-            );
-          })}
-        </Stack>
+        {/* En annotation, la liste des commentaires ; sinon les outils qui s'appliquent à ce PDF : des
+            cartes de verre, avec la pastille de leur groupe. */}
+        {annoter ? (
+          <ListeCommentaires annotations={annotations} selection={selection} onChoisir={allerAuCommentaire} onSupprimer={supprimerAnnotation} />
+        ) : (
+          <Stack gap={8} w={272} style={{ overflow: "auto", flexShrink: 0 }} data-outils-lecteur>
+            <div>
+              <Text fw={750} size="lg">
+                {t.outils}
+              </Text>
+              <Text size="xs" c="dimmed">
+                {t.outilsAide}
+              </Text>
+            </div>
+            {outils.map((definition) => {
+              const Icone = definition.icone;
+              const { titre, description } = textes.outils[definition.cle];
+              return (
+                <UnstyledButton key={definition.cle} className="carte-action" onClick={() => onOutil(definition)} disabled={!formats} data-action={definition.cle}>
+                  <span className="pastille" style={varsTeinte(GROUPE_DE[definition.cle].teinte)}>
+                    <Icone size={17} stroke={1.8} />
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <Text fw={650} size="sm" lh={1.25}>
+                      {titre}
+                    </Text>
+                    <Text size="xs" c="dimmed" lineClamp={1}>
+                      {description}
+                    </Text>
+                  </div>
+                </UnstyledButton>
+              );
+            })}
+          </Stack>
+        )}
       </Group>
     </Stack>
   );

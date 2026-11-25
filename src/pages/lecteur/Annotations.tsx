@@ -1,22 +1,55 @@
-// Éditeur de PDF, première étape : la barre d'annotation du lecteur, et sur chaque page la couche
-// qui montre les annotations et reçoit les gestes de l'outil choisi. Positions en points de la page
-// affichée (comme les mots), converties en pixels par l'échelle du lecteur.
-import { useEffect, useRef, useState, type PointerEvent as EvenementPointeur, type ReactNode } from "react";
-import { ActionIcon, Box, Button, ColorSwatch, Group, NumberInput, Popover, Text, Textarea, Tooltip } from "@mantine/core";
-import { IconArrowBackUp, IconArrowForwardUp, IconCheck, IconCursorText, IconDeviceFloppy, IconEraser, IconHighlight, IconSquare, IconMessageCircle, IconPhoto, IconPointer, IconTrash, IconTypography } from "@tabler/icons-react";
+// Éditeur de PDF : la barre d'annotation du lecteur, et sur chaque page la couche qui montre les
+// annotations et reçoit les gestes de l'outil choisi. Positions en points de la page affichée (comme
+// les mots), converties en pixels par l'échelle du lecteur.
+import { useEffect, useRef, useState, type PointerEvent as EvenementPointeur, type ReactNode, type SVGAttributes } from "react";
+import { ActionIcon, Box, Button, Checkbox, ColorSwatch, Group, NumberInput, Popover, SegmentedControl, Select, Text, Textarea, Tooltip } from "@mantine/core";
 import {
+  IconArrowBackUp,
+  IconArrowForwardUp,
+  IconArrowNarrowRight,
+  IconCheck,
+  IconCircle,
+  IconCursorText,
+  IconDeviceFloppy,
+  IconEraser,
+  IconHighlight,
+  IconLine,
+  IconMessageCircle,
+  IconPhoto,
+  IconPointer,
+  IconRectangle,
+  IconRubberStamp,
+  IconScribble,
+  IconShape,
+  IconSquare,
+  IconStrikethrough,
+  IconTrash,
+  IconTypography,
+  IconUnderline,
+} from "@tabler/icons-react";
+import {
+  branche,
   correctionDe,
+  dateDuJour,
+  extraitSurligne,
   INTERLIGNE,
   motsDeLaLigne,
   nouvelId,
   policeCss,
+  prolonger,
   RVB,
+  TAMPONS,
   TEINTES_SURLIGNEUR,
   TEINTES_TEXTE,
+  TEINTES_TRAIT,
+  zoneDe,
   zoneEntre,
   zonesSurlignees,
+  zoneTampon,
   type Annotation,
+  type Forme,
   type MotComplet,
+  type MotTampon,
   type Point,
   type Teinte,
   type Zone,
@@ -25,19 +58,61 @@ import { textes } from "../../textes";
 
 const t = textes.lecteur.annotation;
 
-export type OutilAnnotation = "selection" | "surligner" | "note" | "texte" | "image" | "corriger" | "correcteur" | "gomme";
+export type OutilAnnotation =
+  | "selection"
+  | "surligner"
+  | "souligner"
+  | "barrer"
+  | "note"
+  | "texte"
+  | "forme"
+  | "dessin"
+  | "tampon"
+  | "image"
+  | "corriger"
+  | "correcteur"
+  | "gomme";
 
 const ICONES: Record<OutilAnnotation, typeof IconPointer> = {
   selection: IconPointer,
   surligner: IconHighlight,
+  souligner: IconUnderline,
+  barrer: IconStrikethrough,
   note: IconMessageCircle,
   texte: IconTypography,
+  forme: IconShape,
+  dessin: IconScribble,
+  tampon: IconRubberStamp,
   image: IconPhoto,
   corriger: IconCursorText,
   correcteur: IconSquare,
   gomme: IconEraser,
 };
-const ORDRE: OutilAnnotation[] = ["selection", "surligner", "note", "texte", "image", "corriger", "correcteur", "gomme"];
+const ORDRE: OutilAnnotation[] = ["selection", "surligner", "souligner", "barrer", "note", "texte", "forme", "dessin", "tampon", "image", "corriger", "correcteur", "gomme"];
+
+const ICONES_FORMES: Record<Forme, typeof IconPointer> = { rectangle: IconRectangle, ellipse: IconCircle, ligne: IconLine, fleche: IconArrowNarrowRight };
+const FORMES: Forme[] = ["rectangle", "ellipse", "ligne", "fleche"];
+
+/** L'outil qui crée chaque sorte d'annotation. */
+const OUTIL_DE: Record<Annotation["sorte"], OutilAnnotation> = {
+  surlignage: "surligner",
+  soulignage: "souligner",
+  barre: "barrer",
+  note: "note",
+  texte: "texte",
+  forme: "forme",
+  dessin: "dessin",
+  tampon: "tampon",
+  image: "image",
+  correction: "corriger",
+  blanc: "correcteur",
+};
+
+/** L'icône d'une annotation (celle de son outil, ou de sa forme), pour la liste des commentaires. */
+export const iconeDe = (annotation: Annotation) => (annotation.sorte === "forme" ? ICONES_FORMES[annotation.forme] : ICONES[OUTIL_DE[annotation.sorte]]);
+
+/** Outils qui tracent un trait : soulignement, rature, formes, dessin. */
+const OUTILS_TRAIT: OutilAnnotation[] = ["souligner", "barrer", "forme", "dessin"];
 
 export const couleur = (teinte: Teinte, opacite = 1) => `rgba(${RVB[teinte].join(", ")}, ${opacite})`;
 
@@ -45,6 +120,15 @@ export const couleur = (teinte: Teinte, opacite = 1) => `rgba(${RVB[teinte].join
 export interface ImageChargee {
   adresse: string;
   proportion: number;
+}
+
+/** Réglages des outils de commentaire : couleur des traits, forme, épaisseur, tampon et sa date. */
+export interface ReglagesCommentaires {
+  teinteTrait: Teinte;
+  forme: Forme;
+  epaisseur: number;
+  tampon: MotTampon;
+  avecDate: boolean;
 }
 
 interface PropsBarre {
@@ -56,6 +140,8 @@ interface PropsBarre {
   onTeinteTexte: (teinte: Teinte) => void;
   taille: number;
   onTaille: (taille: number) => void;
+  reglages: ReglagesCommentaires;
+  onReglages: (reglages: ReglagesCommentaires) => void;
   nombre: number;
   peutAnnuler: boolean;
   peutRetablir: boolean;
@@ -68,12 +154,13 @@ interface PropsBarre {
   onTerminer: () => void;
 }
 
-/** La barre d'annotation : les outils, la couleur et la taille, annuler, enregistrer le PDF annoté. */
+/** La barre d'annotation : les outils, leurs réglages, annuler, enregistrer le PDF annoté. */
 export function BarreAnnotations(props: PropsBarre) {
-  const { outil, onOutil, nombre } = props;
-  const teintes = outil === "texte" ? TEINTES_TEXTE : outil === "surligner" ? TEINTES_SURLIGNEUR : [];
-  const teinte = outil === "texte" ? props.teinteTexte : props.teinteSurligneur;
-  const choisirTeinte = outil === "texte" ? props.onTeinteTexte : props.onTeinteSurligneur;
+  const { outil, onOutil, nombre, reglages, onReglages } = props;
+  const trait = OUTILS_TRAIT.includes(outil);
+  const teintes = outil === "texte" ? TEINTES_TEXTE : outil === "surligner" ? TEINTES_SURLIGNEUR : trait ? TEINTES_TRAIT : [];
+  const teinte = outil === "texte" ? props.teinteTexte : trait ? reglages.teinteTrait : props.teinteSurligneur;
+  const choisirTeinte = (cle: Teinte) => (outil === "texte" ? props.onTeinteTexte(cle) : trait ? onReglages({ ...reglages, teinteTrait: cle }) : props.onTeinteSurligneur(cle));
   return (
     <Box data-barre-annotations>
       <Group justify="space-between" wrap="wrap" gap="xs" className="commandes-lecteur barre-annotations">
@@ -100,6 +187,30 @@ export function BarreAnnotations(props: PropsBarre) {
               );
             })}
           </Group>
+          {outil === "forme" && (
+            <Group gap={2} wrap="nowrap" pl={4} role="radiogroup" aria-label={t.formes.titre}>
+              {FORMES.map((cle) => {
+                const Icone = ICONES_FORMES[cle];
+                return (
+                  <Tooltip key={cle} label={t.formes[cle]}>
+                    <ActionIcon
+                      variant={reglages.forme === cle ? "light" : "subtle"}
+                      color={reglages.forme === cle ? "eau" : "gray"}
+                      size={28}
+                      radius="md"
+                      role="radio"
+                      aria-checked={reglages.forme === cle}
+                      aria-label={t.formes[cle]}
+                      onClick={() => onReglages({ ...reglages, forme: cle })}
+                      data-forme={cle}
+                    >
+                      <Icone size={17} stroke={1.8} />
+                    </ActionIcon>
+                  </Tooltip>
+                );
+              })}
+            </Group>
+          )}
           {teintes.length > 0 && (
             <Group gap={6} wrap="nowrap" pl={6} className="choix-teinte">
               {teintes.map((cle) => (
@@ -118,6 +229,34 @@ export function BarreAnnotations(props: PropsBarre) {
                   </ColorSwatch>
                 </Tooltip>
               ))}
+            </Group>
+          )}
+          {(outil === "forme" || outil === "dessin") && (
+            <SegmentedControl
+              size="xs"
+              value={String(reglages.epaisseur)}
+              onChange={(valeur) => onReglages({ ...reglages, epaisseur: Number(valeur) })}
+              aria-label={t.epaisseur}
+              data={[
+                { value: "1", label: t.epaisseurs.fin },
+                { value: "2", label: t.epaisseurs.moyen },
+                { value: "4", label: t.epaisseurs.epais },
+              ]}
+            />
+          )}
+          {outil === "tampon" && (
+            <Group gap={8} wrap="nowrap" pl={4}>
+              <Select
+                size="xs"
+                w={150}
+                value={reglages.tampon}
+                onChange={(valeur) => valeur && onReglages({ ...reglages, tampon: valeur as MotTampon })}
+                allowDeselect={false}
+                aria-label={t.tampon}
+                data={(Object.keys(TAMPONS) as MotTampon[]).map((cle) => ({ value: cle, label: t.tampons[cle] }))}
+                data-choix-tampon
+              />
+              <Checkbox size="xs" label={t.avecDate} checked={reglages.avecDate} onChange={(evenement) => onReglages({ ...reglages, avecDate: evenement.currentTarget.checked })} />
             </Group>
           )}
           {outil === "texte" && (
@@ -175,6 +314,7 @@ interface PropsCouche {
   teinteSurligneur: Teinte;
   teinteTexte: Teinte;
   taille: number;
+  reglages: ReglagesCommentaires;
   images: Record<string, ImageChargee>;
   selection: string | null;
   onSelection: (id: string | null) => void;
@@ -185,23 +325,36 @@ interface PropsCouche {
   onEffacer: (ids: string[]) => void;
 }
 
-/** Geste en cours sur la couche : surlignage tracé, gomme passée, ou annotation déplacée ou agrandie. */
+/** Passage surligné, souligné ou barré : la même façon de choisir les mots. */
+type StyleTexte = "surlignage" | "soulignage" | "barre";
+
+/** Geste en cours sur la couche : tracé, gomme passée, ou annotation déplacée ou agrandie. */
 type Geste =
-  | { sorte: "surligner"; debut: Point; courant: Point }
+  | { sorte: "surligner"; style: StyleTexte; debut: Point; courant: Point }
   | { sorte: "gommer"; effacees: string[] }
   | { sorte: "corriger"; debut: Point; courant: Point }
   | { sorte: "correcteur"; debut: Point; courant: Point }
+  | { sorte: "forme"; debut: Point; courant: Point }
+  | { sorte: "dessin"; points: Point[] }
   | { sorte: "deplacer"; annotation: Annotation; debut: Point; courant: Point }
-  | { sorte: "taille"; annotation: Annotation & { sorte: "image" }; debut: Point; courant: Point };
+  | { sorte: "taille"; annotation: Annotation & { sorte: "image" | "tampon" }; debut: Point; courant: Point };
 
 /** L'annotation décalée de (dx, dy) points. */
 function decaler(annotation: Annotation, dx: number, dy: number): Annotation {
+  const point = (p: Point) => ({ x: p.x + dx, y: p.y + dy });
   switch (annotation.sorte) {
     case "surlignage":
+    case "soulignage":
+    case "barre":
       return { ...annotation, zones: annotation.zones.map((z) => ({ ...z, x: z.x + dx, y: z.y + dy })) };
     case "image":
     case "blanc":
+    case "tampon":
       return { ...annotation, zone: { ...annotation.zone, x: annotation.zone.x + dx, y: annotation.zone.y + dy } };
+    case "forme":
+      return { ...annotation, debut: point(annotation.debut), fin: point(annotation.fin) };
+    case "dessin":
+      return { ...annotation, points: annotation.points.map(point) };
     // Une correction reste à la place du texte qu'elle remplace.
     case "correction":
       return annotation;
@@ -210,10 +363,37 @@ function decaler(annotation: Annotation, dx: number, dy: number): Annotation {
   }
 }
 
-/** L'image agrandie de `dx` points en largeur, sans déformation. */
-function agrandir(annotation: Annotation & { sorte: "image" }, dx: number, proportion: number): Annotation {
-  const largeur = Math.max(12, annotation.zone.largeur + dx);
+/** L'image ou le tampon agrandi de `dx` points en largeur, sans déformation. */
+function agrandir(annotation: Annotation & { sorte: "image" | "tampon" }, dx: number, proportion: number): Annotation {
+  const largeur = Math.max(annotation.sorte === "tampon" ? 40 : 12, annotation.zone.largeur + dx);
   return { ...annotation, zone: { ...annotation.zone, largeur, hauteur: largeur / proportion } };
+}
+
+/** Dessin SVG d'une forme ou d'un trait, en points de la page (le cadre SVG fait l'échelle). */
+function trace(annotation: Annotation & { sorte: "forme" | "dessin" }, attributs: SVGAttributes<SVGElement>): ReactNode {
+  if (annotation.sorte === "dessin") return <polyline points={annotation.points.map((p) => `${p.x},${p.y}`).join(" ")} {...attributs} />;
+  const { debut, fin } = annotation;
+  const zone = zoneEntre(debut, fin);
+  switch (annotation.forme) {
+    case "rectangle":
+      return <rect x={zone.x} y={zone.y} width={zone.largeur} height={zone.hauteur} {...attributs} />;
+    case "ellipse":
+      return <ellipse cx={zone.x + zone.largeur / 2} cy={zone.y + zone.hauteur / 2} rx={zone.largeur / 2} ry={zone.hauteur / 2} {...attributs} />;
+    case "ligne":
+      return <line x1={debut.x} y1={debut.y} x2={fin.x} y2={fin.y} {...attributs} />;
+    case "fleche": {
+      // Deux branches à 30° de part et d'autre de la ligne, au bout (comme le cœur).
+      const retour = Math.atan2(debut.y - fin.y, debut.x - fin.x);
+      const longueur = branche(annotation.epaisseur);
+      const bout = (ecart: number) => `${fin.x + longueur * Math.cos(retour + ecart)},${fin.y + longueur * Math.sin(retour + ecart)}`;
+      return (
+        <g {...attributs}>
+          <line x1={debut.x} y1={debut.y} x2={fin.x} y2={fin.y} />
+          <polyline points={`${bout(-Math.PI / 6)} ${fin.x},${fin.y} ${bout(Math.PI / 6)}`} />
+        </g>
+      );
+    }
+  }
 }
 
 /**
@@ -221,7 +401,7 @@ function agrandir(annotation: Annotation & { sorte: "image" }, dx: number, propo
  * est vide ; un déplacement ne compte qu'une fois relâché : une seule étape à annuler.
  */
 export function CoucheAnnotations(props: PropsCouche) {
-  const { page, echelle, annotations, actif, outil, selection, onSelection } = props;
+  const { page, echelle, annotations, actif, outil, selection, onSelection, reglages } = props;
   const couche = useRef<HTMLDivElement>(null);
   const [geste, setGeste] = useState<Geste | null>(null);
   /** Texte ou note en cours d'écriture (nouveau, ou existant que l'on modifie). */
@@ -243,6 +423,10 @@ export function CoucheAnnotations(props: PropsCouche) {
     const rect = couche.current!.getBoundingClientRect();
     return { x: (evenement.clientX - rect.left) / echelle, y: (evenement.clientY - rect.top) / echelle };
   };
+
+  /** Largeur sur hauteur d'une image ou d'un tampon, gardée quand on l'agrandit. */
+  const proportion = (annotation: Annotation & { sorte: "image" | "tampon" }) =>
+    (annotation.sorte === "image" ? props.images[annotation.chemin]?.proportion : undefined) ?? annotation.zone.largeur / Math.max(1, annotation.zone.hauteur);
 
   /** Les annotations de cette page sous le pointeur (là où passe la gomme). */
   function touchees(evenement: { clientX: number; clientY: number }): string[] {
@@ -276,8 +460,15 @@ export function CoucheAnnotations(props: PropsCouche) {
     onSelection(annotation.id);
   }
 
-  // La couche elle-même : surligner, poser une note ou un texte ; en sélection, un clic dans le vide
-  // retire la sélection.
+  /** Commence un geste qui suit le pointeur jusqu'à ce qu'on le lâche. */
+  function capturer(evenement: EvenementPointeur<HTMLDivElement>, suivant: Geste) {
+    evenement.preventDefault();
+    evenement.currentTarget.setPointerCapture(evenement.pointerId);
+    setGeste(suivant);
+  }
+
+  // La couche elle-même : tracer, poser une note, un texte ou un tampon ; en sélection, un clic
+  // dans le vide retire la sélection.
   function pointeurBas(evenement: EvenementPointeur<HTMLDivElement>) {
     if (!actif || evenement.button !== 0) return;
     const ici = point(evenement);
@@ -285,10 +476,9 @@ export function CoucheAnnotations(props: PropsCouche) {
       valider(brouillon);
       return;
     }
-    if (outil === "surligner") {
-      evenement.preventDefault();
-      evenement.currentTarget.setPointerCapture(evenement.pointerId);
-      setGeste({ sorte: "surligner", debut: ici, courant: ici });
+    if (outil === "surligner" || outil === "souligner" || outil === "barrer") {
+      const style: StyleTexte = outil === "souligner" ? "soulignage" : outil === "barrer" ? "barre" : "surlignage";
+      capturer(evenement, { sorte: "surligner", style, debut: ici, courant: ici });
     } else if (outil === "note") {
       evenement.preventDefault();
       setBrouillon({ id: nouvelId(), sorte: "note", page, x: ici.x, y: ici.y, texte: "" });
@@ -296,21 +486,26 @@ export function CoucheAnnotations(props: PropsCouche) {
       evenement.preventDefault();
       // Le point cliqué est le milieu de la première ligne.
       setBrouillon({ id: nouvelId(), sorte: "texte", page, x: ici.x, y: ici.y - (INTERLIGNE * props.taille) / 2, texte: "", taille: props.taille, teinte: props.teinteTexte });
-    } else if (outil === "corriger" || outil === "correcteur") {
+    } else if (outil === "forme") {
+      capturer(evenement, { sorte: "forme", debut: ici, courant: ici });
+    } else if (outil === "dessin") {
+      capturer(evenement, { sorte: "dessin", points: [ici] });
+    } else if (outil === "tampon") {
       evenement.preventDefault();
-      evenement.currentTarget.setPointerCapture(evenement.pointerId);
-      setGeste({ sorte: outil, debut: ici, courant: ici });
+      const tampon: Annotation = { id: nouvelId(), sorte: "tampon", page, zone: zoneTampon(reglages.tampon, ici), mot: reglages.tampon, date: reglages.avecDate ? dateDuJour() : null };
+      props.onAjouter(tampon);
+      onSelection(tampon.id);
+    } else if (outil === "corriger" || outil === "correcteur") {
+      capturer(evenement, { sorte: outil, debut: ici, courant: ici });
       setSurvol([]);
     } else if (outil === "gomme") {
-      evenement.preventDefault();
-      evenement.currentTarget.setPointerCapture(evenement.pointerId);
-      setGeste({ sorte: "gommer", effacees: touchees(evenement) });
+      capturer(evenement, { sorte: "gommer", effacees: touchees(evenement) });
     } else if (outil === "selection") {
       onSelection(null);
     }
   }
 
-  function pointeurMouvement(evenement: EvenementPointeur<HTMLElement>) {
+  function pointeurMouvement(evenement: EvenementPointeur<HTMLElement | SVGElement>) {
     if (!geste) {
       // Corriger : on voit quel mot le clic prendra.
       if (actif && outil === "corriger" && props.mots) {
@@ -325,6 +520,11 @@ export function CoucheAnnotations(props: PropsCouche) {
       if (nouvelles.length > 0) setGeste({ sorte: "gommer", effacees: [...geste.effacees, ...nouvelles] });
       return;
     }
+    if (geste.sorte === "dessin") {
+      const suite = prolonger(geste.points, point(evenement));
+      if (suite !== geste.points) setGeste({ sorte: "dessin", points: suite });
+      return;
+    }
     setGeste({ ...geste, courant: point(evenement) });
   }
 
@@ -332,6 +532,11 @@ export function CoucheAnnotations(props: PropsCouche) {
     if (!geste) return;
     if (geste.sorte === "gommer") {
       if (geste.effacees.length > 0) props.onEffacer(geste.effacees);
+      setGeste(null);
+      return;
+    }
+    if (geste.sorte === "dessin") {
+      if (geste.points.length >= 2) props.onAjouter({ id: nouvelId(), sorte: "dessin", page, points: geste.points, teinte: reglages.teinteTrait, epaisseur: reglages.epaisseur });
       setGeste(null);
       return;
     }
@@ -348,21 +553,31 @@ export function CoucheAnnotations(props: PropsCouche) {
       setGeste(null);
       return;
     }
+    if (geste.sorte === "forme") {
+      if (Math.hypot(courant.x - debut.x, courant.y - debut.y) >= 2)
+        props.onAjouter({ id: nouvelId(), sorte: "forme", page, forme: reglages.forme, debut, fin: courant, teinte: reglages.teinteTrait, epaisseur: reglages.epaisseur });
+      setGeste(null);
+      return;
+    }
     if (geste.sorte === "surligner") {
       const zones = zonesSurlignees(props.mots ?? [], debut, courant);
-      if (zones.length > 0) props.onAjouter({ id: nouvelId(), sorte: "surlignage", page, teinte: props.teinteSurligneur, zones });
+      if (zones.length > 0) {
+        const id = nouvelId();
+        // Le texte pris, gardé dans le commentaire (comme Acrobat) et montré dans la liste.
+        const extrait = extraitSurligne(props.mots ?? [], debut, courant) || undefined;
+        if (geste.style === "surlignage") props.onAjouter({ id, sorte: "surlignage", page, teinte: props.teinteSurligneur, zones, extrait });
+        else if (geste.style === "soulignage") props.onAjouter({ id, sorte: "soulignage", page, teinte: reglages.teinteTrait, zones, extrait });
+        else props.onAjouter({ id, sorte: "barre", page, teinte: reglages.teinteTrait, zones, extrait });
+      }
     } else if (Math.hypot(courant.x - debut.x, courant.y - debut.y) > 0.5) {
-      const finale =
-        geste.sorte === "deplacer"
-          ? decaler(geste.annotation, courant.x - debut.x, courant.y - debut.y)
-          : agrandir(geste.annotation, courant.x - debut.x, props.images[geste.annotation.chemin]?.proportion ?? 1);
+      const finale = geste.sorte === "deplacer" ? decaler(geste.annotation, courant.x - debut.x, courant.y - debut.y) : agrandir(geste.annotation, courant.x - debut.x, proportion(geste.annotation));
       props.onModifier(finale);
     }
     setGeste(null);
   }
 
   /** Début d'un déplacement (ou d'un changement de taille) d'une annotation, en sélection. */
-  function saisir(annotation: Annotation, sorte: "deplacer" | "taille", evenement: EvenementPointeur<HTMLElement>) {
+  function saisir(annotation: Annotation, sorte: "deplacer" | "taille", evenement: EvenementPointeur<HTMLElement | SVGElement>) {
     if (!actif || outil !== "selection" || evenement.button !== 0) return;
     evenement.preventDefault();
     evenement.stopPropagation();
@@ -371,18 +586,15 @@ export function CoucheAnnotations(props: PropsCouche) {
     // passer les clics vers le texte de la page).
     evenement.currentTarget.setPointerCapture(evenement.pointerId);
     const ici = point(evenement);
-    if (sorte === "taille" && annotation.sorte === "image") setGeste({ sorte: "taille", annotation, debut: ici, courant: ici });
+    if (sorte === "taille" && (annotation.sorte === "image" || annotation.sorte === "tampon")) setGeste({ sorte: "taille", annotation, debut: ici, courant: ici });
     else setGeste({ sorte: "deplacer", annotation, debut: ici, courant: ici });
   }
 
   /** L'annotation telle qu'elle s'affiche : pendant un geste, à sa place provisoire. */
   function affichee(annotation: Annotation): Annotation {
-    if (!geste || geste.sorte === "surligner" || geste.sorte === "gommer" || geste.sorte === "corriger" || geste.sorte === "correcteur" || geste.annotation.id !== annotation.id)
-      return annotation;
+    if (!geste || (geste.sorte !== "deplacer" && geste.sorte !== "taille") || geste.annotation.id !== annotation.id) return annotation;
     const { debut, courant } = geste;
-    return geste.sorte === "deplacer"
-      ? decaler(annotation, courant.x - debut.x, courant.y - debut.y)
-      : agrandir(geste.annotation, courant.x - debut.x, props.images[geste.annotation.chemin]?.proportion ?? 1);
+    return geste.sorte === "deplacer" ? decaler(annotation, courant.x - debut.x, courant.y - debut.y) : agrandir(geste.annotation, courant.x - debut.x, proportion(geste.annotation));
   }
 
   const px = (points: number) => points * echelle;
@@ -398,6 +610,38 @@ export function CoucheAnnotations(props: PropsCouche) {
   /** Haut d'une ligne de texte affichée en hauteur de ligne 1 (ligne de base à 0,84 de la taille). */
   const hautDeLigne = (ligne: number, taille: number) => ligne - 0.84 * taille;
   const rvb = (c: [number, number, number]) => `rgb(${c.join(", ")})`;
+
+  /** Trait sous les mots, ou au travers : à la même hauteur que le cœur l'écrira. */
+  function traitTexte(zone: Zone, style: "soulignage" | "barre", teinte: Teinte): ReactNode {
+    const epaisseur = Math.max(1, px(Math.max(0.6, zone.hauteur * 0.07)));
+    return <span className="trait-texte" style={{ top: px(zone.hauteur * (style === "barre" ? 0.55 : 0.9)) - epaisseur / 2, height: epaisseur, background: couleur(teinte) }} />;
+  }
+
+  /** Forme ou dessin dans un cadre SVG à l'échelle de la page ; `interactif` : saisissable et gommable. */
+  function dessinSvg(annotation: Annotation & { sorte: "forme" | "dessin" }, interactif: boolean, choisie?: boolean): ReactNode {
+    const marge = annotation.epaisseur + (annotation.sorte === "forme" && annotation.forme === "fleche" ? branche(annotation.epaisseur) : 0) + 6 / echelle;
+    const zone = zoneDe(annotation);
+    const cadre = { x: zone.x - marge, y: zone.y - marge, largeur: zone.largeur + 2 * marge, hauteur: zone.hauteur + 2 * marge };
+    return (
+      <svg
+        key={annotation.id}
+        className="annotation-dessin"
+        viewBox={`${cadre.x} ${cadre.y} ${cadre.largeur} ${cadre.hauteur}`}
+        style={{ left: px(cadre.x), top: px(cadre.y), width: px(cadre.largeur), height: px(cadre.hauteur) }}
+      >
+        {choisie && <rect className="cadre-selection" x={zone.x - 2} y={zone.y - 2} width={zone.largeur + 4} height={zone.hauteur + 4} />}
+        <g
+          data-annotation-id={interactif ? annotation.id : undefined}
+          onPointerDown={interactif && enSelection ? (evenement) => saisir(annotation, "deplacer", evenement) : undefined}
+          onPointerMove={interactif ? pointeurMouvement : undefined}
+          onPointerUp={interactif ? pointeurHaut : undefined}
+        >
+          {trace(annotation, { stroke: couleur(annotation.teinte), strokeWidth: annotation.epaisseur, fill: "none", strokeLinecap: "round", strokeLinejoin: "round", pointerEvents: "none" })}
+          {interactif && touchables && trace(annotation, { stroke: "transparent", strokeWidth: annotation.epaisseur + 8 / echelle, fill: "none", pointerEvents: "stroke" })}
+        </g>
+      </svg>
+    );
+  }
 
   function rendu(brute: Annotation): ReactNode {
     const annotation = affichee(brute);
@@ -417,6 +661,58 @@ export function CoucheAnnotations(props: PropsCouche) {
             style={{ left: px(zone.x), top: px(zone.y), width: px(zone.largeur), height: px(zone.hauteur), background: couleur(annotation.teinte, 0.5), pointerEvents: touchables ? "auto" : "none" }}
           />
         ));
+      case "soulignage":
+      case "barre":
+        return annotation.zones.map((zone, rang) => (
+          <div
+            key={`${annotation.id}-${rang}`}
+            data-annotation-id={annotation.id}
+            className="annotation-trait"
+            data-selectionnee={choisie}
+            onPointerDown={enSelection ? prise() : undefined}
+            onPointerMove={pointeurMouvement}
+            onPointerUp={pointeurHaut}
+            style={{ left: px(zone.x), top: px(zone.y), width: px(zone.largeur), height: px(zone.hauteur), pointerEvents: touchables ? "auto" : "none" }}
+          >
+            {traitTexte(zone, annotation.sorte, annotation.teinte)}
+          </div>
+        ));
+      case "forme":
+      case "dessin":
+        return dessinSvg(annotation, true, choisie);
+      case "tampon": {
+        const { zone } = annotation;
+        const { texte, rvb: encre } = TAMPONS[annotation.mot];
+        const bord = Math.min(4, Math.max(0.8, zone.hauteur * 0.06));
+        const utile = zone.largeur - 2 * bord - 0.24 * zone.hauteur;
+        const taille = Math.min(zone.hauteur * (annotation.date ? 0.42 : 0.56), utile / (0.74 * texte.length));
+        return (
+          <div
+            key={annotation.id}
+            data-annotation-id={annotation.id}
+            className="annotation-tampon"
+            data-selectionnee={choisie}
+            onPointerDown={enSelection ? prise() : undefined}
+            onPointerMove={pointeurMouvement}
+            onPointerUp={pointeurHaut}
+            style={{
+              left: px(zone.x),
+              top: px(zone.y),
+              width: px(zone.largeur),
+              height: px(zone.hauteur),
+              borderWidth: px(bord),
+              borderRadius: px(Math.min(zone.hauteur, zone.largeur) * 0.14),
+              borderColor: rvb(encre),
+              color: rvb(encre),
+              pointerEvents: touchables ? "auto" : "none",
+            }}
+          >
+            <span style={{ fontSize: px(taille) }}>{texte}</span>
+            {annotation.date && <span style={{ fontSize: px(Math.min(zone.hauteur * 0.2, utile / (0.62 * annotation.date.length))) }}>{annotation.date}</span>}
+            {choisie && enSelection && <span className="poignee-annotation" aria-label={t.redimensionner} onPointerDown={prise("taille")} onPointerMove={pointeurMouvement} onPointerUp={pointeurHaut} />}
+          </div>
+        );
+      }
       case "note":
         return (
           <button
@@ -527,6 +823,14 @@ export function CoucheAnnotations(props: PropsCouche) {
     }
   }
 
+  // Ce qui se trace en ce moment : forme ou trait de dessin, en aperçu.
+  const traceEnCours: (Annotation & { sorte: "forme" | "dessin" }) | null =
+    geste?.sorte === "forme"
+      ? { id: "trace", sorte: "forme", page, forme: reglages.forme, debut: geste.debut, fin: geste.courant, teinte: reglages.teinteTrait, epaisseur: reglages.epaisseur }
+      : geste?.sorte === "dessin" && geste.points.length >= 2
+        ? { id: "trace", sorte: "dessin", page, points: geste.points, teinte: reglages.teinteTrait, epaisseur: reglages.epaisseur }
+        : null;
+
   return (
     <div
       ref={couche}
@@ -540,6 +844,7 @@ export function CoucheAnnotations(props: PropsCouche) {
       style={{ pointerEvents: actif && outil !== "selection" ? "auto" : "none" }}
     >
       {visibles.map(rendu)}
+      {traceEnCours && dessinSvg(traceEnCours, false)}
       {motsVises.map((rang) => {
         const mot = props.mots![rang];
         return <div key={`vise-${rang}`} className="mot-a-corriger" style={{ left: px(mot.x) - 2, top: px(mot.y) - 1, width: px(mot.longueur) + 4, height: px(mot.taille) + 2 }} />;
@@ -577,9 +882,16 @@ export function CoucheAnnotations(props: PropsCouche) {
           />
         );
       })()}
-      {apercu.map((zone: Zone, rang) => (
-        <div key={`apercu-${rang}`} className="annotation-surlignage" style={{ left: px(zone.x), top: px(zone.y), width: px(zone.largeur), height: px(zone.hauteur), background: couleur(props.teinteSurligneur, 0.5) }} />
-      ))}
+      {geste?.sorte === "surligner" &&
+        apercu.map((zone: Zone, rang) =>
+          geste.style === "surlignage" ? (
+            <div key={`apercu-${rang}`} className="annotation-surlignage" style={{ left: px(zone.x), top: px(zone.y), width: px(zone.largeur), height: px(zone.hauteur), background: couleur(props.teinteSurligneur, 0.5) }} />
+          ) : (
+            <div key={`apercu-${rang}`} className="annotation-trait" style={{ left: px(zone.x), top: px(zone.y), width: px(zone.largeur), height: px(zone.hauteur) }}>
+              {traitTexte(zone, geste.style, reglages.teinteTrait)}
+            </div>
+          ),
+        )}
       {brouillon?.sorte === "texte" && (
         <Textarea
           autoFocus

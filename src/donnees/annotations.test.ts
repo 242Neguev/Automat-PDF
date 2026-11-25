@@ -4,14 +4,21 @@ import {
   appliquer,
   correctionDe,
   estMontant,
+  extraitSurligne,
   HISTORIQUE_VIDE,
   motsDeLaLigne,
   nomAnnote,
+  ordreDeLecture,
   policeCss,
   pourLeCoeur,
   retablir,
   sans,
   zonesSurlignees,
+  dateDuJour,
+  prolonger,
+  TAMPONS,
+  zoneDe,
+  zoneTampon,
   type Annotation,
   type MotComplet,
   type MotPlace,
@@ -129,5 +136,58 @@ describe("corriger un mot ou un montant", () => {
     expect(policeCss("Courier New")).toContain("Courier");
     expect(policeCss("DejaVu Sans")).toContain("Arial");
     expect(policeCss("Calibri")).toContain("Arial");
+  });
+});
+
+describe("commentaires : souligner, barrer, formes, dessin, tampons", () => {
+  it("n'envoie au cœur ni trait vide, ni forme sans longueur", () => {
+    const debut = { x: 10, y: 10 };
+    const annotations: Annotation[] = [
+      { id: "a", sorte: "soulignage", page: 0, teinte: "rouge", zones: [] },
+      { id: "b", sorte: "barre", page: 0, teinte: "rouge", zones: [{ x: 1, y: 2, largeur: 3, hauteur: 4 }] },
+      { id: "c", sorte: "forme", page: 0, forme: "fleche", debut, fin: { x: 10.2, y: 10.3 }, teinte: "rouge", epaisseur: 2 },
+      { id: "d", sorte: "forme", page: 0, forme: "rectangle", debut, fin: { x: 60, y: 40 }, teinte: "rouge", epaisseur: 2 },
+      { id: "e", sorte: "dessin", page: 0, points: [debut], teinte: "noir", epaisseur: 1 },
+      { id: "f", sorte: "tampon", page: 1, zone: { x: 0, y: 0, largeur: 110, hauteur: 54 }, mot: "paye", date: "25/11/2026" },
+    ];
+    expect(pourLeCoeur(annotations).map((a) => a.sorte)).toEqual(["barre", "forme", "tampon"]);
+    expect(pourLeCoeur(annotations)[2]).toEqual({ sorte: "tampon", page: 1, zone: { x: 0, y: 0, largeur: 110, hauteur: 54 }, mot: "paye", date: "25/11/2026" });
+  });
+
+  it("pose un tampon assez large pour son mot, centré sur le clic, daté du jour", () => {
+    expect(zoneTampon("vu", { x: 200, y: 100 })).toEqual({ x: 145, y: 73, largeur: 110, hauteur: 54 });
+    const confidentiel = zoneTampon("confidentiel", { x: 300, y: 300 });
+    expect(confidentiel.largeur).toBe(TAMPONS.confidentiel.texte.length * 17 + 40);
+    expect(confidentiel.x + confidentiel.largeur / 2).toBe(300);
+    expect(dateDuJour(new Date(2026, 10, 5))).toBe("05/11/2026");
+  });
+
+  it("garde le texte souligné ou barré, rien pour un cadre tracé", () => {
+    const complet = (texte: string, x: number, y: number, longueur: number, debutLigne = false): MotComplet => ({
+      texte, x, y, longueur, taille: 10, debutLigne, sens: 0, famille: "Helvetica", gras: false, italique: false, couleur: [0, 0, 0],
+    });
+    const mots = [complet("Délai", 100, 100, 30, true), complet("de", 134, 100, 12), complet("paiement", 150, 100, 50), complet("30", 100, 120, 12, true), complet("jours", 116, 120, 30)];
+    // De « de » jusqu'à « 30 », à la ligne suivante, dans l'ordre de lecture même en remontant.
+    expect(extraitSurligne(mots, { x: 138, y: 104 }, { x: 104, y: 124 })).toBe("de paiement 30");
+    expect(extraitSurligne(mots, { x: 104, y: 124 }, { x: 138, y: 104 })).toBe("de paiement 30");
+    expect(extraitSurligne(mots, { x: 400, y: 400 }, { x: 450, y: 450 })).toBe("");
+  });
+
+  it("allège le trait d'un dessin sans perdre sa forme", () => {
+    let trait = prolonger([], { x: 0, y: 0 });
+    trait = prolonger(trait, { x: 0.2, y: 0.1 });
+    trait = prolonger(trait, { x: 3, y: 4 });
+    expect(trait).toEqual([{ x: 0, y: 0 }, { x: 3, y: 4 }]);
+  });
+
+  it("liste les commentaires dans l'ordre de lecture", () => {
+    const ici = (id: string, page: number, x: number, y: number): Annotation => ({ id, sorte: "note", page, x, y, texte: id });
+    const liste = [ici("bas", 0, 10, 500), ici("page2", 1, 0, 0), ici("droite", 0, 300, 102), ici("gauche", 0, 40, 100)];
+    expect(ordreDeLecture(liste).map((a) => a.id)).toEqual(["gauche", "droite", "bas", "page2"]);
+  });
+
+  it("retrouve la zone de chaque annotation", () => {
+    expect(zoneDe({ id: "a", sorte: "forme", page: 0, forme: "ligne", debut: { x: 50, y: 80 }, fin: { x: 10, y: 20 }, teinte: "noir", epaisseur: 1 })).toEqual({ x: 10, y: 20, largeur: 40, hauteur: 60 });
+    expect(zoneDe({ id: "b", sorte: "dessin", page: 0, points: [{ x: 5, y: 9 }, { x: 1, y: 3 }, { x: 4, y: 12 }], teinte: "noir", epaisseur: 1 })).toEqual({ x: 1, y: 3, largeur: 4, hauteur: 9 });
   });
 });
