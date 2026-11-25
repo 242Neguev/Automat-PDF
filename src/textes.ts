@@ -99,6 +99,7 @@ export const textes = {
     entiere: "Page entière",
     entiereAide: "La page entière tient dans la fenêtre",
     deuxPages: "Deux pages côte à côte",
+    deuxPagesUneSeule: "Deux pages côte à côte : ce PDF n'a qu'une page",
     pivoter: "Faire pivoter l'affichage d'un quart de tour (le fichier n'est pas modifié)",
     pivoterDe: (degres: number) => `Affichage tourné de ${degres}° : un clic de plus le tourne encore d'un quart de tour (le fichier n'est pas modifié)`,
     pleinEcran: {

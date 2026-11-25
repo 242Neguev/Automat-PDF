@@ -597,9 +597,14 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     setRotation((avant) => tourner(avant));
   }
 
-  /** Une page ou deux côte à côte (préférence gardée) ; on reste sur la page lue. */
+  /**
+   * Une page ou deux côte à côte (préférence gardée) ; on reste sur la page lue. Agrandies à la main,
+   * deux pages ne tiendraient pas dans la zone (la seconde, hors de l'écran, passerait inaperçue) :
+   * elles reprennent la largeur de la zone.
+   */
   function basculerDisposition() {
     ancre.current = { page: courante_.current, fraction: 0 };
+    if (mode === "libre") setMode("largeur");
     setDisposition((avant) => {
       const suivante = avant === "deux" ? "une" : "deux";
       try {
@@ -799,18 +804,21 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
               <IconZoomIn size={20} stroke={1.6} />
             </ActionIcon>
           </Tooltip>
-          <Tooltip label={t.deuxPages}>
-            <ActionIcon
-              variant={disposition === "deux" ? "light" : "subtle"}
-              color={disposition === "deux" ? "eau" : "gray"}
-              onClick={basculerDisposition}
-              disabled={!formats}
-              aria-label={t.deuxPages}
-              aria-pressed={disposition === "deux"}
-              data-deux-pages
-            >
-              <IconBook2 size={19} stroke={1.6} />
-            </ActionIcon>
+          {/* Une seule page : rien à mettre côte à côte (l'infobulle le dit, sur le bouton grisé). */}
+          <Tooltip label={nombre === 1 ? t.deuxPagesUneSeule : t.deuxPages}>
+            <span style={{ display: "inline-flex" }}>
+              <ActionIcon
+                variant={disposition === "deux" && nombre > 1 ? "light" : "subtle"}
+                color={disposition === "deux" && nombre > 1 ? "eau" : "gray"}
+                onClick={basculerDisposition}
+                disabled={!formats || nombre < 2}
+                aria-label={t.deuxPages}
+                aria-pressed={disposition === "deux" && nombre > 1}
+                data-deux-pages
+              >
+                <IconBook2 size={19} stroke={1.6} />
+              </ActionIcon>
+            </span>
           </Tooltip>
           <Tooltip label={rotation ? t.pivoterDe(rotation) : t.pivoter} multiline w={240}>
             <ActionIcon variant={rotation ? "light" : "subtle"} color={rotation ? "eau" : "gray"} onClick={pivoter} disabled={!formats} aria-label={t.pivoter} data-pivoter={rotation}>
