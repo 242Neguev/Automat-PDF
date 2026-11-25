@@ -158,6 +158,24 @@ export const compresserPdf = (chemin: string, niveau: "legere" | "moyenne" | "fo
 /** Texte de chaque page (lignes, mots, colonnes séparées par des tabulations ; vide si numérisée). */
 export const textesPdf = (chemin: string) => invoke<string[]>("textes_pdf", { chemin });
 
+/**
+ * Un mot d'une page, pour la couche de texte du lecteur. Position en points sur la page affichée (y vers
+ * le bas) : coin en haut à gauche du mot dans son sens d'écriture ; `longueur` dans ce sens, `taille` en
+ * travers ; `sens` en quarts de tour dans le sens des aiguilles d'une montre.
+ */
+export interface Mot {
+  texte: string;
+  x: number;
+  y: number;
+  longueur: number;
+  taille: number;
+  sens: number;
+  debutLigne: boolean;
+}
+
+/** Les mots d'une page (à partir de 0), ligne par ligne dans l'ordre de lecture. */
+export const motsPage = (chemin: string, page: number) => invoke<Mot[]>("mots_page", { chemin, page });
+
 /** Le fichier d'une personne : ses pages (à partir de 0), et son mot de passe s'il faut le protéger. */
 export interface FichierPersonne {
   nom: string;

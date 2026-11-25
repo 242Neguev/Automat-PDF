@@ -41,6 +41,8 @@ L'installateur Windows (`.exe`) et l'image disque Mac (`.dmg`, une seule pour le
 | **PDF-14** | **Petits écrans** : sur un portable dont l'affichage est agrandi (1920 × 1080 à 150 %, 175 % ou 200 %), la fenêtre agrandie ne passe plus sous la barre des tâches : elle exigeait 680 pixels de haut, plus que l'écran n'en offre ; elle en demande 460 (et 900 de large) ; à l'ouverture, elle ne dépasse plus de l'écran ; le **bouton principal** de chaque outil reste à l'écran, collé en bas de la fenêtre, quand la page est plus haute qu'elle (avec ce qu'il manque quand il est grisé) ; les boutons de la question du premier lancement et des réglages de la messagerie restent visibles ; une fois le travail fait, l'encadré du résultat vient à l'écran ; l'aperçu en grand d'**Organiser** se règle sur la taille de la fenêtre ; dans **Signature ou cachet**, **Masquer des passages** et **Numéros et tampon**, la page passe sous les réglages quand la fenêtre est étroite | ✅ |
 | **PDF-15** | **Version Mac** (macOS 11 ou plus récent, une seule application pour les Mac Intel et Apple Silicon) : image disque `.dmg`, compilée sur un Mac par un double-clic (`scripts/compiler-mac.command`) et publiée avec l'installateur Windows, compilé lui aussi sur le Mac (`scripts/publier.command`) ; **clic droit dans le Finder** par les services « Automat-PDF : Compresser »… (mêmes actions que sous Windows), **Ouvrir avec** et dépôt sur l'icône du Dock, sans prendre la place d'Aperçu ; une seule fenêtre ; **Office en PDF et PDF en Word par Microsoft Office pour Mac**, piloté par AppleScript : chaque document est confié à Word, Excel ou PowerPoint dans son propre dossier, où son bac à sable le laisse travailler sans rien demander, puis le fichier créé est rangé à sa place (LibreOffice ou Automat-PDF lui-même en relais, comme sous Windows ; jamais un document de l'utilisateur fermé) ; **envoi par Mail** (brouillons ou envoi direct) à la place d'Outlook ; mot de passe de la messagerie dans le trousseau de macOS ; barre des menus et textes adaptés au Mac (⌘, Finder, Mail) ; mises à jour installées puis application relancée ; statistiques avec la version de macOS ; [fiche de test sous Mac](docs/test-mac/README.md) | ✅ |
 | **PDF-16** | **Thème sombre** : Automat-PDF suit le mode clair ou sombre de l'ordinateur (Windows comme Mac) et change avec lui, sans redémarrer ; gris de l'Encre d'Eau sèche, textes secondaires au même contraste qu'en clair (5,8) ; aperçus des pages toujours blancs ; logos inversés | ✅ |
+| **PDF-17** | **Lecteur de PDF** : un PDF ouvert par « Ouvrir avec », déposé seul ou choisi sur l'accueil s'ouvre dans le lecteur (un outil affiché qui prend les PDF, ou demandé par le clic droit, le reçoit comme avant) ; pages à la suite, dessinées par hayro à la largeur affichée quand elles approchent de l'écran ; zoom (largeur, page entière, ⌘ + / − / 0), « Page … sur … », colonne de vignettes ; **recherche** dans le texte (⌘F ou Ctrl+F, sans tenir compte des majuscules ni des accents ; Entrée : résultat suivant), mots trouvés surlignés ; **texte sélectionnable et copiable** (couche de texte invisible, placée mot par mot) ; à côté, les outils qui s'appliquent au PDF, ouverts avec lui d'un clic ; ouverture dans l'application habituelle (pour imprimer) | ✅ |
+| **PDF-18** | **Nouvelle apparence** : fond aux halos de couleur et panneaux de **verre dépoli**, en clair comme en sombre ; une **couleur par groupe d'outils** (cartes de l'accueil, pastilles, panneaux et numéros d'étape de chaque outil, texte foncé au contraste de 7 au moins) ; barre latérale en verre, outils rangés par groupes repliables ; **documents récents** (gardés sur l'ordinateur, avec leur première page) dans la barre latérale, sur l'accueil (« Reprendre ») et en puces dans chaque outil ; sur Mac, **fenêtre transparente** sur le bureau flouté, sans barre de titre ; réglage « Réduire la transparence » du système respecté | ✅ |
 
 ## Développer (Mac ou Windows)
 
@@ -140,8 +142,9 @@ Sur Mac, la mise à jour est l'application elle-même, compressée (`Automat-PDF
 
 ```
 src/                     Interface React + TypeScript (Mantine)
-  Accueil.tsx            Accueil : « Que voulez-vous faire ? », recherche d'une tâche, zone de dépôt
-  outils.tsx             Les outils, rangés par groupes : menu, accueil, fichiers reçus
+  Accueil.tsx            Accueil : « Que voulez-vous faire ? », recherche d'une tâche, « Reprendre », cartes des groupes
+  outils.tsx             Les outils, rangés par groupes (avec leur couleur) : menu, accueil, fichiers reçus
+  theme.ts               Couleurs (Eau sèche, teintes des groupes), verre et halos, en clair et en sombre
   textes.ts              Tous les textes de l'interface (traduction future), adaptés au système (Windows ou Mac)
   systeme.ts             Le système de l'ordinateur (Mac ou Windows), d'après la vue web
   coeur.ts               Accès typé aux commandes du cœur
@@ -151,8 +154,11 @@ src/                     Interface React + TypeScript (Mantine)
                          repérage des personnes dans le texte des pages, enchaînements enregistrés,
                          réglages de la messagerie (messageries courantes reconnues d'après l'adresse),
                          ce qui manque pour convertir (Office, LibreOffice), recherche d'une tâche
-                         avec les mots de tous les jours, chemins (fichier proposé à côté de l'original)
+                         avec les mots de tous les jours, chemins (fichier proposé à côté de l'original),
+                         destination des fichiers reçus (outil, lecteur ou question), documents récents,
+                         recherche dans le texte d'un PDF
   pages/commun/reception.ts  Fichiers reçus de l'Explorateur ou du Finder (clic droit, glisser-déposer), confiés aux outils
+  pages/lecteur/         Lecteur de PDF : pages, vignettes, zoom, recherche, couche de texte, outils à côté
   pages/                 Un dossier par outil (organiser/, mise-en-page/, fusion/, intercaler/, images/,
                          separation/, annoter/, securite/, optimiser/, convertir/), et commun/, partagé :
                          zone de dépôt, étapes numérotées, bouton d'action qui dit ce qu'il manque,
@@ -165,7 +171,9 @@ src-tauri/               Cœur Rust (Tauri)
   src/pdf.rs             Fusion, séparation, assemblage de pages choisies (ordre, rotation) ; pages recopiées
                          telles quelles, liens internes vers des pages écartées retirés
   src/rendu.rs           Pages rendues en images (vignettes, aperçus, export PNG/JPG) par hayro, en Rust
-  src/texte.rs           Texte des pages lu par hayro : lignes, mots et colonnes reconstitués d'après les positions
+  src/texte.rs           Texte des pages lu par hayro : lignes, mots et colonnes reconstitués d'après les positions ;
+                         mots placés d'une page, pour la couche de texte du lecteur
+  src/mesures.rs         Mesures du rendu (test lancé à la main, en version optimisée) : ouverture et dessin d'un gros PDF
   src/envoi.rs           Messages à envoyer, suivi du compte rendu et bilan, communs à la messagerie, à Outlook et à Mail
   src/messagerie.rs      Envoi par la messagerie (SMTP, chiffré par le système), mot de passe dans le coffre du système
   src/outlook.rs         Envoi par Outlook (Windows), par le script scripts/outlook.ps1
@@ -199,7 +207,8 @@ src-tauri/               Cœur Rust (Tauri)
   scripts/macos/         Scripts AppleScript intégrés au programme (Mail ; Word, Excel et PowerPoint), en ASCII
   windows/clic-droit.nsh Sous-menu du clic droit, posé et retiré par l'installateur NSIS (pas par le MSI)
   Info.plist             Mac : services du clic droit, raison donnée pour piloter Office et Mail, langue
-  tauri.macos.conf.json  Mac : « Ouvrir avec » (PDF, images, documents Office), signature, image disque
+  tauri.macos.conf.json  Mac : fenêtre transparente sans barre de titre (la reprendre en entier si celle de
+                         tauri.conf.json change), « Ouvrir avec » (PDF, images, documents Office), signature, image disque
   macos/                 Mac : autorisations de l'application signée (piloter d'autres applications)
 scripts/                 Compilation de l'installateur Windows sur un PC, et de l'application Mac sur un Mac
 ```

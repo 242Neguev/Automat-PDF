@@ -404,6 +404,11 @@ pub fn textes_pdf(chemin: &str) -> Result<Vec<String>, Erreur> {
     texte::textes(octets, &nom)
 }
 
+/// Les mots d'une page et leur place, pour la couche de texte du lecteur (sélection, copie, recherche).
+pub fn mots_page(chemin: &str, page: usize) -> Result<Vec<texte::Mot>, Erreur> {
+    texte::mots(memoire::pdf(chemin)?, &nom_de(chemin), page)
+}
+
 /// Le fichier d'une personne : ses pages (comptées à partir de 0), et son mot de passe s'il faut
 /// le protéger.
 #[derive(Debug, Clone, Deserialize)]

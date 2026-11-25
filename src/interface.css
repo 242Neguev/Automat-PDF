@@ -16,15 +16,16 @@
   }
 }
 
-/* Zone où glisser ses fichiers : pointillés, et couleur d'accent au survol (elle se clique aussi). */
-.zone-depot {
+/* Zone où glisser ses fichiers : pointillés, et couleur d'accent au survol (elle se clique aussi). Le
+   sélecteur l'emporte sur le bord des panneaux de verre (plus bas). */
+.mantine-Paper-root.zone-depot[data-with-border] {
   border: 2px dashed var(--mantine-color-default-border);
   cursor: pointer;
   transition:
     border-color 120ms ease,
     background-color 120ms ease;
 }
-.zone-depot:hover {
+.mantine-Paper-root.zone-depot[data-with-border]:hover {
   border-color: var(--mantine-color-eau-5);
   background-color: var(--automat-accent-fond);
 }
@@ -40,10 +41,14 @@
   z-index: 3;
   margin-block: calc(var(--mantine-spacing-xs) * -1);
   padding-block: var(--mantine-spacing-xs);
-  background-color: var(--mantine-color-body);
-  transition: box-shadow 120ms ease;
+  transition:
+    box-shadow 120ms ease,
+    background-color 120ms ease;
 }
+/* Collée, elle devient une bande de verre : le contenu qui défile dessous s'y devine, flouté. */
 .barre-action[data-collee] {
+  background-color: var(--automat-verre-fort);
+  backdrop-filter: blur(16px) saturate(140%);
   box-shadow: var(--automat-ombre-barre);
 }
 /* Dans une fenêtre de dialogue, la barre descend jusqu'à son bord. */
@@ -69,4 +74,430 @@
 .tuile-outil:focus-visible > .mantine-Paper-root {
   border-color: var(--automat-accent-bord);
   background-color: var(--automat-accent-fond);
+}
+
+/* -----------------------------------------------------------------------------------------------
+ * Verre et couleurs : le fond de la fenêtre est un dégradé traversé de halos de couleur (theme.ts,
+ * --automat-fond), sur lequel l'application pose des panneaux de verre et des cartes pastel.
+ * ----------------------------------------------------------------------------------------------- */
+body {
+  background: var(--automat-fond);
+  background-attachment: fixed;
+}
+/* Mac : la fenêtre est transparente et macOS floute le bureau derrière elle (tauri.macos.conf.json) ;
+   le fond ne garde que ses halos, sur un voile léger. */
+html[data-fenetre="verre"] body {
+  background: var(--automat-fond-verre);
+}
+
+/* Les panneaux à bord (étapes des outils, encadrés, tuiles) deviennent du verre dépoli posé sur ce fond :
+   nacré, bordé, avec un liseré de lumière en haut. */
+.mantine-Paper-root[data-with-border],
+.carte-action,
+.commandes-lecteur,
+.bandeau-depot {
+  box-shadow:
+    inset 0 1px 0 var(--automat-reflet),
+    var(--automat-ombre-carte);
+}
+.mantine-Paper-root[data-with-border] {
+  background-color: var(--automat-verre);
+  border-color: var(--automat-verre-bord);
+}
+/* Dans un outil, les panneaux prennent un voile et un bord de la teinte de son groupe. */
+.page-outil .mantine-Paper-root[data-with-border] {
+  background-color: rgba(var(--teinte-rvb), var(--automat-teinte-panneau));
+  border-color: rgba(var(--teinte-rvb), var(--automat-teinte-bord));
+}
+
+/* Barre latérale : un panneau de verre qui flotte sur le fond, aux grands arrondis. */
+.mantine-AppShell-navbar {
+  background: transparent;
+  border: none;
+}
+.barre-laterale {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px 10px 10px;
+  border-radius: var(--mantine-radius-xl);
+  background-color: var(--automat-verre-fort);
+  border: 1px solid var(--automat-verre-bord);
+  box-shadow: var(--automat-ombre-carte);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+.barre-laterale .mantine-NavLink-root {
+  border-radius: var(--mantine-radius-md);
+  --nl-hover: var(--automat-survol-fond);
+}
+.barre-laterale .mantine-NavLink-root[data-active] {
+  --nl-bg: var(--automat-actif-fond);
+  --nl-hover: var(--automat-actif-fond);
+  --nl-color: var(--mantine-color-text);
+  font-weight: 650;
+}
+/* Titre d'une section de la barre latérale (« Documents récents », « Outils »), avec son bouton. */
+.titre-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 12px 6px 2px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+/* Pastille d'un outil (menu, lecteur) : son icône sur la teinte de son groupe. */
+.pastille {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--teinte-fond);
+  color: var(--teinte-texte);
+}
+
+/* Cartes des groupes sur l'accueil : pastel vif, texte foncé de la même teinte, étiquette en capitales. */
+.carte-groupe {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 12px 10px;
+  border-radius: var(--mantine-radius-xl);
+  background: var(--teinte-fond);
+  color: var(--teinte-texte);
+  box-shadow: var(--automat-ombre-carte);
+}
+.carte-groupe .entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 4px;
+}
+.carte-groupe .etiquette {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.carte-groupe .tuile-icone {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--teinte-tuile);
+}
+.ligne-outil {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 14px;
+  color: inherit;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+.ligne-outil:hover,
+.ligne-outil:focus-visible {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+.ligne-outil .titre {
+  font-weight: 700;
+  line-height: 1.25;
+}
+.ligne-outil .description {
+  font-size: 13px;
+  line-height: 1.3;
+  opacity: 0.85;
+}
+
+/* Cartes d'action (outils proposés à côté d'un PDF dans le lecteur) : du verre, une pastille, un titre. */
+.carte-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 16px;
+  background-color: var(--automat-verre);
+  border: 1px solid var(--automat-verre-bord);
+  color: inherit;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+.carte-action:hover,
+.carte-action:focus-visible {
+  background-color: var(--automat-actif-fond);
+}
+.carte-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Documents récents : petite vignette de la première page, nom, et la croix qui le retire au survol. */
+.document-recent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 6px;
+  border-radius: 12px;
+  color: inherit;
+  text-align: left;
+}
+.document-recent:hover,
+.document-recent:focus-within {
+  background-color: var(--automat-survol-fond);
+}
+.document-recent[data-actif] {
+  background-color: var(--automat-actif-fond);
+}
+.document-recent .retirer {
+  opacity: 0;
+}
+.document-recent:hover .retirer,
+.document-recent:focus-within .retirer {
+  opacity: 1;
+}
+
+/* Boutons carrés en verre (en-tête du lecteur), comme les petits boutons posés sur les cartes. */
+.bouton-verre {
+  background-color: var(--automat-verre);
+  border: 1px solid var(--automat-verre-bord);
+}
+.bouton-verre:hover {
+  background-color: var(--automat-actif-fond);
+}
+
+/* Pastilles plus grandes : en-tête d'un outil, tuiles des tâches. */
+.pastille-grande {
+  width: 56px;
+  height: 56px;
+  border-radius: 17px;
+  box-shadow: var(--automat-ombre-carte);
+}
+.pastille-moyenne {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+}
+
+/* Accueil : les groupes en grille, dans l'ordre de lecture (de gauche à droite, puis ligne suivante) ;
+   les cartes d'une même ligne ont la même hauteur, comme des cases. Quatre colonnes sur un grand écran. */
+.grille-groupes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+/* Une ligne par outil, de hauteur fixe : l'explication tient sur une ligne, coupée au besoin. */
+.carte-groupe .ligne-outil .description {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Bandeau pour choisir des fichiers (ou les glisser n'importe où dans la fenêtre), sous la recherche. */
+.bandeau-depot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 16px;
+  border-radius: var(--mantine-radius-lg);
+  border: 1.5px dashed var(--mantine-color-default-border);
+  background-color: var(--automat-verre);
+  color: inherit;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+.bandeau-depot:hover,
+.bandeau-depot:focus-visible {
+  border-color: var(--mantine-color-eau-5);
+  background-color: var(--automat-accent-fond);
+}
+.bandeau-bouton {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--mantine-color-eau-6);
+  color: var(--mantine-color-white);
+}
+
+/* « Reprendre » : une ligne par document, sa première page, son nom et depuis quand. */
+.ligne-reprendre {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  color: inherit;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+.ligne-reprendre:hover,
+.ligne-reprendre:focus-visible {
+  background-color: var(--automat-actif-fond);
+}
+
+/* Page d'un outil : un halo de la teinte de son groupe derrière l'en-tête, et les numéros des étapes
+   dans cette teinte (variables --teinte-* posées par App.tsx). */
+.page-outil {
+  position: relative;
+}
+/* Le halo est une tache de couleur floutée : il s'estompe de tous côtés, sans bord visible. */
+.page-outil::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -110px;
+  left: -30px;
+  width: 640px;
+  height: 300px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: rgba(var(--teinte-rvb), var(--automat-halo-force));
+  filter: blur(80px);
+}
+.numero-etape {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 800;
+  background: var(--teinte-fond, var(--mantine-color-eau-6));
+  color: var(--teinte-texte, var(--mantine-color-white));
+}
+/* Les PDF récents, à un clic de l'outil affiché. */
+.puce-recent {
+  max-width: 220px;
+}
+
+/* « Réduire la transparence » (macOS, Windows) : les panneaux deviennent opaques. */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-mantine-color-scheme][data-mantine-color-scheme] {
+    --automat-verre: var(--mantine-color-body);
+    --automat-verre-fort: var(--mantine-color-body);
+  }
+  .barre-laterale,
+  .barre-action[data-collee] {
+    backdrop-filter: none;
+  }
+}
+
+/* Lecteur : la pastille de verre de la page et du zoom, et la zone creusée où défilent les pages. */
+.commandes-lecteur {
+  padding: 6px 8px 6px 6px;
+  border-radius: 22px;
+  background-color: var(--automat-verre);
+  border: 1px solid var(--automat-verre-bord);
+}
+.zone-pages {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  border-radius: var(--mantine-radius-lg);
+  background-color: var(--automat-encart);
+  border: 1px solid var(--automat-verre-bord);
+}
+
+/* -----------------------------------------------------------------------------------------------
+ * Mac : fenêtre en verre (essai du 25/11/2026). macOS floute le bureau derrière la fenêtre (matière
+ * « barre latérale », active même quand la fenêtre ne l'est pas) ; pas de barre de titre : les trois
+ * boutons de la fenêtre se posent dans le coin de la barre latérale, et la bande du haut la déplace.
+ * ----------------------------------------------------------------------------------------------- */
+.zone-glisser {
+  position: fixed;
+  z-index: 150;
+  inset: 0 0 auto 0;
+  height: 30px;
+}
+html[data-fenetre="verre"] .barre-laterale {
+  padding-top: 48px;
+}
+html[data-fenetre="verre"] .mantine-AppShell-main {
+  padding-top: 34px;
+}
+/* Plus de transparence qu'ailleurs : du verre plus clair, et des champs et boutons secondaires en verre
+   eux aussi (les fenêtres de dialogue et les menus restent opaques). */
+html[data-fenetre="verre"][data-mantine-color-scheme="dark"] {
+  --automat-verre: rgba(255, 255, 255, 0.06);
+  --automat-verre-fort: rgba(26, 28, 33, 0.3);
+  --mantine-color-default: rgba(255, 255, 255, 0.06);
+  --mantine-color-default-hover: rgba(255, 255, 255, 0.11);
+}
+html[data-fenetre="verre"][data-mantine-color-scheme="light"] {
+  --automat-verre: rgba(255, 255, 255, 0.36);
+  --automat-verre-fort: rgba(255, 255, 255, 0.4);
+  --mantine-color-default: rgba(255, 255, 255, 0.5);
+  --mantine-color-default-hover: rgba(255, 255, 255, 0.7);
+}
+
+/* Lecteur : la couche de texte (invisible, mot par mot, pour sélectionner et copier), les surlignages de
+   la recherche, et la colonne des vignettes. */
+.couche-texte {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  font-family: sans-serif;
+}
+.couche-texte span {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  transform-origin: 0 0;
+  cursor: text;
+}
+.couche-texte ::selection {
+  background: rgba(30, 110, 114, 0.32);
+}
+.couche-texte br::selection {
+  background: transparent;
+}
+.surlignage {
+  position: absolute;
+  transform-origin: 0 0;
+  border-radius: 2px;
+  background: rgba(255, 210, 0, 0.42);
+  pointer-events: none;
+}
+.surlignage[data-actuel] {
+  background: rgba(255, 140, 0, 0.55);
+  outline: 2px solid rgba(255, 120, 0, 0.9);
+}
+.colonne-vignettes {
+  width: 128px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 10px 6px;
+  border-radius: var(--mantine-radius-lg);
+  background-color: var(--automat-encart);
+  border: 1px solid var(--automat-verre-bord);
+}
+.vignette-lecteur {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+}
+.vignette-lecteur:hover {
+  background-color: var(--automat-survol-fond);
+}
+.vignette-lecteur[data-courante] {
+  border-color: var(--mantine-color-eau-5);
+  background-color: var(--automat-actif-fond);
 }

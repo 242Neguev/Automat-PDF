@@ -220,6 +220,12 @@ pub async fn textes_pdf(chemin: String) -> Result<Vec<String>, Erreur> {
     en_arriere_plan(move || operations::textes_pdf(&chemin)).await
 }
 
+/// Les mots d'une page et leur place, pour le lecteur.
+#[tauri::command]
+pub async fn mots_page(chemin: String, page: usize) -> Result<Vec<crate::texte::Mot>, Erreur> {
+    en_arriere_plan(move || operations::mots_page(&chemin, page)).await
+}
+
 /// Un PDF par personne (protégé par son mot de passe s'il en a un) ; renvoie les fichiers créés.
 #[tauri::command]
 pub async fn separer_par_personne(

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Group, Paper, Stack, Text, ThemeIcon, Title } from "@mantine/core";
+import { Group, Paper, Stack, Text, Title } from "@mantine/core";
 
 interface Props {
   numero: number;
@@ -8,17 +8,16 @@ interface Props {
   children: ReactNode;
 }
 
-/** Une étape numérotée d'un outil qui en compte plusieurs : « 1. Le PDF à séparer ». */
+/**
+ * Une étape numérotée d'un outil qui en compte plusieurs : « 1. Le PDF à séparer ». Son numéro prend la
+ * teinte du groupe de l'outil (variables --teinte-* posées par la page de l'outil, voir App.tsx).
+ */
 export default function Etape({ numero, titre, aide, children }: Props) {
   return (
     <Paper withBorder p="md" data-etape={numero}>
       <Stack gap="sm">
         <Group gap="sm" wrap="nowrap" align="flex-start">
-          <ThemeIcon radius="xl" size={30} style={{ flexShrink: 0 }}>
-            <Text fw={700} size="sm" c="white">
-              {numero}
-            </Text>
-          </ThemeIcon>
+          <span className="numero-etape">{numero}</span>
           <div>
             <Title order={4}>{titre}</Title>
             {aide && (

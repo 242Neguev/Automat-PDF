@@ -20,6 +20,8 @@ mod mail;
 mod marques;
 mod memoire;
 mod messagerie;
+#[cfg(test)]
+mod mesures;
 mod office;
 pub mod operations;
 mod outlook;
@@ -221,6 +223,7 @@ pub fn run() {
             commandes::compresser_pdf,
             commandes::taille_fichier,
             commandes::textes_pdf,
+            commandes::mots_page,
             commandes::separer_par_personne,
             commandes::envoyer_par_outlook,
             commandes::envoyer_par_messagerie,

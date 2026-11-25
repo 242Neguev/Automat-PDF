@@ -1,8 +1,10 @@
 // Les outils de l'application, rangés par groupes : menu de gauche, accueil, fichiers reçus.
 import type { ComponentType } from "react";
 import {
+  IconArrowsExchange,
   IconArrowsMinimize,
   IconEyeOff,
+  IconFeather,
   IconFiles,
   IconFileTypeDocx,
   IconFileTypePdf,
@@ -11,12 +13,16 @@ import {
   IconLayoutGrid,
   IconLock,
   IconNumbers,
+  IconPencil,
   IconPhoto,
   IconPhotoPlus,
   IconScissors,
+  IconShieldLock,
   IconSignature,
+  IconStack2,
   IconUsers,
 } from "@tabler/icons-react";
+import type { Teinte } from "./theme";
 import Caviarder from "./pages/annoter/Caviarder";
 import NumerosTampon from "./pages/annoter/NumerosTampon";
 import SignatureCachet from "./pages/annoter/SignatureCachet";
@@ -47,12 +53,17 @@ export interface DefinitionOutil {
 
 export interface Groupe {
   cle: keyof typeof textes.groupes;
+  /** Couleur du groupe : sa carte sur l'accueil, la pastille de ses outils (theme.ts, TEINTES). */
+  teinte: Teinte;
+  icone: typeof IconFiles;
   outils: DefinitionOutil[];
 }
 
 export const GROUPES: Groupe[] = [
   {
     cle: "pages",
+    teinte: "jaune",
+    icone: IconLayoutGrid,
     outils: [
       { cle: "organiser", icone: IconLayoutGrid, page: OrganiserPdf, accepte: ["pdf"] },
       { cle: "miseEnPage", icone: IconLayoutColumns, page: MiseEnPage, accepte: ["pdf"] },
@@ -60,6 +71,8 @@ export const GROUPES: Groupe[] = [
   },
   {
     cle: "assembler",
+    teinte: "orange",
+    icone: IconStack2,
     outils: [
       { cle: "fusionner", icone: IconFiles, page: FusionPdf, accepte: ["pdf"] },
       { cle: "intercaler", icone: IconLayersIntersect, page: IntercalerPdf, accepte: ["pdf"] },
@@ -68,6 +81,8 @@ export const GROUPES: Groupe[] = [
   },
   {
     cle: "decouper",
+    teinte: "lavande",
+    icone: IconScissors,
     outils: [
       { cle: "separer", icone: IconScissors, page: SeparationPdf, accepte: ["pdf", "liste"] },
       { cle: "parPersonne", icone: IconUsers, page: SeparationParPersonne, accepte: ["pdf", "liste"] },
@@ -75,6 +90,8 @@ export const GROUPES: Groupe[] = [
   },
   {
     cle: "annoter",
+    teinte: "citron",
+    icone: IconPencil,
     outils: [
       { cle: "marques", icone: IconNumbers, page: NumerosTampon, accepte: ["pdf"] },
       { cle: "signature", icone: IconSignature, page: SignatureCachet, accepte: ["pdf", "image"] },
@@ -82,14 +99,18 @@ export const GROUPES: Groupe[] = [
   },
   {
     cle: "securite",
+    teinte: "ciel",
+    icone: IconShieldLock,
     outils: [
       { cle: "motDePasse", icone: IconLock, page: MotDePasse, accepte: ["pdf"] },
       { cle: "caviarder", icone: IconEyeOff, page: Caviarder, accepte: ["pdf"] },
     ],
   },
-  { cle: "optimiser", outils: [{ cle: "compresser", icone: IconArrowsMinimize, page: Compresser, accepte: ["pdf"] }] },
+  { cle: "optimiser", teinte: "rose", icone: IconFeather, outils: [{ cle: "compresser", icone: IconArrowsMinimize, page: Compresser, accepte: ["pdf"] }] },
   {
     cle: "convertir",
+    teinte: "menthe",
+    icone: IconArrowsExchange,
     outils: [
       { cle: "enImages", icone: IconPhoto, page: PdfEnImages, accepte: ["pdf"] },
       { cle: "officeEnPdf", icone: IconFileTypePdf, page: OfficeEnPdf, accepte: ["office"] },
@@ -99,6 +120,9 @@ export const GROUPES: Groupe[] = [
 ];
 
 export const OUTILS = GROUPES.flatMap((groupe) => groupe.outils);
+
+/** Le groupe de chaque outil (pour sa teinte). */
+export const GROUPE_DE = Object.fromEntries(GROUPES.flatMap((groupe) => groupe.outils.map((outil) => [outil.cle, groupe]))) as Record<Outil, Groupe>;
 
 /** Ce qui décrit un outil pour la recherche : son titre, sa description et ses mots-clés. */
 export function texteDe(definition: DefinitionOutil): string {

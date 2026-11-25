@@ -1,6 +1,6 @@
 import { DEFAULT_THEME, mergeMantineTheme } from "@mantine/core";
 import { describe, expect, it } from "vitest";
-import { suivreOrdinateur, theme, variables } from "./theme";
+import { suivreOrdinateur, TEINTES, theme, variables } from "./theme";
 
 const complet = mergeMantineTheme(DEFAULT_THEME, theme);
 const { light: clair, dark: sombre } = variables(complet);
@@ -35,6 +35,13 @@ describe("thème clair et sombre", () => {
     expect(contraste(gris[2], gris[6])).toBeGreaterThanOrEqual(4.5); // … dans un champ
     expect(contraste(complet.colors.eau[4], gris[7])).toBeGreaterThanOrEqual(4.5); // liens et textes Eau
     expect(contraste(clair["--mantine-color-dimmed"], "#ffffff")).toBeGreaterThanOrEqual(5.5);
+  });
+
+  it("garde lisible le texte des cartes de couleur et de leurs icônes", () => {
+    for (const [nom, { fond, tuile, texte }] of Object.entries(TEINTES)) {
+      expect(contraste(texte, fond), nom).toBeGreaterThanOrEqual(7);
+      expect(contraste(texte, tuile), nom).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it("suit toujours le thème de l'ordinateur", () => {

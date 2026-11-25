@@ -16,7 +16,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-dialog = "2"
 # Une seule fenêtre : les fichiers ouverts depuis l'Explorateur (clic droit) vont à la fenêtre déjà ouverte.
 tauri-plugin-single-instance = "2"
