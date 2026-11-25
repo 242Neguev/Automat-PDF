@@ -15,6 +15,7 @@ use crate::envoi::{BilanEnvoi, Message};
 use crate::erreur::Erreur;
 use crate::images::OptionsImages;
 use crate::imposition::Disposition;
+use crate::impression::{Feuille, Imprimante, OptionsImpression, Reglages};
 use crate::libreoffice::Convertisseurs;
 use crate::marques::{OptionsMarques, Placement};
 use crate::messagerie::Compte;
@@ -216,16 +217,44 @@ pub async fn deverrouiller_pdf(
     en_arriere_plan(move || operations::deverrouiller_pdf(&chemin, &mot_de_passe, &sortie)).await
 }
 
-/// Imprime le PDF du lecteur (avec ses annotations en cours) par la fenêtre d'impression du système ;
-/// `false` : l'utilisateur a annulé.
+/// Imprime le PDF du lecteur (avec ses annotations en cours) : sous Windows avec les choix de la
+/// fenêtre d'impression d'Automat-PDF, sur Mac par celle de macOS ; `false` : l'utilisateur a annulé.
 #[tauri::command]
 pub async fn imprimer_pdf(
     app: AppHandle,
     fenetre: tauri::WebviewWindow,
     chemin: String,
     annotations: Vec<Annotation>,
+    options: Option<OptionsImpression>,
 ) -> Result<bool, Erreur> {
-    en_arriere_plan(move || operations::imprimer_pdf(&app, &fenetre, &chemin, &annotations)).await
+    en_arriere_plan(move || {
+        operations::imprimer_pdf(&app, &fenetre, &chemin, &annotations, options.as_ref())
+    })
+    .await
+}
+
+/// Les imprimantes de l'ordinateur, celle par défaut en tête (Windows).
+#[tauri::command]
+pub async fn imprimantes() -> Result<Vec<Imprimante>, Erreur> {
+    en_arriere_plan(operations::imprimantes).await
+}
+
+/// La feuille telle que l'imprimante la prendra, pour l'aperçu (Windows).
+#[tauri::command]
+pub async fn feuille_imprimante(options: OptionsImpression) -> Result<Feuille, Erreur> {
+    en_arriere_plan(move || operations::feuille_imprimante(&options)).await
+}
+
+/// Les réglages du pilote de l'imprimante, dans sa propre fenêtre ; `None` : annulés (Windows).
+#[tauri::command]
+pub async fn proprietes_imprimante(
+    app: AppHandle,
+    fenetre: tauri::WebviewWindow,
+    imprimante: String,
+    pilote: Vec<u8>,
+) -> Result<Option<Reglages>, Erreur> {
+    en_arriere_plan(move || operations::proprietes_imprimante(&app, &fenetre, &imprimante, &pilote))
+        .await
 }
 
 /// Signets et liens d'un PDF, pour le lecteur.

@@ -29,6 +29,7 @@ import {
   type Mot,
   type AvancementImpression,
   type NavigationPdf,
+  type OptionsImpression,
 } from "../../coeur";
 import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, sans, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
 import { aCote, nomDe } from "../../donnees/chemins";
@@ -44,6 +45,8 @@ import { ZoneDepot } from "../commun/ZoneFichier";
 import { BarreAnnotations, CoucheAnnotations, type ImageChargee, type OutilAnnotation } from "./Annotations";
 import MotDePasseLecture from "./MotDePasseLecture";
 import ColonneSignets from "./Signets";
+import FenetreImpression from "./Impression";
+import { MAC } from "../../systeme";
 import { motsDe, textesDe } from "./textes";
 
 const t = textes.lecteur;
@@ -112,6 +115,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   const [lienExterne, setLienExterne] = useState<string | null>(null);
   /** Impression en cours : pages envoyées à l'imprimante, et sur combien (0 : la fenêtre d'impression est ouverte). */
   const [impression, setImpression] = useState<AvancementImpression | null>(null);
+  /** Fenêtre d'impression d'Automat-PDF ouverte (Windows ; sur Mac, celle de macOS). */
+  const [fenetreImpression, setFenetreImpression] = useState(false);
   /** Taille du fichier, écrite pour l'en-tête (« 3,9 Mo »). */
   const [taille, setTaille] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("largeur");
@@ -305,12 +310,22 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     return () => void arret.then((arreter) => arreter());
   }, []);
 
-  /** Imprime le document tel qu'il s'affiche, annotations en cours comprises, par la fenêtre d'impression du système. */
-  async function imprimer() {
+  /**
+   * Imprime le document tel qu'il s'affiche, annotations en cours comprises : sur Mac par la fenêtre
+   * d'impression de macOS, sous Windows par celle d'Automat-PDF (aperçu, couleur ou noir et blanc…).
+   */
+  function imprimer() {
     if (!chemin || !formats || impression) return;
+    if (MAC) void lancerImpression(null);
+    else setFenetreImpression(true);
+  }
+
+  async function lancerImpression(options: OptionsImpression | null) {
+    if (!chemin) return;
+    setFenetreImpression(false);
     setImpression({ faites: 0, total: 0 });
     try {
-      if (await imprimerPdf(chemin, pourLeCoeur(annotations))) notifications.show({ color: "eau", message: t.imprime, autoClose: 4000 });
+      if (await imprimerPdf(chemin, pourLeCoeur(annotations), options)) notifications.show({ color: "eau", message: t.imprime, autoClose: 4000 });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -712,6 +727,18 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
         <Alert color="blue" variant="light" withCloseButton onClose={() => setDeverrouille(false)} mb="xs" data-deverrouille>
           {t.motDePasse.ouvert}
         </Alert>
+      )}
+
+      {chemin && formats && (
+        <FenetreImpression
+          ouvert={fenetreImpression}
+          chemin={chemin}
+          formats={formats}
+          courante={courante}
+          avecAnnotations={annotations.length > 0}
+          onFermer={() => setFenetreImpression(false)}
+          onImprimer={(options) => void lancerImpression(options)}
+        />
       )}
 
       <Modal opened={lienExterne !== null} onClose={() => setLienExterne(null)} title={t.lienExterne.titre} centered>

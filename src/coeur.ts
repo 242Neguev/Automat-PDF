@@ -187,11 +187,72 @@ export interface NavigationPdf {
   liens: LienPdf[][];
 }
 
+/** Un format de papier de l'imprimante, en millimètres (code : celui de Windows, 9 pour A4). */
+export interface Papier {
+  code: number;
+  nom: string;
+  largeur: number;
+  hauteur: number;
+}
+export type RectoVerso = "non" | "bordLong" | "bordCourt";
+/** Taille réelle réduite si besoin, toujours réelle, ou ajustée à la feuille. */
+export type Ajustement = "reduire" | "reelle" | "ajuster";
+export type Orientation = "auto" | "portrait" | "paysage";
+/** Réglages de l'imprimante : par défaut, ou laissés par « Propriétés de l'imprimante… » (pilote). */
+export interface ReglagesImprimante {
+  couleur: boolean;
+  rectoVerso: RectoVerso;
+  papier: number | null;
+  paysage: boolean;
+  /** Réglages complets du pilote, à rendre pour l'impression ; vide : ceux par défaut. */
+  pilote: number[];
+}
+export interface Imprimante {
+  nom: string;
+  parDefaut: boolean;
+  /** Elle sait imprimer en couleur, en recto verso. */
+  couleur: boolean;
+  rectoVerso: boolean;
+  papiers: Papier[];
+  reglages: ReglagesImprimante;
+}
+/** La feuille, en millimètres : taille, et marges non imprimables (gauche, haut, droite, bas). */
+export interface Feuille {
+  largeur: number;
+  hauteur: number;
+  marges: [number, number, number, number];
+}
+/** Les choix de la fenêtre d'impression d'Automat-PDF (Windows). */
+export interface OptionsImpression {
+  imprimante: string;
+  /** Pages (à partir de 0) ; vide : toutes. */
+  pages: number[];
+  copies: number;
+  assembler: boolean;
+  couleur: boolean;
+  rectoVerso: RectoVerso;
+  ajustement: Ajustement;
+  orientation: Orientation;
+  papier: number | null;
+  pilote: number[];
+}
+
 /**
  * Imprime le PDF du lecteur tel qu'il s'affiche (déchiffré s'il a été ouvert avec son mot de passe, avec
- * les annotations en cours), par la fenêtre d'impression du système. `false` : l'utilisateur a annulé.
+ * les annotations en cours) : sous Windows avec les choix de la fenêtre d'Automat-PDF, sur Mac (options
+ * nulles) par la fenêtre d'impression de macOS. `false` : l'utilisateur a annulé.
  */
-export const imprimerPdf = (chemin: string, annotations: ReturnType<typeof pourLeCoeur>) => invoke<boolean>("imprimer_pdf", { chemin, annotations });
+export const imprimerPdf = (chemin: string, annotations: ReturnType<typeof pourLeCoeur>, options: OptionsImpression | null) =>
+  invoke<boolean>("imprimer_pdf", { chemin, annotations, options });
+
+/** Les imprimantes de l'ordinateur, celle par défaut en tête (Windows). */
+export const imprimantes = () => invoke<Imprimante[]>("imprimantes");
+
+/** La feuille telle que l'imprimante la prendra avec ces choix, pour l'aperçu (Windows). */
+export const feuilleImprimante = (options: OptionsImpression) => invoke<Feuille>("feuille_imprimante", { options });
+
+/** Ouvre la fenêtre de réglages du pilote de l'imprimante ; `null` : annulée (Windows). */
+export const proprietesImprimante = (imprimante: string, pilote: number[]) => invoke<ReglagesImprimante | null>("proprietes_imprimante", { imprimante, pilote });
 
 /** Événement du cœur pendant l'envoi des pages à l'imprimante (Windows) : pages envoyées, et sur combien. */
 export const AVANCEMENT_IMPRESSION = "impression-avancement";

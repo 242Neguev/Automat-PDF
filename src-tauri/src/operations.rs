@@ -17,7 +17,7 @@ use crate::erreur::Erreur;
 use crate::fichiers::{self, FichierAEcrire, Nature};
 use crate::images::{self, ImageSource, OptionsImages};
 use crate::imposition::{self, Disposition};
-use crate::impression;
+use crate::impression::{self, Feuille, Imprimante, OptionsImpression, Reglages};
 use crate::libreoffice::{self, Convertisseurs};
 use crate::marques::{self, OptionsMarques, Placement};
 use crate::memoire;
@@ -567,12 +567,14 @@ pub fn ouvrir_page_des_versions() -> Result<(), Erreur> {
 }
 
 /// Imprime le PDF du lecteur tel qu'il s'affiche (déchiffré s'il a été ouvert avec son mot de passe,
-/// avec les annotations en cours) ; `false` : l'utilisateur a annulé.
+/// avec les annotations en cours) ; `false` : l'utilisateur a annulé. Sous Windows, avec les choix
+/// de la fenêtre d'impression d'Automat-PDF ; sur Mac, par celle de macOS.
 pub fn imprimer_pdf(
     app: &AppHandle,
     fenetre: &WebviewWindow,
     chemin: &str,
     annotations: &[Annotation],
+    options: Option<&OptionsImpression>,
 ) -> Result<bool, Erreur> {
     let nom = nom_de(chemin);
     let mut octets = memoire::pdf(chemin)?;
@@ -583,7 +585,27 @@ pub fn imprimer_pdf(
         })?;
         octets = Arc::new(pdf::ecrire(document)?);
     }
-    impression::imprimer(app, fenetre, octets, &nom)
+    impression::imprimer(app, fenetre, octets, &nom, options)
+}
+
+/// Les imprimantes de l'ordinateur, celle par défaut en tête (Windows).
+pub fn imprimantes() -> Result<Vec<Imprimante>, Erreur> {
+    impression::imprimantes()
+}
+
+/// La feuille telle que l'imprimante la prendra, pour l'aperçu (Windows).
+pub fn feuille_imprimante(options: &OptionsImpression) -> Result<Feuille, Erreur> {
+    impression::feuille(options)
+}
+
+/// Les réglages du pilote de l'imprimante, dans sa propre fenêtre ; `None` : annulés (Windows).
+pub fn proprietes_imprimante(
+    app: &AppHandle,
+    fenetre: &WebviewWindow,
+    imprimante: &str,
+    pilote: &[u8],
+) -> Result<Option<Reglages>, Erreur> {
+    impression::proprietes(app, fenetre, imprimante, pilote)
 }
 
 /// Signets et liens d'un PDF, pour le lecteur.
