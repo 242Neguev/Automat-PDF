@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, Loader, Text } from "@mantine/core";
 import { IconFileOff } from "@tabler/icons-react";
-import { imageFichier, imagePage } from "./vignettes";
+import { FICHIER_RELU, imageFichier, imagePage } from "./vignettes";
 
 interface Props {
   chemin: string;
@@ -25,6 +25,16 @@ export default function Vignette({ chemin, page, rotation = 0, taille, largeur, 
   const [visible, setVisible] = useState(false);
   const [image, setImage] = useState<string | null>(null);
   const [echec, setEchec] = useState(false);
+  /** Nouvel essai quand le fichier se relit autrement (PDF ouvert avec son mot de passe). */
+  const [essai, setEssai] = useState(0);
+
+  useEffect(() => {
+    const relu = (evenement: Event) => {
+      if ((evenement as CustomEvent<string>).detail === chemin) setEssai((n) => n + 1);
+    };
+    window.addEventListener(FICHIER_RELU, relu);
+    return () => window.removeEventListener(FICHIER_RELU, relu);
+  }, [chemin]);
 
   useEffect(() => {
     const element = cadre.current;
@@ -53,7 +63,7 @@ export default function Vignette({ chemin, page, rotation = 0, taille, largeur, 
     return () => {
       actuelle = false;
     };
-  }, [visible, chemin, page, largeur]);
+  }, [visible, chemin, page, largeur, essai]);
 
   return (
     <Box ref={cadre} w={taille} h={taille} style={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

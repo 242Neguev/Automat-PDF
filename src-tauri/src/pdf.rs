@@ -15,7 +15,7 @@ const HERITES: [&[u8]; 4] = [b"Resources", b"MediaBox", b"CropBox", b"Rotate"];
 /// déchiffré, un PDF qui demande un mot de passe est refusé avec un message clair.
 pub(crate) fn charger(octets: &[u8], nom: &str) -> Result<Document, Erreur> {
     let mut document = Document::load_mem_with_options(octets, LoadOptions::with_password("")).map_err(|erreur| match erreur {
-        lopdf::Error::InvalidPassword => Erreur::simple(format!(
+        lopdf::Error::InvalidPassword => Erreur::mot_de_passe(format!(
             "« {nom} » est protégé par un mot de passe : retirez-le d'abord avec l'outil « Mot de passe »."
         )),
         autre => Erreur::simple(format!("« {nom} » n'a pas pu être lu : {autre}")),

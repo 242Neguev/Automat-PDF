@@ -4,10 +4,27 @@
 // approchent, à la largeur affichée. Par-dessus, une couche de texte invisible, placée mot par mot,
 // permet de sélectionner et de copier le texte, et porte les surlignages de la recherche.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ActionIcon, Alert, Badge, Box, Button, Center, CloseButton, Group, Loader, NumberInput, SegmentedControl, Stack, Text, TextInput, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Alert, Badge, Box, Button, Center, CloseButton, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Text, TextInput, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconChevronUp, IconCircleCheck, IconExternalLink, IconFileText, IconFolder, IconLayoutSidebar, IconPencil, IconPlus, IconSearch, IconZoomIn, IconZoomOut } from "@tabler/icons-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { annoterPdf, enErreur, lireImage, montrerDansDossier, ouvrirFichier, pagesPdf, tailleFichier, type FormatPage, type Mot } from "../../coeur";
+import {
+  annoterPdf,
+  enErreur,
+  lireImage,
+  montrerDansDossier,
+  MOT_DE_PASSE,
+  navigationPdf,
+  ouvrirFichier,
+  ouvrirLien,
+  pagesPdf,
+  reverrouillerLecture,
+  tailleFichier,
+  type DestinationPdf,
+  type FormatPage,
+  type LienPdf,
+  type Mot,
+  type NavigationPdf,
+} from "../../coeur";
 import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, sans, type Annotation, type Historique, type Teinte } from "../../donnees/annotations";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { motsCouverts, occurrences, type Occurrence } from "../../donnees/recherche-texte";
@@ -16,10 +33,12 @@ import { GROUPE_DE, type DefinitionOutil } from "../../outils";
 import { textes } from "../../textes";
 import { varsTeinte } from "../../theme";
 import Vignette from "../commun/Vignette";
-import { imagePage } from "../commun/vignettes";
+import { imagePage, relire } from "../commun/vignettes";
 import { signalerErreur } from "../commun/signalerErreur";
 import { ZoneDepot } from "../commun/ZoneFichier";
 import { BarreAnnotations, CoucheAnnotations, type ImageChargee, type OutilAnnotation } from "./Annotations";
+import MotDePasseLecture from "./MotDePasseLecture";
+import ColonneSignets from "./Signets";
 import { motsDe, textesDe } from "./textes";
 
 const t = textes.lecteur;
@@ -77,6 +96,15 @@ interface Props {
 export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: Props) {
   const [formats, setFormats] = useState<FormatPage[] | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  /** Le PDF demande son mot de passe d'ouverture ; puis il a été ouvert avec (déchiffré en mémoire). */
+  const [protege, setProtege] = useState(false);
+  const [deverrouille, setDeverrouille] = useState(false);
+  /** Relance la lecture du document (après son mot de passe). */
+  const [ouverture, setOuverture] = useState(0);
+  /** Signets et liens du document ; le panneau de gauche (vignettes ou signets) ; le lien vers un site à confirmer. */
+  const [navigation, setNavigation] = useState<NavigationPdf | null>(null);
+  const [panneau, setPanneau] = useState<"pages" | "signets">("pages");
+  const [lienExterne, setLienExterne] = useState<string | null>(null);
   /** Taille du fichier, écrite pour l'en-tête (« 3,9 Mo »). */
   const [taille, setTaille] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("largeur");
@@ -121,6 +149,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   useEffect(() => {
     setFormats(null);
     setErreur(null);
+    setProtege(false);
+    setNavigation(null);
     setTaille(null);
     setCourante(0);
     courante_.current = 0;
@@ -133,14 +163,40 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     let actuelDoc = true;
     pagesPdf(chemin).then(
       (lus) => actuelDoc && setFormats(lus),
-      (e) => actuelDoc && setErreur(enErreur(e).message || t.illisible),
+      (e) => {
+        if (!actuelDoc) return;
+        const lue = enErreur(e);
+        if (lue.motif === MOT_DE_PASSE) setProtege(true);
+        else setErreur(lue.message || t.illisible);
+      },
     );
     tailleFichier(chemin).then(
       (octets) => actuelDoc && setTaille(formaterTaille(octets)),
       () => undefined,
     );
+    // Signets et liens : un PDF sans eux (ou illisible pour lopdf) s'affiche quand même.
+    navigationPdf(chemin).then(
+      (lue) => actuelDoc && setNavigation(lue),
+      () => undefined,
+    );
     return () => {
       actuelDoc = false;
+    };
+  }, [chemin, ouverture]);
+
+  // Un autre document : l'avis « ouvert avec son mot de passe » ne le concerne pas.
+  useEffect(() => setDeverrouille(false), [chemin]);
+
+  // Le PDF ouvert avec son mot de passe est oublié quand le lecteur passe à un autre document : il
+  // redemandera son mot de passe, comme à sa première ouverture (et comme Acrobat).
+  const ouvertAvecMotDePasse = useRef<string | null>(null);
+  useEffect(() => {
+    const ouvert = chemin;
+    return () => {
+      if (ouvert && ouvertAvecMotDePasse.current === ouvert) {
+        ouvertAvecMotDePasse.current = null;
+        void reverrouillerLecture(ouvert).catch(() => undefined);
+      }
     };
   }, [chemin]);
 
@@ -234,6 +290,12 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
     const page = pages.current[index];
     if (!zone || !page) return;
     zone.scrollTop += page.getBoundingClientRect().top - zone.getBoundingClientRect().top - MARGE + decalage;
+  }
+
+  /** Suit un signet ou un lien : vers une page (et sa hauteur), ou vers un site, après confirmation. */
+  function suivreLien(destination: DestinationPdf | null, adresse: string | null) {
+    if (destination) allerA(destination.page, destination.y ? destination.y * echelle : 0);
+    else if (adresse) setLienExterne(adresse);
   }
 
   function validerSaisie() {
@@ -433,6 +495,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
   const nombre = formats?.length ?? 0;
   const details = [formats ? t.pages(nombre) : null, taille].filter(Boolean).join(" · ");
   const occurrenceActuelle = resultats && resultats.length > 0 ? resultats[actuel] : null;
+  const aSignets = (navigation?.signets.length ?? 0) > 0;
   return (
     <Stack ref={cadre} gap="md" h={hauteur} data-lecteur>
       {/* En-tête : la première page, le nom du document, et de quoi l'ouvrir ailleurs ou en ouvrir un autre. */}
@@ -613,11 +676,74 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
         </Alert>
       )}
 
+      {deverrouille && formats && (
+        <Alert color="blue" variant="light" withCloseButton onClose={() => setDeverrouille(false)} mb="xs" data-deverrouille>
+          {t.motDePasse.ouvert}
+        </Alert>
+      )}
+
+      <Modal opened={lienExterne !== null} onClose={() => setLienExterne(null)} title={t.lienExterne.titre} centered>
+        <Stack gap="sm">
+          <Text size="sm">{t.lienExterne.texte}</Text>
+          <Text size="sm" fw={600} style={{ overflowWrap: "anywhere" }} data-adresse-lien>
+            {lienExterne}
+          </Text>
+          <Text size="xs" c="dimmed">
+            {t.lienExterne.prudence}
+          </Text>
+          <Group justify="flex-end" gap="sm">
+            <Button variant="default" onClick={() => setLienExterne(null)}>
+              {t.lienExterne.annuler}
+            </Button>
+            <Button
+              leftSection={<IconExternalLink size={15} />}
+              onClick={() => {
+                const adresse = lienExterne;
+                setLienExterne(null);
+                if (adresse) void ouvrirLien(adresse).catch(signalerErreur);
+              }}
+            >
+              {t.lienExterne.ouvrir}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       <Group align="stretch" gap="md" wrap="nowrap" style={{ flex: 1, minHeight: 0 }}>
-        {vignettes && formats && formats.length > 1 && <ColonneVignettes chemin={chemin} nombre={formats.length} courante={courante} onPage={(index) => allerA(index)} />}
+        {vignettes && formats && (formats.length > 1 || aSignets) && (
+          <div className="panneau-lateral" data-signets={aSignets || undefined}>
+            {aSignets && (
+              <SegmentedControl
+                size="xs"
+                fullWidth
+                value={panneau}
+                onChange={(valeur) => setPanneau(valeur === "signets" ? "signets" : "pages")}
+                data={[
+                  { value: "pages", label: t.pagesVignettes },
+                  { value: "signets", label: t.signets },
+                ]}
+              />
+            )}
+            {aSignets && panneau === "signets" ? (
+              <ColonneSignets signets={navigation!.signets} courante={courante} onSuivre={suivreLien} />
+            ) : (
+              <ColonneVignettes chemin={chemin} nombre={formats.length} courante={courante} onPage={(index) => allerA(index)} />
+            )}
+          </div>
+        )}
 
         <Box ref={defilement} onScroll={suivre} className="zone-pages" data-pages>
-          {erreur ? (
+          {protege && chemin ? (
+            <MotDePasseLecture
+              chemin={chemin}
+              onOuvert={() => {
+                ouvertAvecMotDePasse.current = chemin;
+                setDeverrouille(true);
+                setOuverture((n) => n + 1);
+                relire(chemin);
+              }}
+            />
+          ) : erreur ? (
             <Alert color="red" m="md" title={t.illisible}>
               {erreur}
             </Alert>
@@ -637,6 +763,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir }: P
                   racine={defilement.current}
                   requete={resultats && resultats.length > 0 ? recherche : ""}
                   rangActuel={occurrenceActuelle?.page === index ? occurrenceActuelle.rang : -1}
+                  liens={annoter ? undefined : navigation?.liens[index]}
+                  onLien={(lien) => suivreLien(lien.destination, lien.adresse)}
                   refPage={(element) => {
                     pages.current[index] = element;
                   }}
@@ -767,6 +895,9 @@ interface PropsPage {
   refPage: (element: HTMLDivElement | null) => void;
   /** Couche de l'éditeur (annotations), posée au-dessus du texte ; reçoit les mots de la page. */
   couche?: (mots: Mot[] | null) => ReactNode;
+  /** Liens de la page (vers une page, un site, un e-mail) ; aucun pendant l'annotation. */
+  liens?: LienPdf[];
+  onLien?: (lien: LienPdf) => void;
 }
 
 /**
@@ -774,7 +905,7 @@ interface PropsPage {
  * de l'écran. Les mots, invisibles, se sélectionnent et se copient ; ceux que la recherche trouve sont
  * surlignés.
  */
-function PageLecteur({ chemin, index, format, echelle, racine, requete, rangActuel, refPage, couche }: PropsPage) {
+function PageLecteur({ chemin, index, format, echelle, racine, requete, rangActuel, refPage, couche, liens, onLien }: PropsPage) {
   const boite = useRef<HTMLDivElement | null>(null);
   const [proche, setProche] = useState(false);
   const [image, setImage] = useState<string | null>(null);
@@ -858,6 +989,22 @@ function PageLecteur({ chemin, index, format, echelle, racine, requete, rangActu
           })}
         </div>
       )}
+      {onLien &&
+        liens?.map((lien, rang) => {
+          const libelle = lien.adresse ?? (lien.destination ? t.lienPage(lien.destination.page + 1) : "");
+          return (
+            <button
+              key={`lien-${rang}`}
+              type="button"
+              className="lien-pdf"
+              style={{ left: lien.x * echelle, top: lien.y * echelle, width: lien.largeur * echelle, height: lien.hauteur * echelle }}
+              title={libelle}
+              aria-label={libelle}
+              onClick={() => onLien(lien)}
+              data-lien
+            />
+          );
+        })}
       {couche?.(mots)}
     </Box>
   );

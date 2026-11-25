@@ -18,6 +18,7 @@ use crate::imposition::Disposition;
 use crate::libreoffice::Convertisseurs;
 use crate::marques::{OptionsMarques, Placement};
 use crate::messagerie::Compte;
+use crate::navigation::Navigation;
 use crate::office::Conversions;
 use crate::operations::{
     self, FichierPersonne, ImageChoisie, PageChoisie, Reception, Recus, Separation,
@@ -213,6 +214,30 @@ pub async fn deverrouiller_pdf(
     sortie: String,
 ) -> Result<(), Erreur> {
     en_arriere_plan(move || operations::deverrouiller_pdf(&chemin, &mot_de_passe, &sortie)).await
+}
+
+/// Signets et liens d'un PDF, pour le lecteur.
+#[tauri::command]
+pub async fn navigation_pdf(chemin: String) -> Result<Navigation, Erreur> {
+    en_arriere_plan(move || operations::navigation_pdf(&chemin)).await
+}
+
+/// Ouvre le lien d'un PDF (page web, e-mail), après l'accord de l'utilisateur dans le lecteur.
+#[tauri::command]
+pub async fn ouvrir_lien(adresse: String) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::ouvrir_lien(&adresse)).await
+}
+
+/// Oublie le contenu déchiffré d'un PDF : le lecteur est passé à un autre document.
+#[tauri::command]
+pub fn reverrouiller_lecture(chemin: String) {
+    operations::reverrouiller_lecture(&chemin);
+}
+
+/// Ouvre dans le lecteur un PDF protégé par un mot de passe : déchiffré en mémoire seulement.
+#[tauri::command]
+pub async fn deverrouiller_lecture(chemin: String, mot_de_passe: String) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::deverrouiller_lecture(&chemin, &mot_de_passe)).await
 }
 
 /// Enregistre le PDF allégé ; renvoie ce que la compression a fait.

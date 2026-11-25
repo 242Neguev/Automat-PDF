@@ -43,6 +43,15 @@ export const imagePage = (chemin: string, page: number, largeur: number) =>
 /** Adresse (blob:) de la vignette d'un fichier image. */
 export const imageFichier = (chemin: string, largeur: number) => charger(`${chemin}\u0000image\u0000${largeur}`, () => vignetteImage(chemin, largeur));
 
+/** Événement : un fichier se relit autrement (PDF ouvert avec son mot de passe) ; ses vignettes se redemandent. */
+export const FICHIER_RELU = "automat-pdf:fichier-relu";
+
+/** Oublie les images d'un fichier, et fait redemander les siennes aux vignettes affichées (un échec compris). */
+export function relire(chemin: string) {
+  oublier(chemin);
+  window.dispatchEvent(new CustomEvent<string>(FICHIER_RELU, { detail: chemin }));
+}
+
 /** Oublie les images d'un fichier qui vient d'être réécrit. */
 export function oublier(chemin: string) {
   for (const [cle, image] of images) {

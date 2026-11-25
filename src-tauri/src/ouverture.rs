@@ -49,18 +49,36 @@ pub fn montrer(chemin: &str) -> Result<(), Erreur> {
     lancer(commande_montrer(chemin), chemin)
 }
 
-/// Ouvre dans le navigateur une page choisie par l'application, jamais une adresse reçue.
-pub fn ouvrir_page(page: &'static str) -> Result<(), Erreur> {
-    let programme = if cfg!(windows) {
+/// Programme qui confie une adresse au navigateur (ou à la messagerie, pour « mailto: »).
+fn navigateur() -> &'static str {
+    if cfg!(windows) {
         "explorer.exe"
     } else if cfg!(target_os = "macos") {
         "open"
     } else {
         "xdg-open"
-    };
-    let mut commande = Command::new(programme);
+    }
+}
+
+/// Ouvre dans le navigateur une page choisie par l'application, jamais une adresse reçue.
+pub fn ouvrir_page(page: &'static str) -> Result<(), Erreur> {
+    let mut commande = Command::new(navigateur());
     commande.arg(page);
     lancer(commande, page)
+}
+
+/// Ouvre le lien d'un PDF dans le navigateur ou la messagerie, après l'accord de l'utilisateur dans
+/// le lecteur : seulement une page web ou un e-mail (`navigation::adresse_sure`), jamais un fichier,
+/// un programme ou un script.
+pub fn ouvrir_lien(adresse: &str) -> Result<(), Erreur> {
+    let adresse = crate::navigation::adresse_sure(adresse).ok_or_else(|| {
+        Erreur::simple(
+            "Ce lien ne peut pas être ouvert : seuls les liens vers une page web ou une adresse e-mail le peuvent.",
+        )
+    })?;
+    let mut commande = Command::new(navigateur());
+    commande.arg(&adresse);
+    lancer(commande, &adresse)
 }
 
 /// Lance la commande sans l'attendre ; elle est récupérée à sa fin, sans bloquer l'application.

@@ -23,6 +23,7 @@ mod memoire;
 mod messagerie;
 #[cfg(test)]
 mod mesures;
+mod navigation;
 mod office;
 pub mod operations;
 mod outlook;
@@ -222,6 +223,10 @@ pub fn run() {
             commandes::caviarder_pdf,
             commandes::proteger_pdf,
             commandes::deverrouiller_pdf,
+            commandes::deverrouiller_lecture,
+            commandes::reverrouiller_lecture,
+            commandes::navigation_pdf,
+            commandes::ouvrir_lien,
             commandes::compresser_pdf,
             commandes::taille_fichier,
             commandes::textes_pdf,

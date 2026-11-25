@@ -55,6 +55,7 @@ pub fn verifier(messages: &[Message]) -> Result<(), Erreur> {
     Err(Erreur {
         message: "Certains messages ne peuvent pas être préparés.".into(),
         details: problemes,
+        motif: None,
     })
 }
 
@@ -138,6 +139,7 @@ impl<F: Fn(usize, usize)> Suivi<F> {
             return Err(Erreur {
                 message: echec.into(),
                 details: fin.erreurs,
+                motif: None,
             });
         }
         Ok(self.bilan)

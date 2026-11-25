@@ -5,7 +5,12 @@ import type { pourLeCoeur } from "./donnees/annotations";
 export interface Erreur {
   message: string;
   details: string[];
+  /** Ce que l'interface peut en faire : `MOT_DE_PASSE`, le PDF demande son mot de passe d'ouverture. */
+  motif?: string;
 }
+
+/** Motif d'une erreur du cœur : le PDF ne s'ouvre qu'avec son mot de passe. */
+export const MOT_DE_PASSE = "mot_de_passe";
 
 /** Contenu brut d'une liste (Excel, CSV, ODS), décodée ensuite dans l'interface. */
 export const lireListe = (chemin: string) => invoke<ArrayBuffer>("lire_liste", { chemin });
@@ -148,6 +153,51 @@ export const protegerPdf = (chemin: string, options: OptionsProtection, sortie: 
 
 /** Enregistre dans `sortie` le PDF sans son mot de passe. */
 export const deverrouillerPdf = (chemin: string, motDePasse: string, sortie: string) => invoke<void>("deverrouiller_pdf", { chemin, motDePasse, sortie });
+
+/** Où mène un signet ou un lien interne : la page (0 : la première) et la hauteur visée, en points depuis le haut. */
+export interface DestinationPdf {
+  page: number;
+  y: number | null;
+}
+
+/** Un signet du sommaire, à plat : son niveau dit sa place dans l'arbre (0 : premier niveau). */
+export interface Signet {
+  titre: string;
+  niveau: number;
+  destination: DestinationPdf | null;
+  /** Page web ou e-mail, pour un signet qui y mène. */
+  adresse: string | null;
+  /** Ses sous-signets sont dépliés à l'ouverture. */
+  ouvert: boolean;
+}
+
+/** Un lien d'une page, en points de la page affichée depuis son coin en haut à gauche. */
+export interface LienPdf {
+  x: number;
+  y: number;
+  largeur: number;
+  hauteur: number;
+  destination: DestinationPdf | null;
+  adresse: string | null;
+}
+
+export interface NavigationPdf {
+  signets: Signet[];
+  /** Les liens de chaque page. */
+  liens: LienPdf[][];
+}
+
+/** Signets et liens d'un PDF. */
+export const navigationPdf = (chemin: string) => invoke<NavigationPdf>("navigation_pdf", { chemin });
+
+/** Ouvre le lien d'un PDF (page web, e-mail), après l'accord de l'utilisateur. Le cœur refuse tout le reste. */
+export const ouvrirLien = (adresse: string) => invoke<void>("ouvrir_lien", { adresse });
+
+/** Ouvre dans le lecteur un PDF protégé par un mot de passe : déchiffré en mémoire seulement, jamais sur le disque. */
+export const deverrouillerLecture = (chemin: string, motDePasse: string) => invoke<void>("deverrouiller_lecture", { chemin, motDePasse });
+
+/** Oublie le PDF déchiffré : le lecteur est passé à un autre document, qui redemandera son mot de passe. */
+export const reverrouillerLecture = (chemin: string) => invoke<void>("reverrouiller_lecture", { chemin });
 
 /** Ce que la compression a fait : tailles (octets), images allégées, objets en double retirés. */
 export interface Bilan {
@@ -335,8 +385,8 @@ export const recusAuLancement = () => invoke<Recus[]>("recus_au_lancement");
 /** Erreur du cœur (message et détails) ou de l'interface, sous une même forme. */
 export function enErreur(erreur: unknown): Erreur {
   if (typeof erreur === "object" && erreur !== null && "message" in erreur) {
-    const { message, details } = erreur as Partial<Erreur>;
-    return { message: String(message), details: Array.isArray(details) ? details : [] };
+    const { message, details, motif } = erreur as Partial<Erreur>;
+    return { message: String(message), details: Array.isArray(details) ? details : [], ...(typeof motif === "string" ? { motif } : {}) };
   }
   return { message: String(erreur), details: [] };
 }

@@ -61,6 +61,7 @@ fn erreur_du_script(code: &str, details: Option<String>) -> Erreur {
     Erreur {
         message: message.into(),
         details: details.into_iter().collect(),
+        motif: None,
     }
 }
 

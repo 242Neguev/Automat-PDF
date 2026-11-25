@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use hayro::hayro_interpret::InterpreterSettings;
-use hayro::hayro_syntax::Pdf;
+use hayro::hayro_syntax::{DecryptionError, LoadPdfError, Pdf};
 use hayro::vello_cpu::color::palette::css::{TRANSPARENT, WHITE};
 use hayro::{RenderCache, RenderSettings, render};
 use image::codecs::jpeg::JpegEncoder;
@@ -25,7 +25,14 @@ pub struct FormatPage {
 const COTE_MAX: f32 = 8000.0;
 
 pub(crate) fn ouvrir(octets: Arc<Vec<u8>>, nom: &str) -> Result<Pdf, Erreur> {
-    Pdf::new(octets).map_err(|_| Erreur::simple(format!("« {nom} » n'a pas pu être lu.")))
+    Pdf::new(octets).map_err(|erreur| match erreur {
+        // Un PDF qui n'a que des restrictions (impression, copie…) s'ouvre : hayro essaie le mot de
+        // passe vide. Celui-ci demande son mot de passe d'ouverture.
+        LoadPdfError::Decryption(DecryptionError::PasswordProtected) => {
+            Erreur::mot_de_passe(format!("« {nom} » est protégé par un mot de passe."))
+        }
+        _ => Erreur::simple(format!("« {nom} » n'a pas pu être lu.")),
+    })
 }
 
 /// Taille de chaque page.

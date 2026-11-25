@@ -20,6 +20,7 @@ use crate::libreoffice::{self, Convertisseurs};
 use crate::marques::{self, OptionsMarques, Placement};
 use crate::memoire;
 use crate::messagerie::{self, Compte};
+use crate::navigation::{self, Navigation};
 use crate::office::{self, Conversions};
 use crate::outlook::ModeEnvoi;
 use crate::ouverture;
@@ -391,6 +392,16 @@ pub fn proteger_pdf(chemin: &str, options: &OptionsProtection, sortie: &str) -> 
     fichiers::enregistrer(sortie, &securite::proteger(document, options)?)
 }
 
+/// Déverrouille en mémoire un PDF qui demande son mot de passe d'ouverture, pour le lecteur.
+pub fn deverrouiller_lecture(chemin: &str, mot_de_passe: &str) -> Result<(), Erreur> {
+    memoire::deverrouiller(chemin, mot_de_passe, &nom_de(chemin))
+}
+
+/// Oublie le contenu déchiffré d'un PDF : le lecteur est passé à un autre document.
+pub fn reverrouiller_lecture(chemin: &str) {
+    memoire::reverrouiller(chemin);
+}
+
 /// Enregistre dans `sortie` le PDF sans son mot de passe.
 pub fn deverrouiller_pdf(chemin: &str, mot_de_passe: &str, sortie: &str) -> Result<(), Erreur> {
     let octets = fichiers::lire(chemin, Nature::Pdf)?;
@@ -551,6 +562,17 @@ const PAGE_DES_VERSIONS: &str = "https://github.com/242Neguev/Automat-PDF/releas
 /// Ouvre la page de la dernière version publiée dans le navigateur.
 pub fn ouvrir_page_des_versions() -> Result<(), Erreur> {
     ouverture::ouvrir_page(PAGE_DES_VERSIONS)
+}
+
+/// Signets et liens d'un PDF, pour le lecteur.
+pub fn navigation_pdf(chemin: &str) -> Result<Navigation, Erreur> {
+    let document = pdf::charger(&memoire::pdf(chemin)?, &nom_de(chemin))?;
+    Ok(navigation::navigation(&document))
+}
+
+/// Ouvre le lien d'un PDF (page web, e-mail), après l'accord de l'utilisateur dans le lecteur.
+pub fn ouvrir_lien(adresse: &str) -> Result<(), Erreur> {
+    ouverture::ouvrir_lien(adresse)
 }
 
 /// Fichier des réglages de confidentialité : recherche des mises à jour, statistiques anonymes.
