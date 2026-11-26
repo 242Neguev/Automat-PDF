@@ -212,6 +212,7 @@ pub fn images_en_pdf(
             nom: nom_de(&image.chemin),
             octets,
             rotation: image.rotation,
+            ppp: None,
         })
         .collect();
     fichiers::enregistrer(sortie, &images::images_en_pdf(&sources, options)?)

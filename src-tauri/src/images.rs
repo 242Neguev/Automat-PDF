@@ -1,7 +1,8 @@
 //! Images (photos, scans) réunies en un PDF, une image par page. Les JPEG sont repris tels quels :
 //! aucune perte de qualité, et une photo prise en portrait est redressée par la rotation de la page.
 //! Les autres formats (PNG, WEBP, TIFF, BMP, GIF, JPEG en CMJN ou en miroir) sont décodés puis
-//! compressés sans perte, transparence comprise.
+//! compressés sans perte, transparence comprise. Une page numérisée garde sa taille réelle, d'après
+//! sa résolution (`FormatFeuille::Reelle`).
 
 use std::io::Cursor;
 
@@ -17,12 +18,15 @@ const POINTS_PAR_MM: f32 = 72.0 / 25.4;
 /// Feuille A4 en portrait, en points.
 const A4: (f32, f32) = (595.28, 841.89);
 
-/// Taille des pages : A4 (portrait ou paysage selon l'image), ou ajustée aux proportions de l'image.
+/// Taille des pages : A4 (portrait ou paysage selon l'image), ajustée aux proportions de l'image,
+/// ou réelle, d'après la résolution de chaque image (page numérisée) ; sans résolution connue, la
+/// taille réelle est ajustée.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FormatFeuille {
     A4,
     Ajustee,
+    Reelle,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -33,12 +37,14 @@ pub struct OptionsImages {
     pub marge_mm: f32,
 }
 
-/// Une image à placer : son nom (pour les messages), son contenu et la rotation ajoutée par
-/// l'utilisateur (degrés, sens horaire).
+/// Une image à placer : son nom (pour les messages), son contenu, la rotation ajoutée par
+/// l'utilisateur (degrés, sens horaire) et sa résolution en points par pouce, quand on la connaît
+/// (page numérisée).
 pub struct ImageSource<'a> {
     pub nom: String,
     pub octets: &'a [u8],
     pub rotation: i64,
+    pub ppp: Option<f32>,
 }
 
 /// Image prête à être incorporée : son flux PDF (et celui de sa transparence), sa taille en
@@ -201,8 +207,13 @@ pub fn images_en_pdf(images: &[ImageSource], options: OptionsImages) -> Result<V
         } else {
             (largeur, hauteur)
         };
-        let (page_l, page_h, marge) = match options.format {
-            FormatFeuille::A4 => {
+        let ajustee = if vue_l >= vue_h {
+            (A4.1, A4.1 * vue_h / vue_l, 0.0)
+        } else {
+            (A4.1 * vue_l / vue_h, A4.1, 0.0)
+        };
+        let (page_l, page_h, marge) = match (options.format, source.ppp.filter(|ppp| *ppp > 0.0)) {
+            (FormatFeuille::A4, _) => {
                 let marge = options.marge_mm.clamp(0.0, 50.0) * POINTS_PAR_MM;
                 if vue_l > vue_h {
                     (A4.1, A4.0, marge)
@@ -210,8 +221,9 @@ pub fn images_en_pdf(images: &[ImageSource], options: OptionsImages) -> Result<V
                     (A4.0, A4.1, marge)
                 }
             }
-            FormatFeuille::Ajustee if vue_l >= vue_h => (A4.1, A4.1 * vue_h / vue_l, 0.0),
-            FormatFeuille::Ajustee => (A4.1 * vue_l / vue_h, A4.1, 0.0),
+            // 72 points par pouce.
+            (FormatFeuille::Reelle, Some(ppp)) => (vue_l * 72.0 / ppp, vue_h * 72.0 / ppp, 0.0),
+            (FormatFeuille::Ajustee | FormatFeuille::Reelle, _) => ajustee,
         };
         let echelle = ((page_l - 2.0 * marge) / vue_l).min((page_h - 2.0 * marge) / vue_h);
         // Les coordonnées de la page sont celles d'avant la rotation : la boîte tourne avec l'image.
@@ -352,11 +364,13 @@ mod tests {
                 nom: "paysage.jpg".into(),
                 octets: &photo,
                 rotation: 0,
+                ppp: None,
             },
             ImageSource {
                 nom: "tournee.jpg".into(),
                 octets: &photo,
                 rotation: 90,
+                ppp: None,
             },
         ];
         let pdf = images_en_pdf(
@@ -379,12 +393,62 @@ mod tests {
     }
 
     #[test]
+    fn garde_la_taille_reelle_d_une_page_numerisee() {
+        // Une feuille A4 numérisée à 30 ppp : 248 × 351 pixels, soit 595,2 × 842,4 points.
+        let page = jpeg(248, 351);
+        let images = [
+            ImageSource {
+                nom: "page 1.jpg".into(),
+                octets: &page,
+                rotation: 0,
+                ppp: Some(30.0),
+            },
+            ImageSource {
+                nom: "page 2.jpg".into(),
+                octets: &page,
+                rotation: 90,
+                ppp: Some(30.0),
+            },
+            ImageSource {
+                nom: "photo.jpg".into(),
+                octets: &page,
+                rotation: 0,
+                ppp: None,
+            },
+        ];
+        let pdf = images_en_pdf(
+            &images,
+            OptionsImages {
+                format: FormatFeuille::Reelle,
+                marge_mm: 10.0,
+            },
+        )
+        .unwrap();
+        let pages = pages(&pdf);
+        let proche = |a: f32, b: f32| (a - b).abs() < 0.01;
+        assert!(
+            proche(pages[0].0, 595.2) && proche(pages[0].1, 842.4),
+            "{:?}",
+            pages[0]
+        );
+        // Tournée d'un quart de tour : la boîte garde les dimensions de l'image, la page tourne.
+        assert!(
+            proche(pages[1].0, 595.2) && proche(pages[1].1, 842.4) && pages[1].2 == 90,
+            "{:?}",
+            pages[1]
+        );
+        // Sans résolution connue : la taille est ajustée (le grand côté est celui d'une feuille A4).
+        assert!(proche(pages[2].1, 841.89), "{:?}", pages[2]);
+    }
+
+    #[test]
     fn garde_la_transparence_d_un_png_et_ajuste_la_page() {
         let png = png_transparent(200, 100);
         let images = [ImageSource {
             nom: "logo.png".into(),
             octets: &png,
             rotation: 0,
+            ppp: None,
         }];
         let pdf = images_en_pdf(
             &images,
@@ -416,6 +480,7 @@ mod tests {
                 nom: "faux.png".into(),
                 octets: b"pas une image",
                 rotation: 0,
+                ppp: None,
             }],
             OptionsImages {
                 format: FormatFeuille::A4,

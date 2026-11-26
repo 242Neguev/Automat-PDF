@@ -500,6 +500,75 @@ pub async fn reconnaitre_lecture<R: tauri::Runtime>(
     .await
 }
 
+/// Le dossier de travail des pages numérisées, dans le cache de l'application.
+pub fn dossier_numerisation<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, Erreur> {
+    app.path()
+        .app_cache_dir()
+        .map(|cache| cache.join("numerisation"))
+        .map_err(|erreur| {
+            Erreur::simple(format!(
+                "Le dossier des pages numérisées est introuvable : {erreur}"
+            ))
+        })
+}
+
+/// Les scanners de l'ordinateur, branchés ou sur le réseau.
+#[tauri::command]
+pub async fn scanners() -> Result<Vec<crate::numerisation::Scanner>, Erreur> {
+    en_arriere_plan(crate::numerisation::scanners).await
+}
+
+/// Numérise selon les réglages ; les pages vont dans le dossier de travail. L'avancement est
+/// annoncé par l'événement `progression-numerisation` : pages numérisées.
+#[tauri::command]
+pub async fn numeriser<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    reglages: crate::numerisation::Reglages,
+) -> Result<crate::numerisation::Numerisation, Erreur> {
+    let travail = dossier_numerisation(&app)?;
+    en_arriere_plan(move || {
+        crate::numerisation::numeriser(
+            &reglages,
+            &travail,
+            std::sync::Arc::new(move |pages: usize| {
+                let _ = app.emit("progression-numerisation", pages);
+            }),
+        )
+    })
+    .await
+}
+
+/// Arrête la numérisation en cours ; les pages déjà numérisées sont gardées.
+#[tauri::command]
+pub fn annuler_numerisation() {
+    crate::numerisation::annuler();
+}
+
+/// Le PDF des pages numérisées, écrit dans `sortie`, avec leur texte reconnu si `reconnaitre`.
+/// L'avancement de la reconnaissance est annoncé par l'événement `progression-reconnaissance` :
+/// pages lues, pages à lire.
+#[tauri::command]
+pub async fn enregistrer_numerisation<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    pages: Vec<crate::numerisation::PagePdf>,
+    reconnaitre: bool,
+    sortie: String,
+) -> Result<crate::numerisation::BilanPdf, Erreur> {
+    en_arriere_plan(move || {
+        crate::numerisation::enregistrer_pdf(&pages, reconnaitre, &sortie, &|lues, total| {
+            let _ = app.emit("progression-reconnaissance", (lues, total));
+        })
+    })
+    .await
+}
+
+/// Efface les pages numérisées.
+#[tauri::command]
+pub async fn oublier_numerisation<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), Erreur> {
+    let travail = dossier_numerisation(&app)?;
+    en_arriere_plan(move || crate::numerisation::oublier(&travail)).await
+}
+
 /// Enregistre dans `sortie` le PDF du lecteur tel qu'il est en mémoire : avec le texte reconnu de
 /// ses pages numérisées et les retouches du lecteur. L'original n'est pas modifié.
 #[tauri::command]

@@ -60,7 +60,7 @@ p384 = { version = "0.14", default-features = false, features = ["ecdsa", "std"]
 # Les mêmes versions que Tauri, réduites aux classes utilisées.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSBundle", "NSData", "NSDictionary", "NSError", "NSRange", "NSString", "NSURL"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSBundle", "NSData", "NSDictionary", "NSError", "NSGeometry", "NSIndexSet", "NSRange", "NSRunLoop", "NSString", "NSURL", "NSValue"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "NSPrintOperation", "NSPrintPanel", "NSWorkspace", "block2", "objc2-uniform-type-identifiers"] }
 # Impression depuis le lecteur : PDFKit imprime le PDF lui-même (net à toute résolution), par la
 # fenêtre d'impression de macOS (imprimante, pages, copies, recto verso, aperçu).
@@ -76,6 +76,11 @@ core-foundation = "0.10"
 # Reconnaissance du texte des pages numérisées (OCR) : Vision, le moteur de macOS, hors ligne.
 objc2-vision = { version = "0.3", default-features = false, features = ["std", "VNObservation", "VNRecognizeTextRequest", "VNRequest", "VNRequestHandler", "VNTypes", "objc2-core-foundation"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
+# Numériser depuis le scanner : ImageCaptureCore, les scanners que voit Transfert d'images (USB, réseau,
+# AirScan). Ses réponses n'arrivent que sur le fil principal, où la file principale de GCD (dispatch2)
+# confie le travail.
+objc2-image-capture-core = { version = "0.3", default-features = false, features = ["std", "ICDevice", "ICDeviceBrowser", "ICScannerDevice", "ICScannerFunctionalUnits"] }
+dispatch2 = { version = "0.3", default-features = false, features = ["std"] }
 
 # Windows : impression depuis le lecteur (imprimantes, réglages du pilote, pages envoyées par GDI) ;
 # lecteur de PDF par défaut (association des PDF, fenêtre « Ouvrir avec », registre) ; chaîne du
@@ -84,7 +89,10 @@ objc2-core-foundation = { version = "0.3", default-features = false, features = 
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Printing", "Win32_Storage_Xps", "Win32_Security_Cryptography", "Win32_System_Registry", "Win32_UI_Shell"] }
 # Reconnaissance du texte des pages numérisées (OCR) : Windows.Media.Ocr, le moteur de Windows 10
 # et 11, hors ligne. Le même crate windows que Tauri (WebView2), réduit aux espaces utilisés.
-windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_System_WinRT"] }
+# Numériser depuis le scanner : Windows.Devices.Scanners, au-dessus de WIA (les scanners installés avec
+# leur pilote WIA) ; windows-future nomme le suivi des pages numérisées.
+windows = { version = "0.62", features = ["Devices_Enumeration", "Devices_Scanners", "Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Search", "Storage_Streams", "Win32_System_WinRT"] }
+windows-future = "0.3"
 
 # Voir https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

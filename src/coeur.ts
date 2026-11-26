@@ -608,6 +608,59 @@ export const reconnaitreLecture = (chemin: string) => invoke<BilanReconnaissance
 /** Enregistre le PDF du lecteur tel qu'il est en mémoire (texte reconnu, retouches). */
 export const enregistrerLecture = (chemin: string, sortie: string) => invoke<void>("enregistrer_lecture", { chemin, sortie });
 
+/** Ce qu'un scanner sait faire : vitre, chargeur de documents, recto verso par le chargeur. */
+export interface SourcesScanner {
+  vitre: boolean;
+  chargeur: boolean;
+  rectoVerso: boolean;
+}
+/** Un scanner de l'ordinateur ; ses sources quand on les connaît (sur Mac, après une première numérisation). */
+export interface Scanner {
+  id: string;
+  nom: string;
+  sources: SourcesScanner | null;
+}
+export type SourceNumerisation = "vitre" | "chargeur";
+export type CouleurNumerisation = "couleur" | "gris" | "noir-et-blanc";
+export interface ReglagesNumerisation {
+  scanner: string;
+  source: SourceNumerisation;
+  rectoVerso: boolean;
+  couleur: CouleurNumerisation;
+  /** Points par pouce ; le scanner prend la plus proche des siennes. */
+  resolution: number;
+}
+/** Une page numérisée : son image (dossier de travail) et sa résolution réelle. */
+export interface PageNumerisee {
+  chemin: string;
+  resolution: number;
+}
+export interface Numerisation {
+  pages: PageNumerisee[];
+  sources: SourcesScanner | null;
+  /** Arrêtée par l'utilisateur ; les pages déjà numérisées sont gardées. */
+  annulee: boolean;
+  /** Ce qui a arrêté le scanner après quelques pages. */
+  interrompue: string | null;
+}
+export interface BilanNumerisation {
+  pages: number;
+  texte: BilanReconnaissance | null;
+  /** Pourquoi le texte n'a pas été reconnu ; le PDF est enregistré sans. */
+  sansTexte: string | null;
+}
+/** Les scanners de l'ordinateur, branchés ou sur le réseau. */
+export const scanners = () => invoke<Scanner[]>("scanners");
+/** Numérise (avancement par l'événement « progression-numerisation » : pages numérisées). */
+export const numeriser = (reglages: ReglagesNumerisation) => invoke<Numerisation>("numeriser", { reglages });
+/** Arrête la numérisation en cours ; les pages déjà numérisées sont gardées. */
+export const annulerNumerisation = () => invoke<void>("annuler_numerisation");
+/** Le PDF des pages numérisées, à leur taille réelle, avec leur texte reconnu si demandé (progression-reconnaissance). */
+export const enregistrerNumerisation = (pages: { chemin: string; rotation: number; resolution: number }[], reconnaitre: boolean, sortie: string) =>
+  invoke<BilanNumerisation>("enregistrer_numerisation", { pages, reconnaitre, sortie });
+/** Efface les pages numérisées. */
+export const oublierNumerisation = () => invoke<void>("oublier_numerisation");
+
 /** Ce qui permet de convertir les documents Office sur ce PC. */
 export interface Convertisseurs {
   /** Microsoft Word est inscrit (il peut toutefois ne pas répondre). */

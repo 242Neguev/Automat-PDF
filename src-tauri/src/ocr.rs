@@ -601,6 +601,7 @@ mod tests {
                 nom: "scan.png".into(),
                 octets: &png,
                 rotation: 0,
+                ppp: None,
             }],
             crate::images::OptionsImages {
                 format: crate::images::FormatFeuille::A4,

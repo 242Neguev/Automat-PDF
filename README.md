@@ -163,7 +163,8 @@ src/                     Interface React + TypeScript (Mantine)
                          annuler, surlignage d'après les mots, mots à corriger, montants, retouches des
                          commentaires d'un PDF reçu), signets, impression (pages, aperçu de la feuille),
                          affichage (deux pages, rotation), lecteur par défaut, avancement d'un travail
-                         sur une liste de fichiers (page par page pour la reconnaissance du texte)
+                         sur une liste de fichiers (page par page pour la reconnaissance du texte),
+                         numérisation (nom du PDF, réglages gardés)
   pages/commun/reception.ts  Fichiers reçus de l'Explorateur ou du Finder (clic droit, glisser-déposer), confiés aux outils
   pages/lecteur/         Lecteur de PDF : pages, vignettes, zoom, recherche, couche de texte, outils à côté,
                          onglets, deux pages, rotation ; mot de passe (MotDePasseLecture.tsx), signets
@@ -204,7 +205,8 @@ src-tauri/               Cœur Rust (Tauri)
   src/powershell.rs      Lancement des scripts PowerShell (Windows) : données par fichier, compte rendu JSON, chien de garde
   src/applescript.rs     Lancement des scripts AppleScript (Mac, par osascript), de la même façon
   src/services.rs        Mac : clic droit dans le Finder (services « Automat-PDF : … » déclarés dans Info.plist)
-  src/images.rs          Images en PDF (JPEG repris tels quels, orientation EXIF, transparence)
+  src/images.rs          Images en PDF (JPEG repris tels quels, orientation EXIF, transparence, taille
+                         réelle d'une page numérisée)
   src/imposition.rs      Pages par feuille : formulaires PDF placés à l'échelle, annotations incrustées
   src/marques.rs         Surimpressions : numéros, tampon, filigrane, image (signature, cachet)
   src/caviardage.rs      Caviardage : caractères, pixels, dessins et annotations sous les zones supprimés ;
@@ -228,6 +230,9 @@ src-tauri/               Cœur Rust (Tauri)
                          posée mot par mot sur l'image des pages
   src/volume.rs          Volume traité à la fois : le point de contrôle des opérations sur un lot de
                          documents (sans plafond pour l'instant)
+  src/numerisation.rs    Numériser depuis le scanner : ImageCaptureCore (Mac), Windows.Devices.Scanners
+                         (WIA, Windows) ; pages en images dans le cache, puis PDF à leur taille réelle,
+                         texte reconnu si demandé. examples/numeriser.rs : numériser depuis le terminal
   src/navigation.rs      Signets et liens d'un PDF ; adresses de sites et d'e-mails seules ouvertes
   src/impression.rs      Impression : PDFKit (Mac) ; imprimantes, réglages du pilote et pages par GDI (Windows)
   src/lecteur_defaut.rs  Lecteur de PDF par défaut : qui ouvre les PDF, fenêtre de choix du système

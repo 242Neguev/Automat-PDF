@@ -30,6 +30,8 @@ mod messagerie;
 #[cfg(test)]
 mod mesures;
 mod navigation;
+// Public pour `examples/numeriser.rs` : essayer un scanner sans l'interface.
+pub mod numerisation;
 mod ocr;
 mod office;
 pub mod operations;
@@ -208,8 +210,10 @@ pub fn run() {
             // macOS : les services du clic droit dans le Finder sont remis à cette application.
             #[cfg(target_os = "macos")]
             services::installer(app.handle().clone());
-            #[cfg(not(target_os = "macos"))]
-            let _ = app;
+            // Les pages numérisées d'une session précédente ne restent pas sur l'ordinateur.
+            if let Ok(travail) = commandes::dossier_numerisation(app.handle()) {
+                std::thread::spawn(move || numerisation::oublier(&travail));
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -265,6 +269,11 @@ pub fn run() {
             commandes::semble_numerise,
             commandes::reconnaitre_lecture,
             commandes::enregistrer_lecture,
+            commandes::scanners,
+            commandes::numeriser,
+            commandes::annuler_numerisation,
+            commandes::enregistrer_numerisation,
+            commandes::oublier_numerisation,
             commandes::convertisseurs_office,
             commandes::installer_libreoffice,
             commandes::ouvrir_page_libreoffice,

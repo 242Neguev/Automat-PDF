@@ -257,6 +257,7 @@ version = "0.7.0"
 dependencies = [
  "block2",
  "core-foundation 0.10.1",
+ "dispatch2",
  "flate2",
  "getrandom 0.4.3",
  "hayro",
@@ -268,6 +269,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-core-foundation",
  "objc2-foundation",
+ "objc2-image-capture-core",
  "objc2-pdf-kit",
  "objc2-uniform-type-identifiers",
  "objc2-vision",
@@ -286,6 +288,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "windows",
+ "windows-future",
  "windows-sys 0.61.2",
  "zip",
 ]
@@ -3130,6 +3133,16 @@ dependencies = [
  "libc",
  "objc2",
  "objc2-core-foundation",
+]
+
+[[package]]
+name = "objc2-image-capture-core"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b153f2757b48c47daa739a4c8f27ec2912ddbfe5cb6fd28738ec5d6e1a0e83a"
+dependencies = [
+ "objc2",
+ "objc2-foundation",
 ]
 
 [[package]]
