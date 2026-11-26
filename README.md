@@ -162,7 +162,8 @@ src/                     Interface React + TypeScript (Mantine)
                          recherche dans le texte d'un PDF, annotations de l'éditeur (historique pour
                          annuler, surlignage d'après les mots, mots à corriger, montants, retouches des
                          commentaires d'un PDF reçu), signets, impression (pages, aperçu de la feuille),
-                         affichage (deux pages, rotation), lecteur par défaut
+                         affichage (deux pages, rotation), lecteur par défaut, avancement d'un travail
+                         sur une liste de fichiers (page par page pour la reconnaissance du texte)
   pages/commun/reception.ts  Fichiers reçus de l'Explorateur ou du Finder (clic droit, glisser-déposer), confiés aux outils
   pages/lecteur/         Lecteur de PDF : pages, vignettes, zoom, recherche, couche de texte, outils à côté,
                          onglets, deux pages, rotation ; mot de passe (MotDePasseLecture.tsx), signets
@@ -170,7 +171,7 @@ src/                     Interface React + TypeScript (Mantine)
                          par défaut (LecteurParDefaut.tsx) ; éditeur (Annotations.tsx) : barre d'annotation
                          et couche posée sur chaque page ; liste des commentaires (Commentaires.tsx) ;
                          formulaires (Formulaire.tsx), signature dessinée (FenetreSignature.tsx),
-                         signatures numériques vérifiées (Signatures.tsx)
+                         signatures numériques vérifiées (Signatures.tsx), PDF numérisé (Numerise.tsx)
   pages/                 Un dossier par outil (organiser/, mise-en-page/, fusion/, intercaler/, images/,
                          separation/, annoter/, securite/, optimiser/, convertir/), et commun/, partagé :
                          zone de dépôt, étapes numérotées, bouton d'action qui dit ce qu'il manque,
@@ -222,6 +223,11 @@ src-tauri/               Cœur Rust (Tauri)
                          RSA, RSA-PSS et ECDSA vérifiées (RustCrypto), horodatages
   src/confiance.rs       Certificat d'une signature jugé par le système (magasin de Windows, trousseau de
                          macOS), sans Internet
+  src/ocr.rs             Reconnaissance du texte des scans (OCR) par le moteur du système, hors ligne
+                         (Vision sur Mac, Windows.Media.Ocr sous Windows) ; couche de texte invisible
+                         posée mot par mot sur l'image des pages
+  src/volume.rs          Volume traité à la fois : le point de contrôle des opérations sur un lot de
+                         documents (sans plafond pour l'instant)
   src/navigation.rs      Signets et liens d'un PDF ; adresses de sites et d'e-mails seules ouvertes
   src/impression.rs      Impression : PDFKit (Mac) ; imprimantes, réglages du pilote et pages par GDI (Windows)
   src/lecteur_defaut.rs  Lecteur de PDF par défaut : qui ouvre les PDF, fenêtre de choix du système

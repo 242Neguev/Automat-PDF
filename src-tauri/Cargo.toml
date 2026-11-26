@@ -60,7 +60,7 @@ p384 = { version = "0.14", default-features = false, features = ["ecdsa", "std"]
 # Les mêmes versions que Tauri, réduites aux classes utilisées.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSBundle", "NSData", "NSError", "NSString", "NSURL"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSBundle", "NSData", "NSDictionary", "NSError", "NSRange", "NSString", "NSURL"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "NSPrintOperation", "NSPrintPanel", "NSWorkspace", "block2", "objc2-uniform-type-identifiers"] }
 # Impression depuis le lecteur : PDFKit imprime le PDF lui-même (net à toute résolution), par la
 # fenêtre d'impression de macOS (imprimante, pages, copies, recto verso, aperçu).
@@ -73,12 +73,18 @@ block2 = "0.6"
 # Les mêmes versions que la messagerie (keyring, native-tls).
 security-framework = "3"
 core-foundation = "0.10"
+# Reconnaissance du texte des pages numérisées (OCR) : Vision, le moteur de macOS, hors ligne.
+objc2-vision = { version = "0.3", default-features = false, features = ["std", "VNObservation", "VNRecognizeTextRequest", "VNRequest", "VNRequestHandler", "VNTypes", "objc2-core-foundation"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
 
 # Windows : impression depuis le lecteur (imprimantes, réglages du pilote, pages envoyées par GDI) ;
 # lecteur de PDF par défaut (association des PDF, fenêtre « Ouvrir avec », registre) ; chaîne du
 # certificat d'une signature numérique jugée par le magasin de certificats. Le même windows-sys que Tauri.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Printing", "Win32_Storage_Xps", "Win32_Security_Cryptography", "Win32_System_Registry", "Win32_UI_Shell"] }
+# Reconnaissance du texte des pages numérisées (OCR) : Windows.Media.Ocr, le moteur de Windows 10
+# et 11, hors ligne. Le même crate windows que Tauri (WebView2), réduit aux espaces utilisés.
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_System_WinRT"] }
 
 # Voir https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

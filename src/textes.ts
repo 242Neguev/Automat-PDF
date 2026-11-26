@@ -241,6 +241,10 @@ export const textes = {
       obligatoire: (libelle: string) => `${libelle} (obligatoire)`,
       choisir: "Choisir…",
     },
+    numerise: {
+      bandeau: "Ce PDF semble numérisé : son texte n'est pas reconnu. On ne peut ni y chercher un mot ni en copier le texte.",
+      reconnaitre: "Reconnaître le texte",
+    },
     signaturesNumeriques: {
       titre: "Signatures numériques",
       details: "Détails",
@@ -556,6 +560,14 @@ export const textes = {
       description: "Document modifiable",
       sousTitre: "Convertir des PDF en documents Word modifiables (.docx), avec ou sans Microsoft Word.",
       motsCles: "word docx modifier modifiable éditer retoucher convertir transformer texte",
+    },
+    ocr: {
+      titre: "Reconnaître le texte",
+      description: "Scans cherchables et copiables",
+      sousTitre:
+        "Rendre cherchables des PDF numérisés : leur texte est reconnu sur l'ordinateur, sans Internet, puis posé, invisible, sous l'image de chaque page.",
+      motsCles:
+        "ocr reconnaissance reconnaître texte caractères scan scans scanné scanner numérisé numériser rechercher chercher copier cherchable lire photo",
     },
     parPersonne: {
       titre: "Séparer par personne",
@@ -1065,6 +1077,18 @@ export const textes = {
       deposerDetail: "Chacun deviendra un document Word modifiable (.docx).",
       aide: "Par Microsoft Word s'il est installé, le plus fidèle ; sinon, Automat-PDF convertit lui-même : texte modifiable, images à leur place, colonnes alignées par des tabulations. Relisez le document obtenu. Un PDF numérisé sans texte reconnu ne donne que des images.",
       sansWord: `Microsoft Word n'est pas installé sur ${CET_ORDINATEUR} : Automat-PDF convertira lui-même, avec une mise en page plus simple que celle de Word (paragraphes, polices, images ; les tableaux deviennent des colonnes alignées).`,
+    },
+    ocr: {
+      deposer: "Glissez vos PDF numérisés ici",
+      deposerDetail: "Chacun deviendra un PDF cherchable, « … - texte reconnu.pdf ».",
+      aide: `Le texte est reconnu par ${SYSTEME}, sur ${CET_ORDINATEUR}, sans Internet, en français et en anglais. Il est posé, invisible, sous l'image de chaque page : on peut alors y chercher un mot, en copier le texte, séparer des bulletins par personne. L'image ne change pas, l'original non plus ; les pages qui ont déjà du texte restent telles quelles. Relisez ce qui compte : une lecture automatique peut se tromper.`,
+      bouton: "Reconnaître le texte…",
+      choisirDossier: "Dossier où enregistrer les PDF cherchables",
+      cree: (n: number) => (n > 1 ? `${n} PDF rendus cherchables` : "PDF rendu cherchable"),
+      aucun: "Aucun PDF n'a été rendu cherchable",
+      echecs: (n: number) => `${n} fichier${n > 1 ? "s" : ""} sans texte reconnu :`,
+      progression: (fichier: number, fichiers: number, page: number, pages: number) =>
+        fichiers > 1 ? `Fichier ${fichier} sur ${fichiers} · page ${page} sur ${pages}` : `Page ${page} sur ${pages}`,
     },
   },
   liste: {

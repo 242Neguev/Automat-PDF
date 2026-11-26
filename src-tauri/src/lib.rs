@@ -30,6 +30,7 @@ mod messagerie;
 #[cfg(test)]
 mod mesures;
 mod navigation;
+mod ocr;
 mod office;
 pub mod operations;
 mod outlook;
@@ -46,6 +47,7 @@ mod securite;
 mod services;
 mod signatures;
 mod texte;
+mod volume;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
@@ -259,6 +261,8 @@ pub fn run() {
             commandes::enregistrer_mot_de_passe_messagerie,
             commandes::office_en_pdf,
             commandes::pdf_en_word,
+            commandes::reconnaitre_texte,
+            commandes::semble_numerise,
             commandes::convertisseurs_office,
             commandes::installer_libreoffice,
             commandes::ouvrir_page_libreoffice,

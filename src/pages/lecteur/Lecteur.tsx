@@ -40,6 +40,7 @@ import {
   commentairesPdf,
   formulairePdf,
   retoucherLecture,
+  sembleNumerise,
   signaturesPdf,
   type ChampFormulaire,
   type CommentairePdf,
@@ -96,6 +97,7 @@ import ListeCommentaires from "./Commentaires";
 import { BandeauFormulaire, CoucheFormulaire } from "./Formulaire";
 import FenetreSignature from "./FenetreSignature";
 import { BandeauSignatures, CoucheSignatures, PanneauSignatures } from "./Signatures";
+import { BandeauNumerise } from "./Numerise";
 import MotDePasseLecture from "./MotDePasseLecture";
 import ColonneSignets from "./Signets";
 import FenetreImpression from "./Impression";
@@ -251,6 +253,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
    * enregistrement, si elles sont restées valables.
    */
   const [signatures, setSignatures] = useState<SignaturePdf[] | null>(null);
+  /** Le PDF semble numérisé : aucun texte sur ses premières pages (0.8.0, OCR). */
+  const [numerise, setNumerise] = useState(false);
   const [panneauSignatures, setPanneauSignatures] = useState<{ enAvant: string | null } | null>(null);
   // Après l'enregistrement d'un PDF signé : ses signatures restent valables, ou signalent les corrections.
   const [signaturesGardees, setSignaturesGardees] = useState<"gardees" | "pagesChangees" | null>(null);
@@ -345,6 +349,12 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     signaturesPdf(chemin).then(
       (lues) => actuelDoc && setSignatures(lues),
       () => actuelDoc && setSignatures([]),
+    );
+    // Un scan sans texte : le lecteur propose de reconnaître son texte.
+    setNumerise(false);
+    sembleNumerise(chemin).then(
+      (oui) => actuelDoc && setNumerise(oui),
+      () => {},
     );
     return () => {
       actuelDoc = false;
@@ -1087,6 +1097,15 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
 
       {signatures && signatures.length > 0 && formats && !annoter && (
         <BandeauSignatures signatures={signatures} onDetails={() => setPanneauSignatures({ enAvant: null })} />
+      )}
+
+      {numerise && formats && !annoter && (
+        <BandeauNumerise
+          onReconnaitre={(() => {
+            const ocr = outils.find((definition) => definition.cle === "ocr");
+            return ocr ? () => onOutil(ocr) : null;
+          })()}
+        />
       )}
 
       {chemin && signatures && signatures.length > 0 && (

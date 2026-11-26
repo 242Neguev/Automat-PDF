@@ -237,6 +237,20 @@ pub fn textes(octets: Arc<Vec<u8>>, nom: &str) -> Result<Vec<String>, Erreur> {
         .collect())
 }
 
+/// Au moins une des `combien` premières pages a-t-elle du texte (trois caractères, hors espaces) ?
+pub fn a_du_texte(octets: Arc<Vec<u8>>, nom: &str, combien: usize) -> Result<bool, Erreur> {
+    let pdf = ouvrir(octets, nom)?;
+    let cache = InterpreterCache::new();
+    let reglages = InterpreterSettings::default();
+    Ok(pdf.pages().iter().take(combien).any(|page| {
+        relever(page, &cache, &reglages)
+            .iter()
+            .filter(|caractere| !caractere.texte.trim().is_empty())
+            .count()
+            >= 3
+    }))
+}
+
 /// Un mot de la page affichée, pour la couche de texte du lecteur : la sélection, la copie et la
 /// recherche. Position en points sur la page affichée (y vers le bas) : le coin en haut à gauche du
 /// mot dans son sens d'écriture ; le mot s'étend sur `longueur` dans ce sens, sur `taille` en travers.

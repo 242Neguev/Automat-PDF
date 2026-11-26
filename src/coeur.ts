@@ -591,6 +591,10 @@ export const officeEnPdf = (fichiers: string[], dossier: string) => invoke<Conve
 
 /** PDF en documents Word modifiables dans `dossier` ; avancement par l'événement « progression-conversion ». */
 export const pdfEnWord = (fichiers: string[], dossier: string) => invoke<Conversions>("pdf_en_word", { fichiers, dossier });
+/** PDF numérisés rendus cherchables (OCR, moteur du système) : chacun devient « … - texte reconnu.pdf » dans `dossier`. */
+export const reconnaitreTexte = (fichiers: string[], dossier: string) => invoke<Conversions>("reconnaitre_texte", { fichiers, dossier });
+/** Le PDF semble-t-il numérisé (aucun texte sur ses premières pages) ? */
+export const sembleNumerise = (chemin: string) => invoke<boolean>("semble_numerise", { chemin });
 
 /** Ce qui permet de convertir les documents Office sur ce PC. */
 export interface Convertisseurs {

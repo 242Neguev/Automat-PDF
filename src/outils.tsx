@@ -20,6 +20,7 @@ import {
   IconShieldLock,
   IconSignature,
   IconStack2,
+  IconTextScan2,
   IconUsers,
 } from "@tabler/icons-react";
 import type { Teinte } from "./theme";
@@ -29,6 +30,7 @@ import SignatureCachet from "./pages/annoter/SignatureCachet";
 import type { SorteFichier } from "./pages/commun/reception";
 import OfficeEnPdf from "./pages/convertir/OfficeEnPdf";
 import PdfEnWord from "./pages/convertir/PdfEnWord";
+import ReconnaitreTexte from "./pages/convertir/ReconnaitreTexte";
 import FusionPdf from "./pages/fusion/FusionPdf";
 import ImagesEnPdf from "./pages/images/ImagesEnPdf";
 import PdfEnImages from "./pages/images/PdfEnImages";
@@ -115,6 +117,7 @@ export const GROUPES: Groupe[] = [
       { cle: "enImages", icone: IconPhoto, page: PdfEnImages, accepte: ["pdf"] },
       { cle: "officeEnPdf", icone: IconFileTypePdf, page: OfficeEnPdf, accepte: ["office"] },
       { cle: "pdfEnWord", icone: IconFileTypeDocx, page: PdfEnWord, accepte: ["pdf"] },
+      { cle: "ocr", icone: IconTextScan2, page: ReconnaitreTexte, accepte: ["pdf"] },
     ],
   },
 ];

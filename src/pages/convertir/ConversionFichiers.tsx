@@ -5,6 +5,7 @@ import { IconFilePlus, IconTransform, IconX } from "@tabler/icons-react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Conversions } from "../../coeur";
+import { partFaite, type Avancement } from "../../donnees/avancement";
 import { dossierDe, nomDe } from "../../donnees/chemins";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
@@ -26,18 +27,39 @@ interface Props {
   deposerDetail: string;
   aide: string;
   convertir: (fichiers: string[], dossier: string) => Promise<Conversions>;
+  /** Libellés propres à l'outil, à la place de ceux d'une conversion. */
+  libelles?: Partial<Libelles>;
 }
 
+interface Libelles {
+  bouton: string;
+  choisirDossier: string;
+  cree: (n: number) => string;
+  aucun: string;
+  echecs: (n: number) => string;
+  /** Avancement page par page (fichier en cours, fichiers, pages lues, pages à lire). */
+  progressionPages: (fichier: number, fichiers: number, page: number, pages: number) => string;
+}
+
+
 /** Une liste de fichiers à convertir, chacun en un fichier du même nom dans le dossier choisi. */
-export default function ConversionFichiers({ outil, filtre, deposer, deposerDetail, aide, convertir }: Props) {
+export default function ConversionFichiers({ outil, filtre, deposer, deposerDetail, aide, convertir, libelles = {} }: Props) {
+  const l = {
+    bouton: t.convertir,
+    choisirDossier: t.choisirDossier,
+    cree: t.cree,
+    aucun: t.aucun,
+    echecs: t.echecs,
+    ...libelles,
+  };
   const [fichiers, setFichiers] = useState<string[]>([]);
   const [enCours, setEnCours] = useState(false);
-  const [progression, setProgression] = useState<[number, number] | null>(null);
+  const [progression, setProgression] = useState<Avancement | null>(null);
   const [echecs, setEchecs] = useState<string[]>([]);
   const [cree, setCree] = useState<Cree | null>(null);
 
   useEffect(() => {
-    const arret = listen<[number, number]>("progression-conversion", (evenement) => setProgression(evenement.payload)).catch(() => () => {});
+    const arret = listen<Avancement>("progression-conversion", (evenement) => setProgression(evenement.payload)).catch(() => () => {});
     return () => void arret.then((arreter) => arreter());
   }, []);
 
@@ -51,7 +73,7 @@ export default function ConversionFichiers({ outil, filtre, deposer, deposerDeta
   useFichiersRecus(outil, ajouterChemins);
 
   async function lancer() {
-    const dossier = await open({ directory: true, multiple: false, title: t.choisirDossier, defaultPath: dossierDe(fichiers[0] ?? "") || undefined });
+    const dossier = await open({ directory: true, multiple: false, title: l.choisirDossier, defaultPath: dossierDe(fichiers[0] ?? "") || undefined });
     if (typeof dossier !== "string") return;
     setEnCours(true);
     setProgression(null);
@@ -64,13 +86,13 @@ export default function ConversionFichiers({ outil, filtre, deposer, deposerDeta
         // Un seul fichier : on peut l'ouvrir ; plusieurs : on ouvre leur dossier.
         setCree(
           resultat.crees.length === 1
-            ? { titre: t.cree(1), chemin: resultat.crees[0] }
-            : { titre: t.cree(resultat.crees.length), chemin: dossier, dossier: true },
+            ? { titre: l.cree(1), chemin: resultat.crees[0] }
+            : { titre: l.cree(resultat.crees.length), chemin: dossier, dossier: true },
         );
         // Les fichiers convertis quittent la liste ; ceux en échec y restent, pour réessayer.
         const enEchec = new Set(resultat.echecs.map((echec) => echec.rang));
         setFichiers((actuels) => actuels.filter((_, rang) => enEchec.has(rang)));
-      } else notifications.show({ color: "orange", title: t.aucun, message: "", autoClose: 10000 });
+      } else notifications.show({ color: "orange", title: l.aucun, message: "", autoClose: 10000 });
     } catch (e) {
       signalerErreur(e);
     } finally {
@@ -119,20 +141,22 @@ export default function ConversionFichiers({ outil, filtre, deposer, deposerDeta
       </Text>
       <BarreAction>
         <Action icone={IconTransform} enCours={enCours} raison={fichiers.length === 0 && !enCours ? t.raison : null} onClick={() => void lancer()}>
-          {t.convertir}
+          {l.bouton}
         </Action>
       </BarreAction>
       {enCours && progression && (
-        <div>
-          <Progress value={(100 * progression[0]) / Math.max(1, progression[1])} />
+        <div data-avancement>
+          <Progress value={100 * partFaite(progression)} />
           <Text size="sm" c="dimmed" mt={4}>
-            {t.progression(progression[0], progression[1])}
+            {progression.length === 4 && progression[3] > 0 && l.progressionPages
+              ? l.progressionPages(Math.min(progression[0] + 1, progression[1]), progression[1], progression[2], progression[3])
+              : t.progression(progression[0], progression[1])}
           </Text>
         </div>
       )}
       <Resultat cree={cree} onFermer={() => setCree(null)} />
       {echecs.length > 0 && (
-        <Alert color="red" title={t.echecs(echecs.length)}>
+        <Alert color="red" title={l.echecs(echecs.length)}>
           <List size="sm" spacing={2}>
             {echecs.map((ligne) => (
               <List.Item key={ligne}>{ligne}</List.Item>

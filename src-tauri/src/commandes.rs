@@ -467,6 +467,32 @@ pub async fn pdf_en_word(
     .await
 }
 
+/// PDF numérisés rendus cherchables (OCR, moteur du système) : chacun devient « … - texte
+/// reconnu.pdf » dans `dossier`. L'avancement est annoncé par l'événement `progression-conversion` :
+/// fichiers faits, fichiers, pages lues du fichier en cours, ses pages à lire.
+#[tauri::command]
+pub async fn reconnaitre_texte<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    fichiers: Vec<String>,
+    dossier: String,
+) -> Result<Conversions, Erreur> {
+    en_arriere_plan(move || {
+        crate::ocr::reconnaitre_fichiers(&fichiers, &dossier, |fait, total, page, pages| {
+            let _ = app.emit("progression-conversion", (fait, total, page, pages));
+        })
+    })
+    .await
+}
+
+/// Le PDF du lecteur semble-t-il numérisé (aucun texte sur ses premières pages) ?
+#[tauri::command]
+pub async fn semble_numerise(chemin: String) -> Result<bool, Erreur> {
+    en_arriere_plan(move || {
+        crate::ocr::semble_numerise(crate::memoire::pdf(&chemin)?, &operations::nom_de(&chemin))
+    })
+    .await
+}
+
 /// Ce qui permet de convertir les documents Office sur ce PC (Office, LibreOffice, installation
 /// possible de LibreOffice).
 #[tauri::command]
