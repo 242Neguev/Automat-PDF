@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::vello_cpu::color::palette::css::WHITE;
-use hayro::{RenderCache, RenderSettings, render};
+use hayro::{PixmapSettings, RenderCache, RenderSettings, render};
 
 use crate::{pdf, rendu};
 
@@ -98,11 +98,10 @@ fn mesure_le_rendu_d_un_gros_pdf() {
         // Part du dessin seul (sans JPEG), et ce que rapporterait de garder le document ouvert et
         // le cache de hayro (polices, images) d'une page à l'autre, à 1 600 px de large.
         let echelle = 1600.0 / formats[0].largeur;
-        let reglages = RenderSettings {
+        let reglages = PixmapSettings {
             x_scale: echelle,
             y_scale: echelle,
             bg_color: WHITE,
-            ..Default::default()
         };
         let mut separes = Vec::new();
         for &page in &pages {
@@ -112,6 +111,7 @@ fn mesure_le_rendu_d_un_gros_pdf() {
                 &pdf.pages()[page],
                 &RenderCache::new(),
                 &InterpreterSettings::default(),
+                &RenderSettings::default(),
                 &reglages,
             );
             separes.push(debut.elapsed());
@@ -125,6 +125,7 @@ fn mesure_le_rendu_d_un_gros_pdf() {
                 &pdf.pages()[page],
                 &cache,
                 &InterpreterSettings::default(),
+                &RenderSettings::default(),
                 &reglages,
             );
             gardes.push(debut.elapsed());

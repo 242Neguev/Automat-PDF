@@ -25,7 +25,7 @@ serde_json = "1"
 # Lecture et écriture des PDF : les pages sont recopiées telles quelles, rien n'est recalculé.
 lopdf = { version = "0.46", default-features = false }
 # Rendu des pages en images (vignettes, aperçus), en Rust, polices standard du PDF incluses.
-hayro = "0.7"
+hayro = "0.9"
 # Clé de chiffrement des PDF protégés par mot de passe (déjà utilisé par lopdf).
 getrandom = "0.4"
 # Images : photos et scans à mettre en PDF (orientation EXIF comprise), pages exportées en images.

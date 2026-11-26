@@ -14,8 +14,9 @@
 //! modifié. Pas de JavaScript : les calculs d'un formulaire (totaux, contrôles) ne se font pas, et
 //! le lecteur le signale.
 //!
-//! hayro 0.7 ne choisit pas l'apparence d'une case selon son état (/AS) : `pour_l_affichage`
-//! prépare, pour le rendu seulement, une copie où chaque case a l'apparence de son état.
+//! hayro dessine chaque case dans l'apparence de son état (/AS) ; il ne dessine pas un champ sans
+//! apparence. Pour un formulaire qui demande ses apparences (/NeedAppearances, champs sans
+//! apparence), `pour_l_affichage` prépare, pour le rendu seulement, une copie qui les a.
 
 use std::collections::{HashMap, HashSet};
 
@@ -1462,54 +1463,10 @@ fn choisir_etat(
         .and_then(|o| o.as_reference().ok())
 }
 
-/// Prépare le document pour le rendu (hayro 0.7) : les apparences qui manquent, puis, pour
-/// chaque annotation qui a plusieurs états (cases, boutons radio), l'apparence de son état seul.
-/// Ne sert qu'à dessiner : le PDF écrit garde ses états. Renvoie vrai si quelque chose a changé.
+/// Prépare le document pour le rendu : les apparences qui manquent (formulaire qui les demande,
+/// champs sans apparence). Ne sert qu'à dessiner. Renvoie vrai si quelque chose a changé.
 pub fn pour_l_affichage(document: &mut Document) -> bool {
-    let mut change = completer_apparences(document);
-    let mut choix: Vec<(ObjectId, Option<ObjectId>)> = Vec::new();
-    for id_page in document.get_pages().into_values() {
-        let Ok(page) = document.get_dictionary(id_page) else {
-            continue;
-        };
-        let Some(annotations) = page
-            .get(b"Annots")
-            .ok()
-            .map(|o| resoudre(document, o))
-            .and_then(|o| o.as_array().ok())
-        else {
-            continue;
-        };
-        for entree in annotations {
-            let Object::Reference(id) = entree else {
-                continue;
-            };
-            let Ok(annotation) = document.get_dictionary(*id) else {
-                continue;
-            };
-            let a_des_etats = annotation
-                .get(b"AP")
-                .ok()
-                .and_then(|o| dictionnaire_de(document, o))
-                .and_then(|ap| ap.get(b"N").ok())
-                .is_some_and(|n| resoudre(document, n).as_dict().is_ok());
-            if a_des_etats {
-                choix.push((*id, flux_normal(document, annotation)));
-            }
-        }
-    }
-    for (id, flux) in choix {
-        if let Ok(annotation) = document.get_dictionary_mut(id) {
-            match flux {
-                Some(flux) => annotation.set("AP", dictionary! { "N" => Object::Reference(flux) }),
-                None => {
-                    annotation.remove(b"AP");
-                }
-            }
-            change = true;
-        }
-    }
-    change
+    completer_apparences(document)
 }
 
 // ------------------------------------------------------------------------------- Signature dessinée
@@ -2191,7 +2148,7 @@ mod tests {
             .set("NeedAppearances", true);
         assert!(pour_l_affichage(&mut document));
         assert!(apparence(&document, "Du").contains(&chaine("01/12/2026")));
-        // Les boutons radio n'ont plus qu'une apparence : celle de leur état (pour hayro 0.7).
+        // Les boutons radio gardent leurs états : hayro dessine celui de /AS.
         let (liste, _) = noeuds(&document);
         let radio = liste.iter().find(|n| n.nom == "Type").unwrap().widgets[0];
         let apparences = document
@@ -2201,7 +2158,7 @@ mod tests {
             .unwrap()
             .as_dict()
             .unwrap();
-        assert!(apparences.get(b"N").unwrap().as_reference().is_ok());
+        assert!(apparences.get(b"N").unwrap().as_dict().is_ok());
     }
 
     #[test]

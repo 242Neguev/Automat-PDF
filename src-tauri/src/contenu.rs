@@ -8,11 +8,11 @@ use std::io::Cursor;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use hayro::hayro_interpret::font::Glyph;
+use hayro::hayro_interpret::font::{Glyph, GlyphRun};
 use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::{
-    BlendMode, CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, ImageData,
-    InterpreterCache, InterpreterSettings, LumaData, Paint, PathDrawMode, RasterImage, SoftMask,
+    BlendMode, CacheKey, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageData,
+    ImageDrawProps, InterpreterCache, InterpreterSettings, LumaData, Paint, RasterImage, SoftMask,
     TransformExt, interpret_page,
 };
 use hayro::hayro_syntax::object::Name;
@@ -205,17 +205,28 @@ fn encoder(image: &RasterImage<'_>, cible: (u32, u32)) -> Option<(Arc<Vec<u8>>, 
 }
 
 impl<'a> Device<'a> for Releve<'_> {
-    fn set_soft_mask(&mut self, _: Option<SoftMask<'a>>) {}
-    fn set_blend_mode(&mut self, _: BlendMode) {}
-    fn draw_path(&mut self, _: &BezPath, _: Affine, _: &Paint<'a>, _: &PathDrawMode) {
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {
         self.page.autres_traces += 1;
     }
     fn push_clip_path(&mut self, _: &ClipPath) {}
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
-    fn pop_clip_path(&mut self) {}
+    fn pop_clip(&mut self) {}
     fn pop_transparency_group(&mut self) {}
 
-    fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine) {
+    fn draw_glyph_run(&mut self, suite: &GlyphRun<'_, 'a>, props: DrawProps<'a>, mode: &DrawMode) {
+        let invisible = matches!(mode, DrawMode::Invisible);
+        for glyphe in suite.glyphs() {
+            self.relever(
+                glyphe,
+                props.transform * glyphe.transform(),
+                &props.paint,
+                invisible,
+            );
+        }
+    }
+
+    fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a>) {
+        let transform = props.transform;
         // Les pochoirs (masques d'une couleur) ne sont pas des illustrations.
         let Image::Raster(image) = image else {
             return;
@@ -264,14 +275,16 @@ impl<'a> Device<'a> for Releve<'_> {
             });
         }
     }
+}
 
-    fn draw_glyph(
+impl Releve<'_> {
+    /// Un caractère ; `matrice` place son glyphe (1 000 unités par cadratin) sur la page affichée.
+    fn relever(
         &mut self,
-        glyphe: &Glyph<'a>,
-        transform: Affine,
-        glyph_transform: Affine,
-        peinture: &Paint<'a>,
-        mode: &GlyphDrawMode,
+        glyphe: &Glyph<'_>,
+        matrice: Affine,
+        peinture: &Paint<'_>,
+        invisible: bool,
     ) {
         let texte = match glyphe.as_unicode() {
             Some(BfString::Char(caractere)) => caractere.to_string(),
@@ -281,8 +294,7 @@ impl<'a> Device<'a> for Releve<'_> {
                 return;
             }
         };
-        // Le glyphe compte 1 000 unités par cadratin ; avance inconnue : un demi-cadratin.
-        let matrice = transform * glyph_transform;
+        // Avance inconnue : un demi-cadratin.
         let avance = match glyphe {
             Glyph::Outline(contour) => contour.advance_width().map(f64::from),
             Glyph::Type3(_) => None,
@@ -311,7 +323,7 @@ impl<'a> Device<'a> for Releve<'_> {
         let police = match glyphe {
             Glyph::Outline(contour) => self
                 .polices
-                .entry(contour.font_cache_key())
+                .entry(contour.identifier().cache_key())
                 .or_insert_with(|| match contour.font_data() {
                     Some(donnees) => {
                         let mut police = donnees
@@ -343,7 +355,7 @@ impl<'a> Device<'a> for Releve<'_> {
             taille,
             police,
             couleur,
-            invisible: matches!(mode, GlyphDrawMode::Invisible),
+            invisible,
         });
     }
 }

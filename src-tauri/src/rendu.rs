@@ -7,7 +7,7 @@ use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::object::{Array, Dict, Name};
 use hayro::hayro_syntax::{DecryptionError, LoadPdfError, Pdf};
 use hayro::vello_cpu::color::palette::css::{TRANSPARENT, WHITE};
-use hayro::{RenderCache, RenderSettings, render};
+use hayro::{PixmapSettings, RenderCache, RenderSettings, render};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::{ExtendedColorType, ImageEncoder};
@@ -38,11 +38,10 @@ fn copies() -> &'static Mutex<Vec<CopieAffichage>> {
     COPIES.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-/// Le PDF tel que hayro 0.7 doit le dessiner : le même, sauf si des annotations ont plusieurs
-/// états (cases à cocher, boutons radio : hayro ne choisit pas celui de /AS), ou si son formulaire
-/// demande ses apparences (/NeedAppearances, champs sans apparence). Il lui faut alors une copie
-/// préparée (`formulaires::pour_l_affichage`), gardée tant que le PDF l'est. Le PDF lui-même, écrit
-/// ou imprimé, garde ses états.
+/// Le PDF tel que hayro doit le dessiner : le même, sauf si son formulaire demande ses apparences
+/// (/NeedAppearances, champs sans apparence), que hayro ne dessine pas. Il lui faut alors une copie
+/// préparée (`formulaires::pour_l_affichage`), gardée tant que le PDF l'est. Les cases à cocher et
+/// les boutons radio n'en ont pas besoin : hayro 0.9 dessine l'apparence de leur état (/AS).
 pub(crate) fn pour_l_affichage(octets: Arc<Vec<u8>>) -> Arc<Vec<u8>> {
     {
         let mut copies = copies()
@@ -95,18 +94,13 @@ fn a_preparer(octets: &Arc<Vec<u8>>) -> bool {
         page.raw()
             .get::<Array<'_>>(b"Annots")
             .is_some_and(|annotations| {
+                // Un champ sans apparence (formulaire).
                 annotations.iter::<Dict<'_>>().any(|annotation| {
-                    match annotation.get::<Dict<'_>>(b"AP") {
-                        // Plusieurs états : l'apparence normale est un dictionnaire.
-                        Some(apparences) => apparences.get::<Dict<'_>>(b"N").is_some(),
-                        // Un champ sans apparence (formulaire).
-                        None => {
-                            formulaire.is_some()
-                                && annotation
-                                    .get::<Name<'_>>(b"Subtype")
-                                    .is_some_and(|sorte| sorte.as_ref() == b"Widget")
-                        }
-                    }
+                    formulaire.is_some()
+                        && !annotation.contains_key(b"AP")
+                        && annotation
+                            .get::<Name<'_>>(b"Subtype")
+                            .is_some_and(|sorte| sorte.as_ref() == b"Widget")
                 })
             })
     })
@@ -172,16 +166,16 @@ fn rendre(
     let (largeur, hauteur) = page.render_dimensions();
     let echelle =
         echelle(largeur.max(1.0), hauteur.max(1.0)).min(COTE_MAX / largeur.max(hauteur).max(1.0));
-    let reglages = RenderSettings {
+    let reglages = PixmapSettings {
         x_scale: echelle,
         y_scale: echelle,
         bg_color: WHITE,
-        ..Default::default()
     };
     let pixmap = render(
         page,
         &RenderCache::new(),
         &InterpreterSettings::default(),
+        &RenderSettings::default(),
         &reglages,
     );
     // Fond blanc opaque : les pixels prémultipliés valent les pixels ordinaires.
@@ -272,16 +266,16 @@ pub(crate) fn rendre_sur_transparent(
         .ok_or_else(|| Erreur::simple(format!("La page {} n'existe pas.", page + 1)))?;
     let (largeur, hauteur) = page.render_dimensions();
     let echelle = (dpi.clamp(36, 600) as f32 / 72.0).min(COTE_MAX / largeur.max(hauteur).max(1.0));
-    let reglages = RenderSettings {
+    let reglages = PixmapSettings {
         x_scale: echelle,
         y_scale: echelle,
         bg_color: TRANSPARENT,
-        ..Default::default()
     };
     let pixmap = render(
         page,
         &RenderCache::new(),
         &InterpreterSettings::default(),
+        &RenderSettings::default(),
         &reglages,
     );
     // Pixels prémultipliés : chaque couleur est ramenée à ce qu'elle est sans transparence.

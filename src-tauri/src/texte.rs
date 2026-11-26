@@ -6,11 +6,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use hayro::hayro_interpret::font::Glyph;
+use hayro::hayro_interpret::font::{Glyph, GlyphRun};
 use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::{
-    BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterCache,
-    InterpreterSettings, Paint, PathDrawMode, SoftMask, TransformExt, interpret_page,
+    BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
+    InterpreterCache, InterpreterSettings, Paint, SoftMask, TransformExt, interpret_page,
 };
 use hayro::hayro_syntax::page::Page;
 use hayro::vello_cpu::kurbo::{Affine, BezPath, Point, Rect};
@@ -43,30 +43,29 @@ struct Releve {
 }
 
 impl<'a> Device<'a> for Releve {
-    fn set_soft_mask(&mut self, _: Option<SoftMask<'a>>) {}
-    fn set_blend_mode(&mut self, _: BlendMode) {}
-    fn draw_path(&mut self, _: &BezPath, _: Affine, _: &Paint<'a>, _: &PathDrawMode) {}
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
     fn push_clip_path(&mut self, _: &ClipPath) {}
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
-    fn draw_image(&mut self, _: Image<'a, '_>, _: Affine) {}
-    fn pop_clip_path(&mut self) {}
+    fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
+    fn pop_clip(&mut self) {}
     fn pop_transparency_group(&mut self) {}
 
-    fn draw_glyph(
-        &mut self,
-        glyphe: &Glyph<'a>,
-        transform: Affine,
-        glyph_transform: Affine,
-        peinture: &Paint<'a>,
-        _: &GlyphDrawMode,
-    ) {
+    fn draw_glyph_run(&mut self, suite: &GlyphRun<'_, 'a>, props: DrawProps<'a>, _: &DrawMode) {
+        for glyphe in suite.glyphs() {
+            self.relever(glyphe, props.transform * glyphe.transform(), &props.paint);
+        }
+    }
+}
+
+impl Releve {
+    /// Un caractère ; `matrice` place son glyphe (1 000 unités par cadratin) sur la page affichée.
+    fn relever(&mut self, glyphe: &Glyph<'_>, matrice: Affine, peinture: &Paint<'_>) {
         let texte = match glyphe.as_unicode() {
             Some(BfString::Char(caractere)) => caractere.to_string(),
             Some(BfString::String(texte)) => texte,
             None => return,
         };
-        // Le glyphe compte 1 000 unités par cadratin ; avance inconnue : un demi-cadratin.
-        let matrice = transform * glyph_transform;
+        // Avance inconnue : un demi-cadratin.
         let avance = match glyphe {
             Glyph::Outline(contour) => contour.advance_width().map(f64::from),
             Glyph::Type3(_) => None,
@@ -97,7 +96,7 @@ impl<'a> Device<'a> for Releve {
         let police = match glyphe {
             Glyph::Outline(contour) => self
                 .polices
-                .entry(contour.font_cache_key())
+                .entry(contour.identifier().cache_key())
                 .or_insert_with(|| {
                     let donnees = contour.font_data();
                     let mut police = donnees
