@@ -249,7 +249,7 @@ export const textes = {
       fait: (pages: number) =>
         `Texte reconnu sur ${pages} page${pages > 1 ? "s" : ""} : vous pouvez y chercher un mot et en copier le texte. Il est gardé en mémoire ; l'original n'est pas modifié.`,
       enregistrer: "Enregistrer le PDF avec son texte…",
-      enregistre: (nom: string) => `« ${nom} » enregistré, à côté de l'original.`,
+      enregistre: (nom: string) => `« ${nom} » enregistré. L'original n'est pas modifié.`,
       fermer: "Fermer",
     },
     signaturesNumeriques: {
