@@ -162,6 +162,8 @@ interface PropsBarre {
   enregistrement: boolean;
   onEnregistrer: () => void;
   onTerminer: () => void;
+  /** Le PDF a une signature numérique intacte : corriger son texte la fera signaler une modification. */
+  signe?: boolean;
 }
 
 /** La barre d'annotation : les outils, leurs réglages, annuler, enregistrer le PDF annoté. */
@@ -309,6 +311,11 @@ export function BarreAnnotations(props: PropsBarre) {
       <Text size="xs" c="dimmed" mt={4} px={10} data-aide-annotation>
         {t.outils[outil].aide}
       </Text>
+      {props.signe && (outil === "corriger" || outil === "correcteur") && (
+        <Text size="xs" c="orange" px={10} data-aide-pdf-signe>
+          {t.pdfSigne}
+        </Text>
+      )}
     </Box>
   );
 }

@@ -252,7 +252,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
    */
   const [signatures, setSignatures] = useState<SignaturePdf[] | null>(null);
   const [panneauSignatures, setPanneauSignatures] = useState<{ enAvant: string | null } | null>(null);
-  const [signaturesGardees, setSignaturesGardees] = useState(false);
+  // Après l'enregistrement d'un PDF signé : ses signatures restent valables, ou signalent les corrections.
+  const [signaturesGardees, setSignaturesGardees] = useState<"gardees" | "pagesChangees" | null>(null);
   const cadre = useRef<HTMLDivElement>(null);
   const defilement = useRef<HTMLDivElement>(null);
   const champRecherche = useRef<HTMLInputElement>(null);
@@ -695,8 +696,11 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     setEnregistrement(true);
     try {
       await annoterPdf(chemin, pourLeCoeur(annotations), sortie, avecAplatir, retouches);
-      // Un PDF signé numériquement est enregistré à la suite de sa version signée (sauf aplati).
-      setSignaturesGardees(!avecAplatir && (signatures ?? []).some((s) => s.integrite === "intacte"));
+      // Un PDF signé numériquement est enregistré à la suite de sa version signée (sauf aplati) ;
+      // seuls corriger un mot et le correcteur blanc changent ses pages.
+      const signe = !avecAplatir && (signatures ?? []).some((s) => s.integrite === "intacte");
+      const pagesChangees = annotations.some((a) => a.sorte === "correction" || a.sorte === "blanc");
+      setSignaturesGardees(signe ? (pagesChangees ? "pagesChangees" : "gardees") : null);
       const source = chemin;
       setHistoriques(({ [source]: _enregistrees, ...autres }) => autres);
       // Le PDF enregistré garde les retouches ; l'original (toujours ouvert dans son onglet) retrouve les siennes.
@@ -1052,6 +1056,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
             setAnnoter(false);
             setSelection(null);
           }}
+          signe={(signatures ?? []).some((s) => s.integrite === "intacte")}
         />
       )}
       {enregistre && chemin && memeFichier(enregistre, chemin) && (
@@ -1068,8 +1073,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
             <Stack gap={2}>
               <Text size="sm">{t.annotation.enregistreDetail(nomDe(enregistre))}</Text>
               {signaturesGardees && (
-                <Text size="sm" data-signatures-gardees>
-                  {t.signaturesNumeriques.gardees}
+                <Text size="sm" data-signatures-gardees={signaturesGardees}>
+                  {t.signaturesNumeriques[signaturesGardees]}
                 </Text>
               )}
             </Stack>

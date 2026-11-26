@@ -397,14 +397,19 @@ pub fn annoter_pdf(
         })
         .collect();
     formulaires::retirer_champs_signes(&mut document, &signatures);
-    annotations::annoter(&mut document, annotations, |image| {
-        images::image_decodee(&fichiers::lire(image, Nature::Image)?, &nom_de(image))
-    })?;
+    // Un PDF signé numériquement est enregistré à la suite de sa version signée, ses pages
+    // inchangées autant que possible : ses signatures restent valables.
+    let signe = retouches.is_some() && !aplatir && signatures::a_des_signatures(&base, &octets);
+    annotations::annoter(
+        &mut document,
+        annotations,
+        |image| images::image_decodee(&fichiers::lire(image, Nature::Image)?, &nom_de(image)),
+        signe,
+    )?;
     // Le formulaire rempli (dans la copie en mémoire) peut rejoindre ses pages : il n'est plus modifiable.
     if aplatir {
         formulaires::aplatir(&mut document)?;
     }
-    let signe = retouches.is_some() && !aplatir && signatures::a_des_signatures(&base, &octets);
     let ecrit = if signe {
         pdf::ecrire_a_la_suite(&octets, &base, document)?
     } else {
@@ -625,9 +630,12 @@ pub fn imprimer_pdf(
     let mut octets = memoire::pdf(chemin)?;
     if !annotations.is_empty() {
         let mut document = pdf::charger(&octets, &nom)?;
-        annotations::annoter(&mut document, annotations, |image| {
-            images::image_decodee(&fichiers::lire(image, Nature::Image)?, &nom_de(image))
-        })?;
+        annotations::annoter(
+            &mut document,
+            annotations,
+            |image| images::image_decodee(&fichiers::lire(image, Nature::Image)?, &nom_de(image)),
+            false,
+        )?;
         octets = Arc::new(pdf::ecrire(document)?);
     }
     impression::imprimer(app, fenetre, octets, &nom, options)

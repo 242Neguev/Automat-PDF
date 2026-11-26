@@ -362,14 +362,9 @@ pub fn marquer(document: &mut Document, options: &OptionsMarques) -> Result<(), 
     Ok(())
 }
 
-/// Image (signature, cachet) posée sur les pages choisies, contenue dans l'emplacement donné.
-pub fn apposer(
-    document: &mut Document,
-    image: ImagePdf,
-    placement: Placement,
-    pages: &[usize],
-) -> Result<(), Erreur> {
-    let (image_l, image_h) = (
+/// Une image ajoutée au document, avec sa transparence : son objet et sa taille, en pixels.
+pub(crate) fn ajouter_image(document: &mut Document, image: ImagePdf) -> (ObjectId, (f64, f64)) {
+    let taille = (
         f64::from(image.largeur.max(1)),
         f64::from(image.hauteur.max(1)),
     );
@@ -377,7 +372,46 @@ pub fn apposer(
     if let Some(transparence) = image.transparence {
         flux.dict.set("SMask", document.add_object(transparence));
     }
-    let image = document.add_object(flux);
+    (document.add_object(flux), taille)
+}
+
+/// Où dessiner une image de cette taille (en pixels) dans l'emplacement donné d'une page affichée
+/// de taille `(largeur, hauteur)` : centrée, sans être déformée. [gauche, bas, droite, haut], axe
+/// vertical vers le haut.
+pub(crate) fn cadre_image(
+    (image_l, image_h): (f64, f64),
+    placement: Placement,
+    (largeur, hauteur): (f64, f64),
+) -> [f64; 4] {
+    let (bx, bl, bh) = (
+        placement.x * largeur,
+        placement.largeur * largeur,
+        placement.hauteur * hauteur,
+    );
+    let by = hauteur - (placement.y + placement.hauteur) * hauteur;
+    let echelle = (bl / image_l).min(bh / image_h);
+    let (dessin_l, dessin_h) = (image_l * echelle, image_h * echelle);
+    let (x, y) = (bx + (bl - dessin_l) / 2.0, by + (bh - dessin_h) / 2.0);
+    [x, y, x + dessin_l, y + dessin_h]
+}
+
+/// L'image de nom `nom` (dans les ressources) dessinée dans ce cadre.
+pub(crate) fn dessin_image(nom: &str, [x, y, droite, haut]: [f64; 4]) -> String {
+    format!(
+        "q {:.3} 0 0 {:.3} {x:.3} {y:.3} cm /{nom} Do Q\n",
+        droite - x,
+        haut - y
+    )
+}
+
+/// Image (signature, cachet) posée sur les pages choisies, contenue dans l'emplacement donné.
+pub fn apposer(
+    document: &mut Document,
+    image: ImagePdf,
+    placement: Placement,
+    pages: &[usize],
+) -> Result<(), Erreur> {
+    let (image, taille) = ajouter_image(document, image);
     let toutes: Vec<ObjectId> = document.get_pages().into_values().collect();
     for index in pages_choisies(pages, toutes.len()) {
         let page = toutes[index];
@@ -385,26 +419,16 @@ pub fn apposer(
             .get_dictionary(page)
             .map_err(|_| Erreur::simple("Une page n'a pas pu être lue."))?
             .clone();
-        let (largeur, hauteur) = Cadre::de_page(document, &dictionnaire).taille_vue();
-        let (bx, bl, bh) = (
-            placement.x * largeur,
-            placement.largeur * largeur,
-            placement.hauteur * hauteur,
+        let cadre = cadre_image(
+            taille,
+            placement,
+            Cadre::de_page(document, &dictionnaire).taille_vue(),
         );
-        let by = hauteur - (placement.y + placement.hauteur) * hauteur;
-        let echelle = (bl / image_l).min(bh / image_h);
-        let (dessin_l, dessin_h) = (image_l * echelle, image_h * echelle);
-        let (x, y) = (bx + (bl - dessin_l) / 2.0, by + (bh - dessin_h) / 2.0);
         surimprimer(
             document,
             page,
             &[("XObject", "AutomatImage", Object::Reference(image))],
-            |noms| {
-                format!(
-                    "q {dessin_l:.3} 0 0 {dessin_h:.3} {x:.3} {y:.3} cm /{} Do Q\n",
-                    noms[0]
-                )
-            },
+            |noms| dessin_image(&noms[0], cadre),
         )?;
     }
     Ok(())

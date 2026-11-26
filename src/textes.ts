@@ -325,6 +325,7 @@ export const textes = {
         horsLigne: "La révocation des certificats n'est pas consultée : Automat-PDF vérifie sans Internet.",
       },
       gardees: "Ses signatures numériques restent valables : vos modifications sont enregistrées à la suite de la version signée.",
+      pagesChangees: "Vos corrections changent ce qui a été signé : ses signatures numériques le signalent.",
     },
     deposerIci: "Déposez votre PDF : il s'ouvrira dans le lecteur",
     alt: (n: number) => `Page ${n}`,
@@ -340,6 +341,7 @@ export const textes = {
       annoter: "Annoter",
       annoterAide: "Surligner, souligner, barrer, ajouter une note, du texte, une forme, un tampon ou une image, puis enregistrer un nouveau PDF",
       terminer: "Terminer",
+      pdfSigne: "Ce PDF est signé numériquement : corriger son texte change ce qui a été signé, et ses signatures le signaleront.",
       outils: {
         selection: { titre: "Sélectionner", aide: "Cliquez sur une annotation pour la choisir, puis déplacez-la à la souris ou supprimez-la. Double-clic sur un texte : le modifier." },
         surligner: { titre: "Surligner", aide: "Glissez sur le texte à surligner, ou tracez un cadre autour d'un passage (page numérisée, tableau)." },

@@ -860,7 +860,7 @@ mod tests {
     use lopdf::{IncrementalDocument, dictionary};
 
     use super::*;
-    use crate::annotations::Annotation;
+    use crate::annotations::{Annotation, Point, Teinte, Trace, Zone};
     use crate::commentaires::Retouches;
     use crate::essais::{CleEssai, Identite, PdfSigne, fichier_temporaire, pdf_signe};
 
@@ -1178,26 +1178,81 @@ mod tests {
         let original = contrat();
         let chemin = fichier_temporaire("signatures", "Contrat signé.pdf", &original);
         let sortie = chemin.replace("Contrat signé.pdf", "Contrat signé - annoté.pdf");
-        let note = [Annotation::Note {
-            page: 0,
-            x: 60.0,
-            y: 60.0,
-            texte: "Vu".into(),
-        }];
-        crate::operations::annoter_pdf(&chemin, &note, &sortie, false, Some(&Retouches::default()))
+        let mut png = Vec::new();
+        image::RgbImage::from_pixel(40, 20, image::Rgb([20, 60, 160]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
             .unwrap();
-        let annote = std::fs::read(&sortie).unwrap();
-        assert!(
-            annote.starts_with(&original),
-            "la version signée reste telle quelle"
-        );
-        let signature = &signatures(&annote, "Contrat signé - annoté.pdf")[0];
+        let cachet = fichier_temporaire("signatures", "cachet.png", &png);
+        let zone = |x, y| Zone {
+            x,
+            y,
+            largeur: 160.0,
+            hauteur: 60.0,
+        };
+        // Une note, et ce qui irait sinon dans la page : signature dessinée, texte, image.
+        let ajouts = [
+            Annotation::Note {
+                page: 0,
+                x: 60.0,
+                y: 60.0,
+                texte: "Vu".into(),
+            },
+            Annotation::Signature {
+                page: 0,
+                zone: zone(60.0, 300.0),
+                trace: Trace {
+                    proportion: 160.0 / 60.0,
+                    traits: vec![vec![Point { x: 0.1, y: 0.5 }, Point { x: 0.9, y: 0.4 }]],
+                    epaisseur: 0.05,
+                },
+                teinte: Teinte::Marine,
+                initiales: false,
+            },
+            Annotation::Texte {
+                page: 0,
+                x: 60.0,
+                y: 380.0,
+                texte: "Bon pour accord".into(),
+                taille: 12.0,
+                teinte: Teinte::Noir,
+            },
+            Annotation::Image {
+                page: 0,
+                zone: zone(60.0, 420.0),
+                chemin: cachet,
+            },
+        ];
+        let enregistrer = |ajouts: &[Annotation], sortie: &str| {
+            crate::operations::annoter_pdf(
+                &chemin,
+                ajouts,
+                sortie,
+                false,
+                Some(&Retouches::default()),
+            )
+            .unwrap();
+            let annote = std::fs::read(sortie).unwrap();
+            assert!(
+                annote.starts_with(&original),
+                "la version signée reste telle quelle"
+            );
+            signatures(&annote, "Contrat signé - annoté.pdf").remove(0)
+        };
+        let signature = enregistrer(&ajouts, &sortie);
         assert_eq!(signature.integrite, Integrite::Intacte);
         let attendu = Modifications {
             commentaires: true,
             ..Default::default()
         };
         assert_eq!(signature.modifications, attendu);
+        // Le correcteur blanc, lui, change la page : la signature le dit.
+        let blanc = [Annotation::Blanc {
+            page: 0,
+            zone: zone(60.0, 60.0),
+        }];
+        let signature = enregistrer(&blanc, &sortie);
+        assert_eq!(signature.integrite, Integrite::Intacte);
+        assert!(signature.modifications.pages);
         assert!(!a_des_signatures(
             &pdf::charger(&crate::essais::pdf_herite(1, "x"), "x").unwrap(),
             &original

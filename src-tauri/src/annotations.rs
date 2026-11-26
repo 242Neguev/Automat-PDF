@@ -252,7 +252,8 @@ pub enum Annotation {
         date: Option<String>,
     },
     /// Signature ou initiales dessinées à la main (0.7.0), dans la zone : écrites dans le contenu
-    /// de la page, comme une image, en traits vectoriels nets à toute taille.
+    /// de la page, comme une image, en traits vectoriels nets à toute taille (dans une annotation
+    /// sur un PDF signé numériquement, voir `annoter`).
     Signature {
         page: usize,
         zone: Zone,
@@ -835,43 +836,91 @@ fn noter(
 /// Texte écrit sur la page, ligne par ligne, en Helvetica (accents du français compris).
 fn ecrire(
     document: &mut Document,
-    page: ObjectId,
-    hauteur: f64,
+    plan: &Plan,
     (x, y): (f64, f64),
     texte: &str,
-    taille: f64,
-    teinte: Teinte,
+    (taille, teinte): (f64, Teinte),
+    pages_intactes: bool,
 ) -> Result<(), Erreur> {
     let taille = taille.clamp(4.0, 144.0);
     let lignes: Vec<&str> = texte.lines().collect();
     if lignes.iter().all(|ligne| ligne.trim().is_empty()) {
         return Ok(());
     }
-    let base = hauteur - y - LIGNE_DE_BASE * taille;
+    let haut = plan.hauteur - y;
+    let base = haut - LIGNE_DE_BASE * taille;
+    let dessin = |nom: &str| {
+        let mut dessin = format!(
+            "{} BT /{nom} {taille:.2} Tf {:.2} TL 1 0 0 1 {x:.2} {base:.2} Tm\n",
+            teinte.operateur(true),
+            INTERLIGNE * taille
+        );
+        for (rang, ligne) in lignes.iter().enumerate() {
+            if rang > 0 {
+                dessin.push_str("T* ");
+            }
+            dessin.push_str(&police::chaine(ligne));
+            dessin.push_str(" Tj\n");
+        }
+        dessin.push_str("ET\n");
+        dessin
+    };
+    let helvetica = Object::Dictionary(police::police(false));
+    if pages_intactes {
+        let largeur = lignes
+            .iter()
+            .map(|ligne| police::largeur(ligne, false, taille))
+            .fold(0.0, f64::max);
+        // Les lignes, et de quoi ne rogner ni les accents des capitales ni l'italique.
+        let marge = 0.25 * taille + 1.0;
+        let bas = haut - lignes.len() as f64 * INTERLIGNE * taille;
+        return poser(
+            document,
+            plan,
+            [x - marge, bas - marge, x + largeur + marge, haut + marge],
+            dictionary! { "Font" => dictionary! { "F1" => helvetica } },
+            &dessin("F1"),
+            texte,
+        );
+    }
     marques::surimprimer(
         document,
-        page,
-        &[(
-            "Font",
-            "AutomatTexte",
-            Object::Dictionary(police::police(false)),
-        )],
-        |noms| {
-            let mut dessin = format!(
-                "{} BT /{} {taille:.2} Tf {:.2} TL 1 0 0 1 {x:.2} {base:.2} Tm\n",
-                teinte.operateur(true),
-                noms[0],
-                INTERLIGNE * taille
-            );
-            for (rang, ligne) in lignes.iter().enumerate() {
-                if rang > 0 {
-                    dessin.push_str("T* ");
-                }
-                dessin.push_str(&police::chaine(ligne));
-                dessin.push_str(" Tj\n");
-            }
-            dessin.push_str("ET\n");
-            dessin
+        plan.page,
+        &[("Font", "AutomatTexte", helvetica)],
+        |noms| dessin(&noms[0]),
+    )
+}
+
+/// Ce qui irait dans le contenu de la page (texte écrit, image, signature dessinée), posé à la
+/// place dans une annotation Stamp qui couvre `cadre` (page affichée, axe vertical vers le haut),
+/// quand ce contenu ne doit pas changer : sur un PDF signé numériquement, une page modifiée
+/// rendrait ses signatures douteuses, un commentaire ajouté non. Les lecteurs de PDF l'affichent et
+/// l'impriment de même ; verrouillée, elle n'est ni déplacée ni effacée par mégarde.
+fn poser(
+    document: &mut Document,
+    plan: &Plan,
+    cadre: [f64; 4],
+    ressources: Dictionary,
+    dessin: &str,
+    contenu: &str,
+) -> Result<(), Erreur> {
+    let rectangle = cadre_page(plan, cadre);
+    let vue = apparence(
+        document,
+        rectangle,
+        ressources,
+        format!("q {}\n{dessin}Q\n", plan.vers_page.operateur()),
+    );
+    rattacher(
+        document,
+        plan.page,
+        dictionary! {
+            "Type" => "Annot",
+            "Subtype" => "Stamp",
+            "Rect" => nombres(rectangle),
+            "Contents" => texte_pdf(contenu),
+            "F" => 4 | 128,
+            "AP" => vue,
         },
     )
 }
@@ -918,13 +967,12 @@ fn chemin_lisse(points: &[(f64, f64)]) -> String {
 /// l'encre choisie (bouts et angles arrondis, comme un stylo).
 fn signer(
     document: &mut Document,
-    page: ObjectId,
-    hauteur: f64,
+    plan: &Plan,
     zone: &Zone,
-    trace: &Trace,
-    teinte: Teinte,
+    (trace, teinte, initiales): (&Trace, Teinte, bool),
+    pages_intactes: bool,
 ) -> Result<(), Erreur> {
-    let bas = hauteur - zone.y - zone.hauteur;
+    let bas = plan.hauteur - zone.y - zone.hauteur;
     let epaisseur = (trace.epaisseur * zone.hauteur).clamp(0.2, 12.0);
     let mut dessin = format!("{} {epaisseur:.3} w 1 J 1 j\n", teinte.operateur(false));
     let mut restants = POINTS_SIGNATURE_MAX;
@@ -946,7 +994,18 @@ fn signer(
             dessin.push_str("S\n");
         }
     }
-    marques::surimprimer(document, page, &[], |_| dessin)
+    if pages_intactes {
+        // La zone, et de quoi ne pas rogner les traits qui la touchent.
+        let cadre = [
+            zone.x - epaisseur,
+            bas - epaisseur,
+            zone.x + zone.largeur + epaisseur,
+            bas + zone.hauteur + epaisseur,
+        ];
+        let contenu = if initiales { "Initiales" } else { "Signature" };
+        return poser(document, plan, cadre, Dictionary::new(), &dessin, contenu);
+    }
+    marques::surimprimer(document, plan.page, &[], |_| dessin)
 }
 
 /// Zone de la page affichée (depuis le haut) dans le repère de la page.
@@ -1115,10 +1174,14 @@ fn plan(page: ObjectId, vers_page: Matrice, hauteur: f64) -> Plan {
 }
 
 /// Écrit les annotations dans le document. `image` lit et prépare une image d'après son chemin.
+/// `pages_intactes` : le contenu des pages ne doit pas changer (PDF signé numériquement, enregistré
+/// à la suite de sa version signée) ; le texte écrit, les images et les signatures dessinées vont
+/// alors dans des annotations. Corriger un mot et le correcteur blanc changent toujours la page.
 pub(crate) fn annoter(
     document: &mut Document,
     annotations: &[Annotation],
     image: impl Fn(&str) -> Result<ImagePdf, Erreur>,
+    pages_intactes: bool,
 ) -> Result<(), Erreur> {
     let pages: Vec<ObjectId> = document.get_pages().into_values().collect();
     if let Some(absente) = annotations
@@ -1167,7 +1230,14 @@ pub(crate) fn annoter(
                 taille,
                 teinte,
                 ..
-            } => ecrire(document, page, hauteur, (*x, *y), texte, *taille, *teinte)?,
+            } => ecrire(
+                document,
+                &plan(page, vers_page, hauteur),
+                (*x, *y),
+                texte,
+                (*taille, *teinte),
+                pages_intactes,
+            )?,
             Annotation::Image { zone, chemin, .. } => {
                 let placement = Placement {
                     x: zone.x / largeur,
@@ -1175,7 +1245,20 @@ pub(crate) fn annoter(
                     largeur: zone.largeur / largeur,
                     hauteur: zone.hauteur / hauteur,
                 };
-                marques::apposer(document, image(chemin)?, placement, &[index])?;
+                if pages_intactes {
+                    let (objet, taille) = marques::ajouter_image(document, image(chemin)?);
+                    let cadre = marques::cadre_image(taille, placement, (largeur, hauteur));
+                    poser(
+                        document,
+                        &plan(page, vers_page, hauteur),
+                        cadre,
+                        dictionary! { "XObject" => dictionary! { "Im1" => Object::Reference(objet) } },
+                        &marques::dessin_image("Im1", cadre),
+                        "Image",
+                    )?;
+                } else {
+                    marques::apposer(document, image(chemin)?, placement, &[index])?;
+                }
             }
             Annotation::Soulignage {
                 teinte,
@@ -1243,8 +1326,15 @@ pub(crate) fn annoter(
                 zone,
                 trace,
                 teinte,
+                initiales,
                 ..
-            } => signer(document, page, hauteur, zone, trace, *teinte)?,
+            } => signer(
+                document,
+                &plan(page, vers_page, hauteur),
+                zone,
+                (trace, *teinte, *initiales),
+                pages_intactes,
+            )?,
             // Déjà faits, avant le reste.
             Annotation::Correction { .. } | Annotation::Blanc { .. } => {}
         }
@@ -1265,15 +1355,25 @@ mod tests {
 
     fn annote(octets: &[u8], annotations: &[Annotation]) -> Vec<u8> {
         let mut document = charger(octets, "essai.pdf").unwrap();
-        annoter(&mut document, annotations, |_| {
-            let mut png = Vec::new();
-            image::RgbImage::from_pixel(40, 20, image::Rgb([20, 60, 160]))
-                .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
-                .unwrap();
-            image_decodee(&png, "cachet.png")
-        })
-        .unwrap();
+        annoter_sur(&mut document, annotations, false);
         ecrire_pdf(document).unwrap()
+    }
+
+    /// Annote, avec un cachet bleu pour toute image ; `pages_intactes` : comme pour un PDF signé.
+    fn annoter_sur(document: &mut Document, annotations: &[Annotation], pages_intactes: bool) {
+        annoter(
+            document,
+            annotations,
+            |_| {
+                let mut png = Vec::new();
+                image::RgbImage::from_pixel(40, 20, image::Rgb([20, 60, 160]))
+                    .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+                    .unwrap();
+                image_decodee(&png, "cachet.png")
+            },
+            pages_intactes,
+        )
+        .unwrap();
     }
 
     /// Couleur du pixel (x, y) de la page `page`, rendue à 72 points par pouce : un pixel par point.
@@ -1521,6 +1621,7 @@ mod tests {
                 texte: String::new(),
             }],
             |_| unreachable!(),
+            false,
         )
         .unwrap_err();
         assert!(erreur.message.contains("page 6"), "{}", erreur.message);
@@ -1915,6 +2016,91 @@ mod tests {
             contenu.contains("1 J 1 j") && contenu.contains(" c\n"),
             "traits lissés, bouts ronds"
         );
+    }
+
+    #[test]
+    fn sur_un_pdf_signe_pose_signature_texte_et_image_sans_changer_la_page() {
+        let posees = [
+            Annotation::Signature {
+                page: 0,
+                zone: Zone {
+                    x: 300.0,
+                    y: 350.0,
+                    largeur: 200.0,
+                    hauteur: 100.0,
+                },
+                trace: Trace {
+                    proportion: 2.0,
+                    traits: vec![vec![Point { x: 0.0, y: 0.5 }, Point { x: 1.0, y: 0.5 }]],
+                    epaisseur: 0.08,
+                },
+                teinte: Teinte::Marine,
+                initiales: false,
+            },
+            Annotation::Texte {
+                page: 0,
+                x: 60.0,
+                y: 200.0,
+                texte: "Lu et approuvé".into(),
+                taille: 20.0,
+                teinte: Teinte::Noir,
+            },
+            Annotation::Image {
+                page: 0,
+                zone: Zone {
+                    x: 60.0,
+                    y: 450.0,
+                    largeur: 120.0,
+                    hauteur: 60.0,
+                },
+                chemin: "cachet.png".into(),
+            },
+        ];
+        for source in [pdf_herite(1, "Contrat"), page_tournee()] {
+            let mut document = charger(&source, "essai.pdf").unwrap();
+            let id = *document.get_pages().get(&1).unwrap();
+            let contenu = |document: &Document| {
+                crate::pdf::contenu_page(document, document.get_dictionary(id).unwrap()).unwrap()
+            };
+            let avant = contenu(&document);
+            annoter_sur(&mut document, &posees, true);
+            assert_eq!(
+                contenu(&document),
+                avant,
+                "le contenu de la page ne change pas"
+            );
+            let sortie = ecrire_pdf(document).unwrap();
+            assert_eq!(sous_types(&sortie, 0), vec!["Stamp"; 3]);
+            let posees = annotations_de(&sortie, 0);
+            let textes: Vec<String> = posees
+                .iter()
+                .map(|a| lopdf::decode_text_string(a.get(b"Contents").unwrap()).unwrap())
+                .collect();
+            assert_eq!(textes, ["Signature", "Lu et approuvé", "Image"]);
+            for annotation in &posees {
+                assert_eq!(annotation.get(b"F").unwrap().as_i64().unwrap(), 4 | 128);
+            }
+            // Chacune s'affiche à sa place, comme si elle était dans la page.
+            let (largeur, _, pixels) =
+                rendu::pixels_page(Arc::new(sortie.clone()), "essai.pdf", 0, 72).unwrap();
+            let pixel = |x: u32, y: u32| {
+                let i = ((y * largeur + x) * 3) as usize;
+                [pixels[i], pixels[i + 1], pixels[i + 2]]
+            };
+            let [r, _, b] = pixel(400, 400);
+            assert!(
+                r < 120 && b > r + 40,
+                "le trait, à l'encre bleu marine : {r} {b}"
+            );
+            let [r, _, b] = pixel(120, 480);
+            assert!(b > 120 && r < 80, "le cachet bleu : {r} {b}");
+            let encre = (200..224)
+                .flat_map(|y| (60..220).map(move |x| (x, y)))
+                .filter(|&(x, y)| pixel(x, y)[0] < 100)
+                .count();
+            assert!(encre > 100, "les lettres du texte : {encre} pixels foncés");
+            assert_eq!(pixel(560, 300), [255, 255, 255]);
+        }
     }
 
     #[test]
