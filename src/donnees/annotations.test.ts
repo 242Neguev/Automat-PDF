@@ -7,7 +7,10 @@ import {
   extraitSurligne,
   HISTORIQUE_VIDE,
   motsDeLaLigne,
+  memeValeur,
   nomAnnote,
+  nombreDeModifications,
+  nomRempli,
   ordreDeLecture,
   policeCss,
   pourLeCoeur,
@@ -190,9 +193,35 @@ describe("commentaires : souligner, barrer, formes, dessin, tampons", () => {
       { id: "e", sorte: "retouche", page: 1, cible: "p1-3", texte: "Perdu" },
       note("f"),
     ];
-    expect(retouchesDe(annotations)).toEqual({ supprimes: ["p1-3"], textes: [["12 0", "Vu"], ["9 0", "Second"]] });
-    expect(retouchesDe([])).toEqual({ supprimes: [], textes: [] });
+    expect(retouchesDe(annotations)).toEqual({ supprimes: ["p1-3"], textes: [["12 0", "Vu"], ["9 0", "Second"]], champs: [] });
+    expect(retouchesDe([])).toEqual({ supprimes: [], textes: [], champs: [] });
     expect(pourLeCoeur(annotations).map((a) => a.sorte)).toEqual(["note"]);
+  });
+
+  it("tient les champs remplis : la dernière valeur de chacun, sauf revenue à celle du PDF", () => {
+    const champ = (id: string, nom: string, valeur: string | string[]): Annotation => ({ id, sorte: "champ", page: 0, nom, valeur });
+    const annotations: Annotation[] = [
+      champ("a", "Nom", "NKOULOU"),
+      champ("b", "Type", "RTT"),
+      champ("c", "Nom", "MOUKOKO"),
+      champ("d", "Certifie", "Oui"),
+      champ("e", "Certifie", "Off"),
+      champ("f", "Langues", ["en", "fr"]),
+      note("g"),
+    ];
+    // « Certifie » est revenu à sa valeur reçue ; « Langues » aussi, dans un autre ordre.
+    const initiales = { Nom: "", Type: "Off", Certifie: "Off", Langues: ["fr", "en"] };
+    expect(retouchesDe(annotations, initiales).champs).toEqual([
+      ["Nom", "MOUKOKO"],
+      ["Type", "RTT"],
+    ]);
+    expect(pourLeCoeur(annotations).map((a) => a.sorte)).toEqual(["note"]);
+    // Les modifications : la note, et chaque champ une fois.
+    expect(nombreDeModifications(annotations)).toBe(5);
+    expect(memeValeur("", [])).toBe(true);
+    expect(memeValeur(["a"], "a")).toBe(true);
+    expect(memeValeur("Off", "Oui")).toBe(false);
+    expect(nomRempli("Demande de congés.pdf")).toBe("Demande de congés - rempli.pdf");
   });
 
   it("liste les commentaires dans l'ordre de lecture", () => {

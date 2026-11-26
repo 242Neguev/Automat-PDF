@@ -107,9 +107,10 @@ const OUTIL_DE: Record<Annotation["sorte"], OutilAnnotation> = {
   image: "image",
   correction: "corriger",
   blanc: "correcteur",
-  // Retouches des commentaires du PDF : jamais montrées comme des annotations.
+  // Retouches du PDF (commentaires, champs remplis) : jamais montrées comme des annotations.
   suppression: "gomme",
   retouche: "texte",
+  champ: "texte",
 };
 
 /** L'icône d'une annotation (celle de son outil, ou de sa forme), pour la liste des commentaires. */
@@ -367,6 +368,7 @@ function decaler(annotation: Annotation, dx: number, dy: number): Annotation {
     case "correction":
     case "suppression":
     case "retouche":
+    case "champ":
       return annotation;
     default:
       return { ...annotation, x: annotation.x + dx, y: annotation.y + dy };
@@ -833,9 +835,10 @@ export function CoucheAnnotations(props: PropsCouche) {
           </div>
         );
       }
-      // Commentaire du PDF supprimé ou changé : le cœur redessine la page, rien à montrer ici.
+      // Commentaire du PDF supprimé ou changé, champ rempli : le cœur redessine la page.
       case "suppression":
       case "retouche":
+      case "champ":
         return null;
     }
   }

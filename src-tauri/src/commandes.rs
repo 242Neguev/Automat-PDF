@@ -14,6 +14,7 @@ use crate::compression::{Bilan, Niveau};
 use crate::confidentialite::Confidentialite;
 use crate::envoi::{BilanEnvoi, Message};
 use crate::erreur::Erreur;
+use crate::formulaires::Formulaire;
 use crate::images::OptionsImages;
 use crate::imposition::Disposition;
 use crate::impression::{Feuille, Imprimante, OptionsImpression, Reglages};
@@ -172,8 +173,12 @@ pub async fn annoter_pdf(
     chemin: String,
     annotations: Vec<Annotation>,
     sortie: String,
+    aplatir: Option<bool>,
 ) -> Result<(), Erreur> {
-    en_arriere_plan(move || operations::annoter_pdf(&chemin, &annotations, &sortie)).await
+    en_arriere_plan(move || {
+        operations::annoter_pdf(&chemin, &annotations, &sortie, aplatir.unwrap_or(false))
+    })
+    .await
 }
 
 /// Contenu brut d'une image, pour l'afficher telle quelle.
@@ -285,10 +290,17 @@ pub async fn commentaires_pdf(chemin: String) -> Result<Vec<Commentaire>, Erreur
     en_arriere_plan(move || operations::commentaires_pdf(&chemin)).await
 }
 
-/// Supprime des commentaires du PDF, ou en change le texte, en mémoire seulement.
+/// Les champs du formulaire d'un PDF, pour le lecteur.
 #[tauri::command]
-pub async fn retoucher_commentaires(chemin: String, retouches: Retouches) -> Result<(), Erreur> {
-    en_arriere_plan(move || operations::retoucher_commentaires(&chemin, &retouches)).await
+pub async fn formulaire_pdf(chemin: String) -> Result<Formulaire, Erreur> {
+    en_arriere_plan(move || operations::formulaire_pdf(&chemin)).await
+}
+
+/// Retouches du lecteur, en mémoire seulement : commentaires du PDF supprimés ou changés, champs
+/// du formulaire remplis.
+#[tauri::command]
+pub async fn retoucher_lecture(chemin: String, retouches: Retouches) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::retoucher_lecture(&chemin, &retouches)).await
 }
 
 /// Signets et liens d'un PDF, pour le lecteur.

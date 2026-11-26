@@ -680,6 +680,94 @@ html[data-fenetre="verre"][data-mantine-color-scheme="light"] {
   outline: 1px solid rgba(30, 110, 114, 0.45);
 }
 
+/* Formulaires PDF (0.7.0) : les champs posés sur la page, au-dessus du texte. La page montre leur
+   valeur (dessinée par le cœur) ; un fond bleu léger dit où l'on peut écrire, comme dans les
+   lecteurs de PDF courants. Les pages restent blanches en thème sombre : couleurs fixes. */
+.couche-formulaire {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.champ-pdf {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: rgba(59, 130, 246, 0.12);
+  pointer-events: auto;
+  cursor: text;
+}
+.champ-pdf:hover,
+.champ-pdf:focus-within,
+.champ-pdf:focus-visible {
+  outline: 1px solid rgba(30, 110, 114, 0.7);
+}
+.champ-pdf[data-obligatoire] {
+  box-shadow: inset 0 0 0 1px rgba(200, 30, 30, 0.55);
+}
+.champ-pdf--case {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.champ-pdf__ouvrir {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: text;
+}
+.champ-pdf__menu {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+/* La saisie, et la valeur saisie montrée jusqu'à ce que la page redessinée l'affiche. */
+.champ-pdf__saisie,
+.champ-pdf__attente,
+.champ-pdf__liste {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  outline: 2px solid rgba(30, 110, 114, 0.85);
+  background: #fff;
+  color: #111;
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.15;
+}
+.champ-pdf__attente {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  outline: 0;
+  pointer-events: none;
+}
+textarea.champ-pdf__saisie {
+  padding-top: 2px;
+  resize: none;
+}
+.champ-pdf__liste {
+  height: auto;
+  min-height: 100%;
+  z-index: 2;
+}
+.champ-pdf__coche {
+  color: #111;
+  line-height: 1;
+  pointer-events: none;
+}
+
 /* Éditeur de PDF (annotations) : la couche posée sur chaque page du lecteur, au-dessus du texte.
    Positions et tailles viennent des points de la page ; les couleurs, de celles du cœur. */
 .couche-annotations {

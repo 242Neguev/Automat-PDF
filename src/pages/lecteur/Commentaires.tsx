@@ -70,6 +70,7 @@ function resume(annotation: Annotation): { titre: string; detail: string | null 
       return { titre: t.sortes[annotation.sorte], detail: null };
     case "suppression":
     case "retouche":
+    case "champ":
       return { titre: "", detail: null };
   }
 }

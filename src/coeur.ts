@@ -1,6 +1,6 @@
 // Accès typé aux commandes du cœur Rust (voir src-tauri/src/commandes.rs).
 import { invoke } from "@tauri-apps/api/core";
-import type { pourLeCoeur } from "./donnees/annotations";
+import type { pourLeCoeur, ValeurChamp } from "./donnees/annotations";
 
 export interface Erreur {
   message: string;
@@ -120,9 +120,13 @@ export interface Placement {
 export const apposerImage = (chemin: string, image: string, placement: Placement, pages: number[], sortie: string) =>
   invoke<void>("apposer_image", { chemin, image, placement, pages, sortie });
 
-/** Enregistre dans `sortie` le PDF annoté dans le lecteur (surlignages, notes, texte, images). */
-export const annoterPdf = (chemin: string, annotations: ReturnType<typeof pourLeCoeur>, sortie: string) =>
-  invoke<void>("annoter_pdf", { chemin, annotations, sortie });
+/**
+ * Enregistre dans `sortie` le PDF annoté dans le lecteur (surlignages, notes, texte, images), avec
+ * ses retouches (commentaires du PDF, champs remplis) ; `aplatir` : son formulaire rejoint ses
+ * pages et n'est plus modifiable.
+ */
+export const annoterPdf = (chemin: string, annotations: ReturnType<typeof pourLeCoeur>, sortie: string, aplatir = false) =>
+  invoke<void>("annoter_pdf", { chemin, annotations, sortie, aplatir });
 
 /** Zone à noircir, en fractions de la page affichée, depuis son coin en haut à gauche. */
 export interface Zone {
@@ -285,13 +289,72 @@ export interface CommentairePdf {
 /** Les commentaires déjà présents dans un PDF reçu, d'après son contenu d'origine. */
 export const commentairesPdf = (chemin: string) => invoke<CommentairePdf[]>("commentaires_pdf", { chemin });
 
-/** Retouches des commentaires du PDF : toutes à la fois, appliquées en mémoire depuis l'origine. */
+/**
+ * Retouches du PDF dans le lecteur : ses commentaires supprimés ou changés, ses champs remplis.
+ * Toutes à la fois, appliquées en mémoire depuis le contenu d'origine.
+ */
 export interface RetouchesPdf {
   supprimes: string[];
   textes: [string, string][];
+  champs: [string, ValeurChamp][];
 }
 
-export const retoucherCommentaires = (chemin: string, retouches: RetouchesPdf) => invoke<void>("retoucher_commentaires", { chemin, retouches });
+export const retoucherLecture = (chemin: string, retouches: RetouchesPdf) => invoke<void>("retoucher_lecture", { chemin, retouches });
+
+/** Sorte d'un champ de formulaire. */
+export type SorteChamp = "texte" | "case" | "radio" | "liste" | "combo" | "bouton" | "signature";
+
+/** Un widget d'un champ : sa place sur la page affichée, en points depuis son coin en haut à gauche. */
+export interface WidgetChamp {
+  page: number;
+  x: number;
+  y: number;
+  largeur: number;
+  hauteur: number;
+  /** État « coché » de ce widget (case, bouton radio) : « Yes », « Oui », « 1 »… */
+  etat: string | null;
+  /** Taille du texte demandée par le PDF (0 : automatique). */
+  taille: number;
+  /** 0 : à gauche ; 1 : centré ; 2 : à droite. */
+  alignement: number;
+}
+
+/** Un champ du formulaire d'un PDF (valeur reçue, avant les retouches du lecteur). */
+export interface ChampFormulaire {
+  /** Nom complet (« Identité.Nom ») : son repère. */
+  nom: string;
+  /** Infobulle donnée par le PDF. */
+  libelle: string | null;
+  sorte: SorteChamp;
+  valeur: ValeurChamp;
+  lectureSeule: boolean;
+  obligatoire: boolean;
+  multiligne: boolean;
+  /** Mot de passe : le texte s'affiche masqué. */
+  secret: boolean;
+  longueurMax: number | null;
+  /** Une case par caractère. */
+  peigne: boolean;
+  options: { valeur: string; libelle: string }[];
+  multiple: boolean;
+  /** Liste déroulante où l'on peut aussi écrire sa propre valeur. */
+  saisieLibre: boolean;
+  /** Un bouton radio coché ne se décoche pas d'un clic. */
+  sansDecocher: boolean;
+  widgets: WidgetChamp[];
+}
+
+export interface FormulairePdf {
+  champs: ChampFormulaire[];
+  /** Le formulaire a aussi une version XFA (retirée du PDF rempli) ; seulement elle. */
+  xfa: boolean;
+  xfaSeul: boolean;
+  /** Des calculs ou des contrôles (JavaScript) qu'Automat-PDF ne fait pas. */
+  calculs: boolean;
+}
+
+/** Les champs du formulaire d'un PDF, d'après son contenu d'origine. */
+export const formulairePdf = (chemin: string) => invoke<FormulairePdf>("formulaire_pdf", { chemin });
 
 /**
  * Propose de faire d'Automat-PDF le lecteur des PDF : la fenêtre de choix de Windows (ou, à défaut,

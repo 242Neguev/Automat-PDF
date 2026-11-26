@@ -8,6 +8,12 @@ export const TEINTES_TEXTE: Teinte[] = ["noir", "marine", "rouge"];
 /** Couleurs des traits : soulignement, rature, formes, dessin. */
 export const TEINTES_TRAIT: Teinte[] = ["rouge", "marine", "noir"];
 
+/**
+ * Valeur d'un champ de formulaire (0.7.0) : un texte ; l'état d'une case ou d'un bouton radio
+ * (« Off » : décoché) ; l'option (ou les options) choisie d'une liste.
+ */
+export type ValeurChamp = string | string[];
+
 /** Les mêmes couleurs que le cœur (annotations.rs), pour l'aperçu. */
 export const RVB: Record<Teinte, [number, number, number]> = {
   jaune: [255, 219, 31],
@@ -109,11 +115,16 @@ export type Annotation =
   | { id: string; sorte: "tampon"; page: number; zone: Zone; mot: MotTampon; date: string | null }
   /** Commentaire déjà présent dans le PDF (`cible` : son repère), supprimé ; ou son texte changé. */
   | { id: string; sorte: "suppression"; page: number; cible: string }
-  | { id: string; sorte: "retouche"; page: number; cible: string; texte: string };
+  | { id: string; sorte: "retouche"; page: number; cible: string; texte: string }
+  /** Champ du formulaire (`nom` : son nom complet) rempli (0.7.0). */
+  | { id: string; sorte: "champ"; page: number; nom: string; valeur: ValeurChamp };
 
-/** Les retouches des commentaires du PDF : une étape de l'historique, mais rien à dessiner. */
-export const estRetouche = (annotation: Annotation): annotation is Annotation & { sorte: "suppression" | "retouche" } =>
-  annotation.sorte === "suppression" || annotation.sorte === "retouche";
+/**
+ * Les retouches du PDF lui-même (ses commentaires supprimés ou changés, ses champs remplis) : une
+ * étape de l'historique, que le cœur applique à sa copie en mémoire ; rien à dessiner ici.
+ */
+export const estRetouche = (annotation: Annotation): annotation is Annotation & { sorte: "suppression" | "retouche" | "champ" } =>
+  annotation.sorte === "suppression" || annotation.sorte === "retouche" || annotation.sorte === "champ";
 
 /** Ce que le cœur reçoit : les annotations sans leur identifiant (ni l'ancien texte d'une
  * correction), en laissant de côté les vides. Une correction vide efface le mot. */
@@ -309,6 +320,12 @@ export function nomAnnote(nom: string): string {
   return `${base} - annoté.pdf`;
 }
 
+/** Nom proposé pour le formulaire rempli : « Demande.pdf » → « Demande - rempli.pdf ». */
+export function nomRempli(nom: string): string {
+  const base = nom.replace(/\.pdf$/i, "");
+  return `${base} - rempli.pdf`;
+}
+
 /** Les annotations sans celles effacées d'un geste de gomme (une seule étape à annuler). */
 export function sans(annotations: Annotation[], effacees: Iterable<string>): Annotation[] {
   const ids = new Set(effacees);
@@ -360,6 +377,7 @@ export function zoneDe(annotation: Annotation): Zone {
       return { x: annotation.x, y: annotation.y, largeur: 20, hauteur: 20 };
     case "suppression":
     case "retouche":
+    case "champ":
       return { x: 0, y: 0, largeur: 0, hauteur: 0 };
     case "texte":
       return { x: annotation.x, y: annotation.y, largeur: annotation.taille * 8, hauteur: annotation.taille * INTERLIGNE };
@@ -376,12 +394,32 @@ export function ordreDeLecture(annotations: Annotation[]): Annotation[] {
   });
 }
 
+const parCle = <T>([a]: [string, T], [b]: [string, T]) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Deux valeurs de champ égales (une liste comme un ensemble d'options). */
+export function memeValeur(a: ValeurChamp | undefined, b: ValeurChamp | undefined): boolean {
+  const liste = (v: ValeurChamp | undefined) => (v === undefined ? [] : Array.isArray(v) ? [...v].sort() : v === "" ? [] : [v]);
+  const [la, lb] = [liste(a), liste(b)];
+  return la.length === lb.length && la.every((v, i) => v === lb[i]);
+}
+
+/** La dernière valeur de chaque champ rempli, d'après l'historique. */
+export function valeursChamps(annotations: Annotation[]): Record<string, ValeurChamp> {
+  const valeurs: Record<string, ValeurChamp> = {};
+  for (const annotation of annotations) if (annotation.sorte === "champ") valeurs[annotation.nom] = annotation.valeur;
+  return valeurs;
+}
+
 /**
- * Les retouches des commentaires du PDF, d'après l'historique : les supprimés, et le dernier texte
- * de chacun des autres. Toujours dans le même ordre : deux historiques équivalents donnent les
- * mêmes retouches (le cœur ne refait rien pour rien).
+ * Les retouches du PDF, d'après l'historique : les commentaires supprimés, le dernier texte de
+ * chacun des autres, et la dernière valeur de chaque champ du formulaire, sauf celles revenues à
+ * leur valeur d'origine (`initiales`). Toujours dans le même ordre : deux historiques équivalents
+ * donnent les mêmes retouches (le cœur ne refait rien pour rien).
  */
-export function retouchesDe(annotations: Annotation[]): { supprimes: string[]; textes: [string, string][] } {
+export function retouchesDe(
+  annotations: Annotation[],
+  initiales: Record<string, ValeurChamp> = {},
+): { supprimes: string[]; textes: [string, string][]; champs: [string, ValeurChamp][] } {
   const supprimes = new Set<string>();
   const textes = new Map<string, string>();
   for (const annotation of annotations) {
@@ -390,6 +428,24 @@ export function retouchesDe(annotations: Annotation[]): { supprimes: string[]; t
   }
   return {
     supprimes: [...supprimes].sort(),
-    textes: [...textes].filter(([cible]) => !supprimes.has(cible)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    textes: [...textes].filter(([cible]) => !supprimes.has(cible)).sort(parCle),
+    champs: Object.entries(valeursChamps(annotations))
+      .filter(([nom, valeur]) => !memeValeur(valeur, initiales[nom]))
+      .sort(parCle),
   };
+}
+
+/**
+ * Nombre de changements en cours d'un document : les annotations posées, plus chaque commentaire
+ * du PDF retouché et chaque champ rempli, comptés une fois chacun.
+ */
+export function nombreDeModifications(annotations: Annotation[]): number {
+  const cibles = new Set<string>();
+  let posees = 0;
+  for (const annotation of annotations) {
+    if (annotation.sorte === "champ") cibles.add(`champ:${annotation.nom}`);
+    else if (annotation.sorte === "suppression" || annotation.sorte === "retouche") cibles.add(`commentaire:${annotation.cible}`);
+    else posees += 1;
+  }
+  return posees + cibles.size;
 }

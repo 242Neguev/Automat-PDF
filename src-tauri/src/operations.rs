@@ -16,6 +16,7 @@ use crate::confidentialite::{self, Confidentialite};
 use crate::envoi::{BilanEnvoi, Message};
 use crate::erreur::Erreur;
 use crate::fichiers::{self, FichierAEcrire, Nature};
+use crate::formulaires::{self, Formulaire};
 use crate::images::{self, ImageSource, OptionsImages};
 use crate::imposition::{self, Disposition};
 use crate::impression::{self, Feuille, Imprimante, OptionsImpression, Reglages};
@@ -361,12 +362,21 @@ pub fn apposer_image(
 
 /// Enregistre dans `sortie` le PDF annoté dans le lecteur : surlignages et notes (annotations PDF),
 /// texte et images (dans le contenu des pages).
-pub fn annoter_pdf(chemin: &str, annotations: &[Annotation], sortie: &str) -> Result<(), Erreur> {
+pub fn annoter_pdf(
+    chemin: &str,
+    annotations: &[Annotation],
+    sortie: &str,
+    aplatir: bool,
+) -> Result<(), Erreur> {
     let octets = memoire::pdf(chemin)?;
     let mut document = pdf::charger(&octets, &nom_de(chemin))?;
     annotations::annoter(&mut document, annotations, |image| {
         images::image_decodee(&fichiers::lire(image, Nature::Image)?, &nom_de(image))
     })?;
+    // Le formulaire rempli (dans la copie en mémoire) peut rejoindre ses pages : il n'est plus modifiable.
+    if aplatir {
+        formulaires::aplatir(&mut document)?;
+    }
     fichiers::enregistrer(sortie, &pdf::ecrire(document)?)
 }
 
@@ -637,9 +647,16 @@ pub fn commentaires_pdf(chemin: &str) -> Result<Vec<Commentaire>, Erreur> {
     Ok(commentaires::commentaires(&document))
 }
 
-/// Retouche les commentaires du PDF, en mémoire seulement (toujours depuis son contenu d'origine) :
-/// le lecteur les montre, le PDF annoté enregistré et l'impression les gardent.
-pub fn retoucher_commentaires(chemin: &str, retouches: &Retouches) -> Result<(), Erreur> {
+/// Les champs du formulaire d'un PDF, tels qu'il les a reçus (avant les retouches du lecteur).
+pub fn formulaire_pdf(chemin: &str) -> Result<Formulaire, Erreur> {
+    let document = pdf::charger(&memoire::origine(chemin)?, &nom_de(chemin))?;
+    Ok(formulaires::formulaire(&document))
+}
+
+/// Retouches du lecteur, en mémoire seulement (toujours depuis le contenu d'origine du PDF) :
+/// commentaires du PDF supprimés ou changés, champs du formulaire remplis. Le lecteur les montre,
+/// le PDF enregistré et l'impression les gardent.
+pub fn retoucher_lecture(chemin: &str, retouches: &Retouches) -> Result<(), Erreur> {
     let nom = nom_de(chemin);
     memoire::retoucher(chemin, |origine| {
         if retouches.vides() {
@@ -647,6 +664,7 @@ pub fn retoucher_commentaires(chemin: &str, retouches: &Retouches) -> Result<(),
         }
         let mut document = pdf::charger(origine, &nom)?;
         commentaires::retoucher(&mut document, retouches);
+        formulaires::remplir(&mut document, &retouches.champs)?;
         pdf::ecrire(document).map(Some)
     })
 }

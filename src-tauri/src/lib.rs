@@ -13,6 +13,7 @@ mod erreur;
 #[cfg(test)]
 mod essais;
 mod fichiers;
+mod formulaires;
 mod geometrie;
 mod images;
 mod imposition;
@@ -230,7 +231,8 @@ pub fn run() {
             commandes::reverrouiller_lecture,
             commandes::navigation_pdf,
             commandes::commentaires_pdf,
-            commandes::retoucher_commentaires,
+            commandes::formulaire_pdf,
+            commandes::retoucher_lecture,
             commandes::imprimer_pdf,
             commandes::imprimantes,
             commandes::feuille_imprimante,

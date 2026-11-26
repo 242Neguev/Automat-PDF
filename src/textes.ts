@@ -128,9 +128,9 @@ export const textes = {
     onglets: {
       titre: "PDF ouverts",
       fermer: (nom: string) => `Fermer « ${nom} »`,
-      nonEnregistrees: (n: number) => `${n} annotation${n > 1 ? "s" : ""} pas encore enregistrée${n > 1 ? "s" : ""}`,
+      nonEnregistrees: (n: number) => `${n} modification${n > 1 ? "s" : ""} pas encore enregistrée${n > 1 ? "s" : ""}`,
       gardees: (n: number, nom: string) =>
-        `${n > 1 ? `Les ${n} annotations` : "L'annotation"} de « ${nom} » ${n > 1 ? "restent" : "reste"} jusqu'à la fermeture d'Automat-PDF : rouvrez ce PDF pour ${n > 1 ? "les " : "l'"}enregistrer.`,
+        `${n > 1 ? `Les ${n} modifications` : "La modification"} de « ${nom} » ${n > 1 ? "restent" : "reste"} jusqu'à la fermeture d'Automat-PDF : rouvrez ce PDF pour ${n > 1 ? "les " : "l'"}enregistrer.`,
     },
     applicationHabituelle: "Ouvrir dans l'application habituelle",
     imprimer: "Imprimer (⌘P ou Ctrl+P)",
@@ -200,6 +200,20 @@ export const textes = {
       ouvrir: "Ouvrir",
       ouvert:
         "PDF ouvert avec son mot de passe. Le PDF annoté que vous enregistrerez n'en aura pas : pour le protéger de nouveau, utilisez l'outil « Mot de passe ».",
+    },
+    formulaire: {
+      bandeau: "Ce PDF est un formulaire : cliquez dans un champ pour le remplir.",
+      calculs: "Ses calculs automatiques (totaux, contrôles) ne se font pas dans Automat-PDF : vérifiez-les avant d'envoyer le PDF.",
+      xfaSeul: "Ce formulaire est au format XFA, abandonné, qu'Automat-PDF ne sait pas remplir. Vous pouvez écrire dessus avec l'outil Texte (bouton Annoter).",
+      modifies: (n: number) => (n === 0 ? "Aucun champ rempli" : `${n} champ${n > 1 ? "s" : ""} rempli${n > 1 ? "s" : ""}`),
+      aplatir: "Aplatir",
+      aplatirAide: "Le PDF enregistré ne sera plus un formulaire : ses champs, remplis, feront partie de la page et ne se modifieront plus.",
+      enregistrer: "Enregistrer le PDF rempli…",
+      enregistrerAide: "Un nouveau PDF, à côté de l'original : l'original n'est jamais modifié.",
+      enregistre: "PDF rempli enregistré",
+      lectureSeule: "Champ en lecture seule",
+      obligatoire: (libelle: string) => `${libelle} (obligatoire)`,
+      choisir: "Choisir…",
     },
     deposerIci: "Déposez votre PDF : il s'ouvrira dans le lecteur",
     alt: (n: number) => `Page ${n}`,

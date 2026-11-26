@@ -68,11 +68,14 @@ pub struct Retouches {
     pub supprimes: Vec<String>,
     /// Nouveau texte de commentaires : (repère, texte).
     pub textes: Vec<(String, String)>,
+    /// Champs du formulaire remplis (0.7.0) : (nom complet, valeur).
+    #[serde(default)]
+    pub champs: Vec<(String, crate::formulaires::Valeur)>,
 }
 
 impl Retouches {
     pub fn vides(&self) -> bool {
-        self.supprimes.is_empty() && self.textes.is_empty()
+        self.supprimes.is_empty() && self.textes.is_empty() && self.champs.is_empty()
     }
 }
 
@@ -479,6 +482,7 @@ mod tests {
             &Retouches {
                 supprimes: vec![note, pose],
                 textes: vec![(surlignage.clone(), "Net à payer : vérifié".into())],
+                ..Retouches::default()
             },
         );
         let apres = commentaires(&document);
@@ -515,6 +519,7 @@ mod tests {
             &Retouches {
                 supprimes: vec![rature],
                 textes: vec![],
+                ..Retouches::default()
             },
         );
         assert_eq!(

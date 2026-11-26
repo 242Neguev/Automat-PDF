@@ -38,8 +38,11 @@ import {
   ouvrirFichier,
   ouvrirLien,
   commentairesPdf,
-  retoucherCommentaires,
+  formulairePdf,
+  retoucherLecture,
+  type ChampFormulaire,
   type CommentairePdf,
+  type FormulairePdf,
   pagesPdf,
   tailleFichier,
   type DestinationPdf,
@@ -51,8 +54,28 @@ import {
   type OptionsImpression,
 } from "../../coeur";
 import { echelleAjustee, hautAffiche, premiereDeRangee, rangees, tourner, transformation, type Disposition, type Rotation } from "../../donnees/affichage";
-import { annuler, appliquer, HISTORIQUE_VIDE, nomAnnote, nouvelId, pourLeCoeur, retablir, retouchesDe, sans, zoneDe, type Annotation, type Historique, type Teinte, type Zone } from "../../donnees/annotations";
+import {
+  annuler,
+  appliquer,
+  HISTORIQUE_VIDE,
+  nomAnnote,
+  nombreDeModifications,
+  nomRempli,
+  nouvelId,
+  pourLeCoeur,
+  retablir,
+  retouchesDe,
+  sans,
+  valeursChamps,
+  zoneDe,
+  type Annotation,
+  type Historique,
+  type Teinte,
+  type ValeurChamp,
+  type Zone,
+} from "../../donnees/annotations";
 import { aCote, nomDe } from "../../donnees/chemins";
+import { initialesDe, remplissable } from "../../donnees/formulaire";
 import { motsCouverts, occurrences, type Occurrence } from "../../donnees/recherche-texte";
 import { formaterTaille } from "../../donnees/tailles";
 import { GROUPE_DE, type DefinitionOutil } from "../../outils";
@@ -64,6 +87,7 @@ import { signalerErreur } from "../commun/signalerErreur";
 import { ZoneDepot } from "../commun/ZoneFichier";
 import { BarreAnnotations, CoucheAnnotations, type ImageChargee, type OutilAnnotation, type ReglagesCommentaires } from "./Annotations";
 import ListeCommentaires from "./Commentaires";
+import { BandeauFormulaire, CoucheFormulaire } from "./Formulaire";
 import MotDePasseLecture from "./MotDePasseLecture";
 import ColonneSignets from "./Signets";
 import FenetreImpression from "./Impression";
@@ -201,8 +225,12 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   const [selection, setSelection] = useState<string | null>(null);
   const [imagesChargees, setImagesChargees] = useState<Record<string, ImageChargee>>({});
   const [enregistrement, setEnregistrement] = useState(false);
-  /** Le PDF annoté qui vient d'être enregistré (et qui s'affiche). */
+  /** Le PDF annoté (ou le formulaire rempli) qui vient d'être enregistré, et qui s'affiche. */
   const [enregistre, setEnregistre] = useState<string | null>(null);
+  const [sorteEnregistree, setSorteEnregistree] = useState<"annote" | "rempli">("annote");
+  /** Formulaire du PDF (0.7.0) : ses champs tels que reçus (null : pas encore lus) ; l'option « aplatir ». */
+  const [formulaire, setFormulaire] = useState<FormulairePdf | null>(null);
+  const [aplatir, setAplatir] = useState(false);
   const cadre = useRef<HTMLDivElement>(null);
   const defilement = useRef<HTMLDivElement>(null);
   const champRecherche = useRef<HTMLInputElement>(null);
@@ -281,6 +309,12 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     commentairesPdf(chemin).then(
       (lus) => actuelDoc && setExistants(lus),
       () => actuelDoc && setExistants([]),
+    );
+    // Les champs de son formulaire, s'il en a un.
+    setFormulaire(null);
+    formulairePdf(chemin).then(
+      (lu) => actuelDoc && setFormulaire(lu),
+      () => actuelDoc && setFormulaire(null),
     );
     return () => {
       actuelDoc = false;
@@ -553,6 +587,10 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   function modifierCommentairePdf(commentaire: CommentairePdf, texte: string) {
     ajouterAnnotation({ id: nouvelId(), sorte: "retouche", page: commentaire.page, cible: commentaire.id, texte });
   }
+  /** Un champ du formulaire rempli : une étape de l'historique (annuler, rétablir). */
+  function changerChamp(champ: ChampFormulaire, valeur: ValeurChamp) {
+    ajouterAnnotation({ id: nouvelId(), sorte: "champ", page: champ.widgets[0]?.page ?? 0, nom: champ.nom, valeur });
+  }
   function remonter(sens: "annuler" | "retablir") {
     changerHistorique(sens === "annuler" ? annuler : retablir);
     setSelection(null);
@@ -583,10 +621,14 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     }
   }
 
-  /** Enregistre un nouveau PDF avec les annotations, à côté de l'original, puis l'affiche. */
-  async function enregistrerAnnote() {
-    if (!chemin || annotations.length === 0) return;
-    const sortie = await save({ defaultPath: aCote(chemin, nomAnnote(nomDe(chemin))), filters: [{ name: t.filtre, extensions: ["pdf"] }] });
+  /**
+   * Enregistre un nouveau PDF, à côté de l'original, puis l'affiche : les annotations, les retouches
+   * des commentaires et les champs remplis ; `avecAplatir` : le formulaire rejoint ses pages.
+   */
+  async function enregistrer(avecAplatir = false) {
+    if (!chemin || (annotations.length === 0 && !avecAplatir)) return;
+    const rempli = annotations.every((a) => a.sorte === "champ");
+    const sortie = await save({ defaultPath: aCote(chemin, rempli ? nomRempli(nomDe(chemin)) : nomAnnote(nomDe(chemin))), filters: [{ name: t.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     if (memeFichier(sortie, chemin)) {
       signalerErreur({ message: t.annotation.memeFichier });
@@ -594,16 +636,19 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     }
     setEnregistrement(true);
     try {
-      await annoterPdf(chemin, pourLeCoeur(annotations), sortie);
+      await annoterPdf(chemin, pourLeCoeur(annotations), sortie, avecAplatir);
       const source = chemin;
       setHistoriques(({ [source]: _enregistrees, ...autres }) => autres);
-      // Le PDF annoté garde les retouches ; l'original (toujours ouvert dans son onglet) retrouve les siennes.
-      if (retouches.supprimes.length > 0 || retouches.textes.length > 0) {
-        retouchesEnvoyees.current[source] = JSON.stringify({ supprimes: [], textes: [] });
-        void retoucherCommentaires(source, { supprimes: [], textes: [] }).then(() => relire(source), signalerErreur);
+      // Le PDF enregistré garde les retouches ; l'original (toujours ouvert dans son onglet) retrouve les siennes.
+      if (retouches.supprimes.length > 0 || retouches.textes.length > 0 || retouches.champs.length > 0) {
+        const aucune = { supprimes: [], textes: [], champs: [] };
+        retouchesEnvoyees.current[source] = JSON.stringify(aucune);
+        void retoucherLecture(source, aucune).then(() => relire(source), signalerErreur);
       }
       setSelection(null);
       setAnnoter(false);
+      setAplatir(false);
+      setSorteEnregistree(rempli ? "rempli" : "annote");
       setEnregistre(sortie);
       onChoisir(sortie);
     } catch (e) {
@@ -613,18 +658,24 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     }
   }
 
-  // Les retouches des commentaires du PDF suivent l'historique : envoyées au cœur (qui les applique
-  // à sa copie en mémoire, depuis l'origine), puis les pages et les vignettes relues.
-  const retouches = useMemo(() => retouchesDe(annotations), [annotations]);
+  // Formulaire : les valeurs reçues avec le PDF, les valeurs actuelles (après les champs remplis ici).
+  const initiales = useMemo(() => initialesDe(formulaire), [formulaire]);
+  const valeurs = useMemo(() => ({ ...initiales, ...valeursChamps(annotations) }), [initiales, annotations]);
+  const champsRemplissables = useMemo(() => formulaire?.champs.filter(remplissable) ?? [], [formulaire]);
+  const aFormulaire = champsRemplissables.length > 0 || Boolean(formulaire?.xfaSeul);
+
+  // Les retouches du PDF (ses commentaires, ses champs) suivent l'historique : envoyées au cœur (qui
+  // les applique à sa copie en mémoire, depuis l'origine), puis les pages et les vignettes relues.
+  const retouches = useMemo(() => retouchesDe(annotations, initiales), [annotations, initiales]);
   useEffect(() => {
     if (!chemin || !formats) return;
     const cle = JSON.stringify(retouches);
-    const vide = retouches.supprimes.length === 0 && retouches.textes.length === 0;
+    const vide = retouches.supprimes.length === 0 && retouches.textes.length === 0 && retouches.champs.length === 0;
     const avant = retouchesEnvoyees.current[chemin];
     if (cle === avant || (avant === undefined && vide)) return;
     retouchesEnvoyees.current[chemin] = cle;
     const document = chemin;
-    retoucherCommentaires(document, retouches).then(() => {
+    retoucherLecture(document, retouches).then(() => {
       relire(document);
       setVersionImages((version) => version + 1);
     }, signalerErreur);
@@ -636,18 +687,19 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     return () => window.clearTimeout(minuterie);
   }, [repere]);
 
-  // Raccourcis de l'éditeur : annuler, rétablir, supprimer l'annotation choisie (hors saisie de texte).
+  // Raccourcis de l'éditeur (et d'un formulaire) : annuler, rétablir ; dans l'éditeur, supprimer
+  // l'annotation choisie. Pas pendant une saisie.
   useEffect(() => {
-    if (!actif || !annoter || pleinEcran) return;
+    if (!actif || pleinEcran || !(annoter || aFormulaire)) return;
     const touche = (evenement: KeyboardEvent) => {
       const cible = evenement.target as HTMLElement | null;
-      if (cible && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA" || cible.isContentEditable)) return;
+      if (cible && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA" || cible.tagName === "SELECT" || cible.isContentEditable)) return;
       const commande = evenement.metaKey || evenement.ctrlKey;
       const lettre = evenement.key.toLowerCase();
       if (commande && lettre === "z") remonter(evenement.shiftKey ? "retablir" : "annuler");
       else if (commande && lettre === "y") remonter("retablir");
-      else if ((evenement.key === "Delete" || evenement.key === "Backspace") && selection) supprimerAnnotation(selection);
-      else if (evenement.key === "Escape") setSelection(null);
+      else if (annoter && (evenement.key === "Delete" || evenement.key === "Backspace") && selection) supprimerAnnotation(selection);
+      else if (annoter && evenement.key === "Escape") setSelection(null);
       else return;
       evenement.preventDefault();
     };
@@ -657,7 +709,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
 
   /** Ferme un onglet ; ses annotations non enregistrées restent jusqu'à la fermeture d'Automat-PDF. */
   function fermerOnglet(document: string) {
-    const enCours = historiques[document]?.present.length ?? 0;
+    const enCours = nombreDeModifications(historiques[document]?.present ?? []);
     if (enCours > 0) notifications.show({ color: "orange", message: t.onglets.gardees(enCours, nomDe(document)), autoClose: 9000 });
     onFermer(document);
   }
@@ -712,6 +764,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
 
   const nombre = formats?.length ?? 0;
   const details = [formats ? t.pages(nombre) : null, taille].filter(Boolean).join(" · ");
+  /** Annotations et retouches de commentaires en cours (les champs remplis se comptent à part). */
+  const nombreAnnotations = nombreDeModifications(annotations.filter((a) => a.sorte !== "champ"));
   const occurrenceActuelle = resultats && resultats.length > 0 ? resultats[actuel] : null;
   const aSignets = (navigation?.signets.length ?? 0) > 0;
   return (
@@ -720,7 +774,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
       {ouverts.length > 1 && (
         <div className="onglets-lecteur" role="tablist" aria-label={t.onglets.titre} data-onglets>
           {ouverts.map((document) => {
-            const enCours = historiques[document]?.present.length ?? 0;
+            const enCours = nombreDeModifications(historiques[document]?.present ?? []);
             return (
               <div key={document} className="onglet-lecteur" data-actif={document === chemin || undefined}>
                 <UnstyledButton className="onglet-lecteur__nom" role="tab" aria-selected={document === chemin} title={document} onClick={() => onOnglet(document)} data-onglet={nomDe(document)}>
@@ -758,7 +812,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
               color="eau"
               variant={annoter ? "filled" : "light"}
               leftSection={<IconPencil size={17} stroke={1.8} />}
-              rightSection={!annoter && annotations.length > 0 ? <Badge size="sm" circle color="orange">{annotations.length}</Badge> : undefined}
+              rightSection={!annoter && nombreAnnotations > 0 ? <Badge size="sm" circle color="orange">{nombreAnnotations}</Badge> : undefined}
               onClick={() => {
                 setAnnoter((avant) => !avant);
                 setSelection(null);
@@ -923,7 +977,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
           onTaille={setTailleTexte}
           reglages={reglages}
           onReglages={setReglages}
-          nombre={annotations.length}
+          nombre={nombreAnnotations}
           peutAnnuler={historique.passe.length > 0}
           peutRetablir={historique.futur.length > 0}
           onAnnuler={() => remonter("annuler")}
@@ -931,7 +985,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
           selection={selection !== null}
           onSupprimer={() => selection && supprimerAnnotation(selection)}
           enregistrement={enregistrement}
-          onEnregistrer={() => void enregistrerAnnote()}
+          onEnregistrer={() => void enregistrer()}
           onTerminer={() => {
             setAnnoter(false);
             setSelection(null);
@@ -939,7 +993,15 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
         />
       )}
       {enregistre && chemin && memeFichier(enregistre, chemin) && (
-        <Alert color="teal" icon={<IconCircleCheck size={20} />} title={t.annotation.enregistre} withCloseButton onClose={() => setEnregistre(null)} py={8} data-annote-enregistre>
+        <Alert
+          color="teal"
+          icon={<IconCircleCheck size={20} />}
+          title={sorteEnregistree === "rempli" ? t.formulaire.enregistre : t.annotation.enregistre}
+          withCloseButton
+          onClose={() => setEnregistre(null)}
+          py={8}
+          data-annote-enregistre
+        >
           <Group justify="space-between" gap="sm" wrap="wrap">
             <Text size="sm">{t.annotation.enregistreDetail(nomDe(enregistre))}</Text>
             <Button size="xs" variant="default" leftSection={<IconFolder size={15} />} onClick={() => void montrerDansDossier(enregistre).catch(signalerErreur)}>
@@ -947,6 +1009,17 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
             </Button>
           </Group>
         </Alert>
+      )}
+
+      {formulaire && formats && !annoter && aFormulaire && (
+        <BandeauFormulaire
+          formulaire={formulaire}
+          remplis={retouches.champs.length}
+          aplatir={aplatir}
+          onAplatir={setAplatir}
+          enregistrement={enregistrement}
+          onEnregistrer={() => void enregistrer(aplatir)}
+        />
       )}
 
       {deverrouille && formats && (
@@ -964,7 +1037,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
           chemin={chemin}
           formats={formats}
           courante={courante}
-          avecAnnotations={annotations.length > 0}
+          avecAnnotations={pourLeCoeur(annotations).length > 0}
           onFermer={() => setFenetreImpression(false)}
           onImprimer={(options) => void lancerImpression(options)}
         />
@@ -1072,6 +1145,13 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
                       rangActuel={occurrenceActuelle?.page === index ? occurrenceActuelle.rang : -1}
                       liens={annoter ? undefined : navigation?.liens[index]}
                       onLien={(lien) => suivreLien(lien.destination, lien.adresse)}
+                      formulaire={
+                        !annoter && champsRemplissables.some((champ) => champ.widgets.some((w) => w.page === index))
+                          ? (versionImage) => (
+                              <CoucheFormulaire page={index} echelle={echelle} champs={champsRemplissables} valeurs={valeurs} versionImage={versionImage} onChanger={changerChamp} />
+                            )
+                          : undefined
+                      }
                       refPage={(element) => {
                         pages.current[index] = element;
                       }}
@@ -1234,6 +1314,8 @@ interface PropsPage {
   /** Liens de la page (vers une page, un site, un e-mail) ; aucun pendant l'annotation. */
   liens?: LienPdf[];
   onLien?: (lien: LienPdf) => void;
+  /** Champs du formulaire de la page ; reçoit la version de l'image affichée. */
+  formulaire?: (versionImage: number) => ReactNode;
 }
 
 /**
@@ -1241,10 +1323,11 @@ interface PropsPage {
  * de l'écran. Les mots, invisibles, se sélectionnent et se copient ; ceux que la recherche trouve sont
  * surlignés.
  */
-function PageLecteur({ chemin, index, format, echelle, rotation, version, racine, requete, rangActuel, refPage, couche, liens, onLien }: PropsPage) {
+function PageLecteur({ chemin, index, format, echelle, rotation, version, racine, requete, rangActuel, refPage, couche, liens, onLien, formulaire }: PropsPage) {
   const boite = useRef<HTMLDivElement | null>(null);
   const [proche, setProche] = useState(false);
-  const [image, setImage] = useState<string | null>(null);
+  /** L'image affichée, et la version du PDF qu'elle montre. */
+  const [image, setImage] = useState<{ adresse: string; version: number } | null>(null);
   const [mots, setMots] = useState<Mot[] | null>(null);
   const largeur = Math.round(format.largeur * echelle);
   const hauteur = Math.round(format.hauteur * echelle);
@@ -1264,7 +1347,7 @@ function PageLecteur({ chemin, index, format, echelle, rotation, version, racine
     if (!proche) return;
     let actuelle = true;
     imagePage(chemin, index, demandee).then(
-      (adresse) => actuelle && setImage(adresse),
+      (adresse) => actuelle && setImage({ adresse, version }),
       () => undefined,
     );
     return () => {
@@ -1302,7 +1385,7 @@ function PageLecteur({ chemin, index, format, echelle, rotation, version, racine
     >
       <div className="page-droite" style={{ width: largeur, height: hauteur, transform: transformation(rotation, largeur, hauteur) }}>
         {image ? (
-          <img src={image} alt={t.alt(index + 1)} draggable={false} style={{ width: "100%", height: "100%", display: "block", userSelect: "none" }} />
+          <img src={image.adresse} alt={t.alt(index + 1)} draggable={false} style={{ width: "100%", height: "100%", display: "block", userSelect: "none" }} />
         ) : (
           <Center h="100%">
             <Loader size="sm" color="gray" />
@@ -1344,6 +1427,7 @@ function PageLecteur({ chemin, index, format, echelle, rotation, version, racine
               />
             );
           })}
+        {formulaire?.(image?.version ?? -1)}
         {couche?.(mots)}
       </div>
     </Box>

@@ -1,9 +1,10 @@
 //! Pages rendues en images (vignettes, aperçus) par hayro, un moteur de rendu PDF écrit en Rust :
 //! rien à installer, les polices standard du PDF sont incluses.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use hayro::hayro_interpret::InterpreterSettings;
+use hayro::hayro_syntax::object::{Array, Dict, Name};
 use hayro::hayro_syntax::{DecryptionError, LoadPdfError, Pdf};
 use hayro::vello_cpu::color::palette::css::{TRANSPARENT, WHITE};
 use hayro::{RenderCache, RenderSettings, render};
@@ -23,6 +24,104 @@ pub struct FormatPage {
 
 /// Plus grand côté d'une image rendue, en pixels (limite du moteur de rendu).
 const COTE_MAX: f32 = 8000.0;
+/// Copies « pour l'affichage » gardées : le rendu de chaque page d'un même PDF ne les refait pas.
+const COPIES_GARDEES: usize = 6;
+
+/// Un PDF déjà examiné pour l'affichage, et sa copie s'il lui en faut une.
+struct CopieAffichage {
+    source: Weak<Vec<u8>>,
+    copie: Option<Arc<Vec<u8>>>,
+}
+
+fn copies() -> &'static Mutex<Vec<CopieAffichage>> {
+    static COPIES: OnceLock<Mutex<Vec<CopieAffichage>>> = OnceLock::new();
+    COPIES.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// Le PDF tel que hayro 0.7 doit le dessiner : le même, sauf si des annotations ont plusieurs
+/// états (cases à cocher, boutons radio : hayro ne choisit pas celui de /AS), ou si son formulaire
+/// demande ses apparences (/NeedAppearances, champs sans apparence). Il lui faut alors une copie
+/// préparée (`formulaires::pour_l_affichage`), gardée tant que le PDF l'est. Le PDF lui-même, écrit
+/// ou imprimé, garde ses états.
+pub(crate) fn pour_l_affichage(octets: Arc<Vec<u8>>) -> Arc<Vec<u8>> {
+    {
+        let mut copies = copies()
+            .lock()
+            .unwrap_or_else(|empoisonne| empoisonne.into_inner());
+        copies.retain(|c| c.source.strong_count() > 0);
+        if let Some(examine) = copies.iter().find(|c| {
+            c.source
+                .upgrade()
+                .is_some_and(|source| Arc::ptr_eq(&source, &octets))
+        }) {
+            return examine.copie.clone().unwrap_or(octets);
+        }
+    }
+    let copie = a_preparer(&octets)
+        .then(|| preparer(&octets))
+        .flatten()
+        .map(Arc::new);
+    let mut copies = copies()
+        .lock()
+        .unwrap_or_else(|empoisonne| empoisonne.into_inner());
+    copies.insert(
+        0,
+        CopieAffichage {
+            source: Arc::downgrade(&octets),
+            copie: copie.clone(),
+        },
+    );
+    copies.truncate(COPIES_GARDEES);
+    copie.unwrap_or(octets)
+}
+
+/// Faut-il préparer ce PDF pour l'affichage ? Lu par hayro, sans tout charger.
+fn a_preparer(octets: &Arc<Vec<u8>>) -> bool {
+    let Ok(pdf) = Pdf::new(octets.clone()) else {
+        return false;
+    };
+    let xref = pdf.xref();
+    let formulaire = xref
+        .get::<Dict<'_>>(xref.root_id())
+        .and_then(|catalogue| catalogue.get::<Dict<'_>>(b"AcroForm"));
+    if formulaire
+        .as_ref()
+        .and_then(|f| f.get::<bool>(b"NeedAppearances"))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    pdf.pages().iter().any(|page| {
+        page.raw()
+            .get::<Array<'_>>(b"Annots")
+            .is_some_and(|annotations| {
+                annotations.iter::<Dict<'_>>().any(|annotation| {
+                    match annotation.get::<Dict<'_>>(b"AP") {
+                        // Plusieurs états : l'apparence normale est un dictionnaire.
+                        Some(apparences) => apparences.get::<Dict<'_>>(b"N").is_some(),
+                        // Un champ sans apparence (formulaire).
+                        None => {
+                            formulaire.is_some()
+                                && annotation
+                                    .get::<Name<'_>>(b"Subtype")
+                                    .is_some_and(|sorte| sorte.as_ref() == b"Widget")
+                        }
+                    }
+                })
+            })
+    })
+}
+
+/// La copie préparée pour l'affichage (non compressée : elle ne sert qu'à dessiner).
+fn preparer(octets: &[u8]) -> Option<Vec<u8>> {
+    let mut document = crate::pdf::charger(octets, "affichage.pdf").ok()?;
+    if !crate::formulaires::pour_l_affichage(&mut document) {
+        return None;
+    }
+    let mut sortie = Vec::new();
+    document.save_to(&mut sortie).ok()?;
+    Some(sortie)
+}
 
 pub(crate) fn ouvrir(octets: Arc<Vec<u8>>, nom: &str) -> Result<Pdf, Erreur> {
     Pdf::new(octets).map_err(|erreur| match erreur {
@@ -65,7 +164,7 @@ fn rendre(
     page: usize,
     echelle: impl Fn(f32, f32) -> f32,
 ) -> Result<(u32, u32, Vec<u8>), Erreur> {
-    let pdf = ouvrir(octets, nom)?;
+    let pdf = ouvrir(pour_l_affichage(octets), nom)?;
     let page = pdf
         .pages()
         .get(page)
@@ -166,7 +265,7 @@ pub(crate) fn rendre_sur_transparent(
     page: usize,
     dpi: u32,
 ) -> Result<Option<Vec<u8>>, Erreur> {
-    let pdf = ouvrir(octets, nom)?;
+    let pdf = ouvrir(pour_l_affichage(octets), nom)?;
     let page = pdf
         .pages()
         .get(page)
