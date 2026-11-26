@@ -46,6 +46,14 @@ tauri-plugin-updater = { version = "2", default-features = false, features = ["n
 # Statistiques anonymes (seulement avec l'accord de l'utilisateur) : le même client HTTP que les
 # mises à jour.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls", "system-proxy"] }
+# Signatures numériques des PDF reçus : empreintes et signatures (RSA, ECDSA) vérifiées en Rust
+# (RustCrypto, licences MIT ou Apache, sha2 déjà utilisé par lopdf) ; le certificat du signataire
+# est jugé par le système (magasin de certificats de Windows, trousseau de macOS).
+sha1 = "0.11"
+sha2 = "0.11"
+rsa = { version = "0.10", default-features = false, features = ["std", "pkcs1v15"] }
+p256 = { version = "0.14", default-features = false, features = ["ecdsa", "std"] }
+p384 = { version = "0.14", default-features = false, features = ["ecdsa", "std"] }
 
 # macOS : clic droit dans le Finder. Les « Services » d'Automat-PDF (Info.plist) confient les
 # fichiers choisis à l'application, qui les lit dans le presse-papiers des services (AppKit).
@@ -61,12 +69,16 @@ objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", 
 # lui-même la confirmation de l'utilisateur, qui revient par un bloc.
 objc2-uniform-type-identifiers = { version = "0.3", default-features = false, features = ["std", "UTType"] }
 block2 = "0.6"
+# Signatures numériques : la chaîne du certificat jugée par le trousseau de macOS, sans Internet.
+# Les mêmes versions que la messagerie (keyring, native-tls).
+security-framework = "3"
+core-foundation = "0.10"
 
 # Windows : impression depuis le lecteur (imprimantes, réglages du pilote, pages envoyées par GDI) ;
-# lecteur de PDF par défaut (association des PDF, fenêtre « Ouvrir avec », registre).
-# Le même windows-sys que Tauri.
+# lecteur de PDF par défaut (association des PDF, fenêtre « Ouvrir avec », registre) ; chaîne du
+# certificat d'une signature numérique jugée par le magasin de certificats. Le même windows-sys que Tauri.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Printing", "Win32_Storage_Xps", "Win32_System_Registry", "Win32_UI_Shell"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Printing", "Win32_Storage_Xps", "Win32_Security_Cryptography", "Win32_System_Registry", "Win32_UI_Shell"] }
 
 # Voir https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

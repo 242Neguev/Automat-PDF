@@ -32,6 +32,7 @@ use crate::ouverture;
 use crate::pdf::{self, PageAssemblee};
 use crate::rendu::{self, FormatImage, FormatPage};
 use crate::securite::{self, OptionsProtection};
+use crate::signatures::{self, SignaturePdf};
 use crate::texte;
 
 /// Logiciel de messagerie de l'ordinateur, piloté pour préparer ou envoyer les messages : Outlook
@@ -362,14 +363,29 @@ pub fn apposer_image(
 
 /// Enregistre dans `sortie` le PDF annoté dans le lecteur : surlignages et notes (annotations PDF),
 /// texte et images (dans le contenu des pages).
+///
+/// `retouches` : celles du lecteur (commentaires du PDF supprimés ou changés, champs remplis),
+/// refaites depuis le PDF d'origine ; sans elles, le contenu en mémoire est repris tel quel. Un PDF
+/// signé numériquement s'enregistre alors par une révision ajoutée à la suite : ses signatures
+/// restent valables pour la version qu'elles signent (sauf s'il est aplati).
 pub fn annoter_pdf(
     chemin: &str,
     annotations: &[Annotation],
     sortie: &str,
     aplatir: bool,
+    retouches: Option<&Retouches>,
 ) -> Result<(), Erreur> {
-    let octets = memoire::pdf(chemin)?;
-    let mut document = pdf::charger(&octets, &nom_de(chemin))?;
+    let nom = nom_de(chemin);
+    let octets = match retouches {
+        Some(_) => memoire::origine(chemin)?,
+        None => memoire::pdf(chemin)?,
+    };
+    let base = pdf::charger(&octets, &nom)?;
+    let mut document = base.clone();
+    if let Some(retouches) = retouches {
+        commentaires::retoucher(&mut document, retouches);
+        formulaires::remplir(&mut document, &retouches.champs)?;
+    }
     // Un champ de signature où l'on a signé à la main ne demande plus de signature.
     let signatures: Vec<(usize, [f64; 4])> = annotations
         .iter()
@@ -388,7 +404,13 @@ pub fn annoter_pdf(
     if aplatir {
         formulaires::aplatir(&mut document)?;
     }
-    fichiers::enregistrer(sortie, &pdf::ecrire(document)?)
+    let signe = retouches.is_some() && !aplatir && signatures::a_des_signatures(&base, &octets);
+    let ecrit = if signe {
+        pdf::ecrire_a_la_suite(&octets, &base, document)?
+    } else {
+        pdf::ecrire(document)?
+    };
+    fichiers::enregistrer(sortie, &ecrit)
 }
 
 /// Enregistre dans `sortie` le PDF caviardé ; renvoie les pages remplacées par leur image.
@@ -662,6 +684,38 @@ pub fn commentaires_pdf(chemin: &str) -> Result<Vec<Commentaire>, Erreur> {
 pub fn formulaire_pdf(chemin: &str) -> Result<Formulaire, Erreur> {
     let document = pdf::charger(&memoire::origine(chemin)?, &nom_de(chemin))?;
     Ok(formulaires::formulaire(&document))
+}
+
+/// Les signatures numériques d'un PDF, vérifiées : il est relu sur le disque, tel qu'il a été signé
+/// (sans le déchiffrement ni les retouches du lecteur).
+pub fn signatures_pdf(chemin: &str) -> Result<Vec<SignaturePdf>, Erreur> {
+    let octets = fichiers::lire(chemin, Nature::Pdf)?;
+    Ok(signatures::signatures(&octets, &nom_de(chemin)))
+}
+
+/// Écrit dans `dossier` la version d'un PDF qu'a signée une signature (ses `fin` premiers octets),
+/// pour l'ouvrir à côté : « Version signée 1 - Contrat.pdf ». Rend son chemin.
+pub fn version_signee(chemin: &str, fin: usize, dossier: &Path) -> Result<String, Erreur> {
+    let octets = fichiers::lire(chemin, Nature::Pdf)?;
+    let nom = nom_de(chemin);
+    let Some((rang, version)) = signatures::version_signee(&octets, &nom, fin) else {
+        return Err(Erreur::simple(format!(
+            "La version signée de « {nom} » n'a pas été retrouvée."
+        )));
+    };
+    std::fs::create_dir_all(dossier).map_err(|erreur| {
+        Erreur::simple(format!(
+            "Le dossier des versions signées n'a pas pu être créé : {erreur}"
+        ))
+    })?;
+    let racine = Path::new(&nom)
+        .file_stem()
+        .map(|r| r.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "Document".into());
+    let sortie = dossier.join(format!("Version signée {rang} - {racine}.pdf"));
+    let sortie = sortie.to_string_lossy().into_owned();
+    fichiers::enregistrer(&sortie, &version)?;
+    Ok(sortie)
 }
 
 /// Retouches du lecteur, en mémoire seulement (toujours depuis le contenu d'origine du PDF) :

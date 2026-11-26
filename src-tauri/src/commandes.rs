@@ -30,6 +30,7 @@ use crate::operations::{
 use crate::outlook::ModeEnvoi;
 use crate::rendu::{FormatImage, FormatPage};
 use crate::securite::OptionsProtection;
+use crate::signatures::SignaturePdf;
 
 async fn en_arriere_plan<T: Send + 'static>(
     travail: impl FnOnce() -> Result<T, Erreur> + Send + 'static,
@@ -174,9 +175,16 @@ pub async fn annoter_pdf(
     annotations: Vec<Annotation>,
     sortie: String,
     aplatir: Option<bool>,
+    retouches: Option<Retouches>,
 ) -> Result<(), Erreur> {
     en_arriere_plan(move || {
-        operations::annoter_pdf(&chemin, &annotations, &sortie, aplatir.unwrap_or(false))
+        operations::annoter_pdf(
+            &chemin,
+            &annotations,
+            &sortie,
+            aplatir.unwrap_or(false),
+            retouches.as_ref(),
+        )
     })
     .await
 }
@@ -294,6 +302,21 @@ pub async fn commentaires_pdf(chemin: String) -> Result<Vec<Commentaire>, Erreur
 #[tauri::command]
 pub async fn formulaire_pdf(chemin: String) -> Result<Formulaire, Erreur> {
     en_arriere_plan(move || operations::formulaire_pdf(&chemin)).await
+}
+
+/// Les signatures numériques d'un PDF, vérifiées.
+#[tauri::command]
+pub async fn signatures_pdf(chemin: String) -> Result<Vec<SignaturePdf>, Erreur> {
+    en_arriere_plan(move || operations::signatures_pdf(&chemin)).await
+}
+
+/// La version d'un PDF qu'a signée une signature, écrite dans le dossier temporaire pour l'ouvrir.
+#[tauri::command]
+pub async fn version_signee(chemin: String, fin: usize) -> Result<String, Erreur> {
+    let dossier = std::env::temp_dir()
+        .join("Automat-PDF")
+        .join("Versions signées");
+    en_arriere_plan(move || operations::version_signee(&chemin, fin, &dossier)).await
 }
 
 /// Retouches du lecteur, en mémoire seulement : commentaires du PDF supprimés ou changés, champs

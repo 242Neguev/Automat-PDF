@@ -40,6 +40,7 @@ import {
   commentairesPdf,
   formulairePdf,
   retoucherLecture,
+  signaturesPdf,
   type ChampFormulaire,
   type CommentairePdf,
   type FormulairePdf,
@@ -52,6 +53,7 @@ import {
   type AvancementImpression,
   type NavigationPdf,
   type OptionsImpression,
+  type SignaturePdf,
 } from "../../coeur";
 import { echelleAjustee, hautAffiche, premiereDeRangee, rangees, tourner, transformation, type Disposition, type Rotation } from "../../donnees/affichage";
 import {
@@ -78,6 +80,7 @@ import {
 } from "../../donnees/annotations";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { initialesDe, remplissable, signable } from "../../donnees/formulaire";
+import { signaturesDeLaPage } from "../../donnees/signatures";
 import { zoneDansCadre, type SignatureChoisie } from "../../donnees/signature";
 import { motsCouverts, occurrences, type Occurrence } from "../../donnees/recherche-texte";
 import { formaterTaille } from "../../donnees/tailles";
@@ -92,6 +95,7 @@ import { BarreAnnotations, CoucheAnnotations, type ImageChargee, type OutilAnnot
 import ListeCommentaires from "./Commentaires";
 import { BandeauFormulaire, CoucheFormulaire } from "./Formulaire";
 import FenetreSignature from "./FenetreSignature";
+import { BandeauSignatures, CoucheSignatures, PanneauSignatures } from "./Signatures";
 import MotDePasseLecture from "./MotDePasseLecture";
 import ColonneSignets from "./Signets";
 import FenetreImpression from "./Impression";
@@ -241,6 +245,14 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
    */
   const [fenetreSignature, setFenetreSignature] = useState<{ cible: { page: number; zone: Zone } | null } | null>(null);
   const [signatureChoisie, setSignatureChoisie] = useState<SignatureChoisie | null>(null);
+  /**
+   * Signatures numériques (0.7.0) : celles du PDF, vérifiées par le cœur (null : pas encore lues) ;
+   * le panneau de leurs détails, ouvert (et la signature à y montrer d'abord) ; après un
+   * enregistrement, si elles sont restées valables.
+   */
+  const [signatures, setSignatures] = useState<SignaturePdf[] | null>(null);
+  const [panneauSignatures, setPanneauSignatures] = useState<{ enAvant: string | null } | null>(null);
+  const [signaturesGardees, setSignaturesGardees] = useState(false);
   const cadre = useRef<HTMLDivElement>(null);
   const defilement = useRef<HTMLDivElement>(null);
   const champRecherche = useRef<HTMLInputElement>(null);
@@ -325,6 +337,13 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     formulairePdf(chemin).then(
       (lu) => actuelDoc && setFormulaire(lu),
       () => actuelDoc && setFormulaire(null),
+    );
+    // Ses signatures numériques, vérifiées (le PDF est relu tel qu'il a été signé).
+    setSignatures(null);
+    setPanneauSignatures(null);
+    signaturesPdf(chemin).then(
+      (lues) => actuelDoc && setSignatures(lues),
+      () => actuelDoc && setSignatures([]),
     );
     return () => {
       actuelDoc = false;
@@ -675,7 +694,9 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     }
     setEnregistrement(true);
     try {
-      await annoterPdf(chemin, pourLeCoeur(annotations), sortie, avecAplatir);
+      await annoterPdf(chemin, pourLeCoeur(annotations), sortie, avecAplatir, retouches);
+      // Un PDF signé numériquement est enregistré à la suite de sa version signée (sauf aplati).
+      setSignaturesGardees(!avecAplatir && (signatures ?? []).some((s) => s.integrite === "intacte"));
       const source = chemin;
       setHistoriques(({ [source]: _enregistrees, ...autres }) => autres);
       // Le PDF enregistré garde les retouches ; l'original (toujours ouvert dans son onglet) retrouve les siennes.
@@ -1044,12 +1065,35 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
           data-annote-enregistre
         >
           <Group justify="space-between" gap="sm" wrap="wrap">
-            <Text size="sm">{t.annotation.enregistreDetail(nomDe(enregistre))}</Text>
+            <Stack gap={2}>
+              <Text size="sm">{t.annotation.enregistreDetail(nomDe(enregistre))}</Text>
+              {signaturesGardees && (
+                <Text size="sm" data-signatures-gardees>
+                  {t.signaturesNumeriques.gardees}
+                </Text>
+              )}
+            </Stack>
             <Button size="xs" variant="default" leftSection={<IconFolder size={15} />} onClick={() => void montrerDansDossier(enregistre).catch(signalerErreur)}>
               {textes.resultat.montrer}
             </Button>
           </Group>
         </Alert>
+      )}
+
+      {signatures && signatures.length > 0 && formats && !annoter && (
+        <BandeauSignatures signatures={signatures} onDetails={() => setPanneauSignatures({ enAvant: null })} />
+      )}
+
+      {chemin && signatures && signatures.length > 0 && (
+        <PanneauSignatures
+          ouvert={panneauSignatures !== null}
+          onFermer={() => setPanneauSignatures(null)}
+          chemin={chemin}
+          signatures={signatures}
+          enAvant={panneauSignatures?.enAvant ?? null}
+          onVoir={(signature) => allerA(signature.page!, Math.max(0, (signature.zone?.[1] ?? 0) * echelle - 120))}
+          onOuvrir={onChoisir}
+        />
       )}
 
       {formulaire && formats && !annoter && aFormulaire && (
@@ -1214,6 +1258,11 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
                               />
                             )
                           : undefined
+                      }
+                      coucheSignatures={
+                        !annoter && signatures && signaturesDeLaPage(signatures, index).length > 0 ? (
+                          <CoucheSignatures page={index} echelle={echelle} signatures={signatures} onChoisir={(signature) => setPanneauSignatures({ enAvant: signature.champ })} />
+                        ) : undefined
                       }
                       refPage={(element) => {
                         pages.current[index] = element;
@@ -1380,6 +1429,8 @@ interface PropsPage {
   onLien?: (lien: LienPdf) => void;
   /** Champs du formulaire de la page ; reçoit la version de l'image affichée. */
   formulaire?: (versionImage: number) => ReactNode;
+  /** Signatures numériques visibles sur la page : un clic les vérifie. */
+  coucheSignatures?: ReactNode;
 }
 
 /**
@@ -1387,7 +1438,7 @@ interface PropsPage {
  * de l'écran. Les mots, invisibles, se sélectionnent et se copient ; ceux que la recherche trouve sont
  * surlignés.
  */
-function PageLecteur({ chemin, index, format, echelle, rotation, version, racine, requete, rangActuel, refPage, couche, liens, onLien, formulaire }: PropsPage) {
+function PageLecteur({ chemin, index, format, echelle, rotation, version, racine, requete, rangActuel, refPage, couche, liens, onLien, formulaire, coucheSignatures }: PropsPage) {
   const boite = useRef<HTMLDivElement | null>(null);
   const [proche, setProche] = useState(false);
   /** L'image affichée, et la version du PDF qu'elle montre. */
@@ -1492,6 +1543,7 @@ function PageLecteur({ chemin, index, format, echelle, rotation, version, racine
             );
           })}
         {formulaire?.(image?.version ?? -1)}
+        {coucheSignatures}
         {couche?.(mots)}
       </div>
     </Box>

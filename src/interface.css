@@ -873,6 +873,70 @@ textarea.champ-pdf__saisie {
   font: 600 13px/1 system-ui, sans-serif;
   cursor: pointer;
 }
+/* Signatures numériques (0.7.0) : la signature visible sur la page se vérifie d'un clic. Un léger
+   cadre de la couleur du verdict au survol ; les pages restent blanches en thème sombre. */
+.signature-numerique {
+  position: absolute;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+.signature-numerique:hover,
+.signature-numerique:focus-visible {
+  background: rgba(18, 184, 134, 0.1);
+  outline: 1.5px solid rgba(18, 184, 134, 0.7);
+}
+.signature-numerique[data-etat="attention"]:hover,
+.signature-numerique[data-etat="attention"]:focus-visible {
+  background: rgba(253, 126, 20, 0.1);
+  outline-color: rgba(253, 126, 20, 0.75);
+}
+.signature-numerique[data-etat="invalide"]:hover,
+.signature-numerique[data-etat="invalide"]:focus-visible {
+  background: rgba(250, 82, 82, 0.1);
+  outline-color: rgba(250, 82, 82, 0.75);
+}
+.carte-signature {
+  padding: 14px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+}
+.carte-signature[data-en-avant] {
+  border-color: var(--mantine-color-eau-6);
+  box-shadow: 0 0 0 1px var(--mantine-color-eau-6);
+}
+.carte-signature__liste {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.carte-signature__depli {
+  color: var(--mantine-color-dimmed);
+}
+.carte-signature__proprietes {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 6px 0 0;
+  font-size: var(--mantine-font-size-sm);
+}
+.carte-signature__propriete {
+  display: contents;
+}
+.carte-signature__proprietes dt {
+  color: var(--mantine-color-dimmed);
+}
+.carte-signature__proprietes dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.carte-signature__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
 .couche-annotations [data-selectionnee] {
   outline: 1.5px dashed var(--mantine-color-eau-6);
   outline-offset: 2px;

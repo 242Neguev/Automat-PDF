@@ -2,9 +2,11 @@ mod annotations;
 #[cfg(target_os = "macos")]
 mod applescript;
 mod caviardage;
+mod cms;
 mod commandes;
 mod commentaires;
 mod compression;
+mod confiance;
 mod confidentialite;
 mod contenu;
 mod docx;
@@ -42,6 +44,7 @@ mod rendu;
 mod securite;
 #[cfg(target_os = "macos")]
 mod services;
+mod signatures;
 mod texte;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -232,6 +235,8 @@ pub fn run() {
             commandes::navigation_pdf,
             commandes::commentaires_pdf,
             commandes::formulaire_pdf,
+            commandes::signatures_pdf,
+            commandes::version_signee,
             commandes::retoucher_lecture,
             commandes::lire_signatures,
             commandes::enregistrer_signatures,

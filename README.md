@@ -167,7 +167,9 @@ src/                     Interface React + TypeScript (Mantine)
                          onglets, deux pages, rotation ; mot de passe (MotDePasseLecture.tsx), signets
                          (Signets.tsx), impression (Impression.tsx), plein écran (PleinEcran.tsx), lecteur
                          par défaut (LecteurParDefaut.tsx) ; éditeur (Annotations.tsx) : barre d'annotation
-                         et couche posée sur chaque page ; liste des commentaires (Commentaires.tsx)
+                         et couche posée sur chaque page ; liste des commentaires (Commentaires.tsx) ;
+                         formulaires (Formulaire.tsx), signature dessinée (FenetreSignature.tsx),
+                         signatures numériques vérifiées (Signatures.tsx)
   pages/                 Un dossier par outil (organiser/, mise-en-page/, fusion/, intercaler/, images/,
                          separation/, annoter/, securite/, optimiser/, convertir/), et commun/, partagé :
                          zone de dépôt, étapes numérotées, bouton d'action qui dit ce qu'il manque,
@@ -178,7 +180,8 @@ src-tauri/               Cœur Rust (Tauri)
   src/operations.rs      Ce que fait chaque commande, sans dépendre de Tauri (testé de bout en bout)
   src/commandes.rs       Commandes appelées par l'interface, exécutées hors du fil principal
   src/pdf.rs             Fusion, séparation, assemblage de pages choisies (ordre, rotation) ; pages recopiées
-                         telles quelles, liens internes vers des pages écartées retirés
+                         telles quelles, liens internes vers des pages écartées retirés ; PDF signé
+                         enregistré par une révision ajoutée à la suite (ses signatures restent valables)
   src/rendu.rs           Pages rendues en images (vignettes, aperçus, export PNG/JPG) par hayro, en Rust
   src/texte.rs           Texte des pages lu par hayro : lignes, mots et colonnes reconstitués d'après les positions ;
                          mots placés d'une page, pour la couche de texte du lecteur
@@ -209,6 +212,14 @@ src-tauri/               Cœur Rust (Tauri)
                          réécrits), correcteur blanc
   src/commentaires.rs    Commentaires d'un PDF reçu : listés (auteur, date, texte, place), supprimés ou
                          changés (avec leur bulle et leurs réponses)
+  src/formulaires.rs     Formulaires PDF : champs lus (place sur la page), remplis (valeur et apparence),
+                         aplatis ; champs de signature
+  src/signatures.rs      Signatures numériques d'un PDF reçu : plages signées, version signée, ce qui a
+                         changé depuis (révisions comparées objet par objet)
+  src/cms.rs             Signatures CMS : ASN.1 (DER et BER), certificats X.509, empreintes et signatures
+                         RSA, RSA-PSS et ECDSA vérifiées (RustCrypto), horodatages
+  src/confiance.rs       Certificat d'une signature jugé par le système (magasin de Windows, trousseau de
+                         macOS), sans Internet
   src/navigation.rs      Signets et liens d'un PDF ; adresses de sites et d'e-mails seules ouvertes
   src/impression.rs      Impression : PDFKit (Mac) ; imprimantes, réglages du pilote et pages par GDI (Windows)
   src/lecteur_defaut.rs  Lecteur de PDF par défaut : qui ouvre les PDF, fenêtre de choix du système

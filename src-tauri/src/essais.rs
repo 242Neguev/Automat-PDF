@@ -420,3 +420,591 @@ fn lire_requete(connexion: &TcpStream) -> Option<RequeteRecue> {
         String::from_utf8_lossy(&corps).into_owned(),
     ))
 }
+
+// ------------------------------------------------------------------------------- Signatures numériques
+
+/// Écriture DER, pour fabriquer des certificats et des signatures d'essai.
+pub mod der {
+    pub fn tlv(etiquette: u8, contenu: &[u8]) -> Vec<u8> {
+        let mut sortie = vec![etiquette];
+        if contenu.len() < 0x80 {
+            sortie.push(contenu.len() as u8);
+        } else {
+            let octets = contenu.len().to_be_bytes();
+            let debut = octets.iter().position(|&o| o != 0).unwrap();
+            sortie.push(0x80 | (octets.len() - debut) as u8);
+            sortie.extend_from_slice(&octets[debut..]);
+        }
+        sortie.extend_from_slice(contenu);
+        sortie
+    }
+
+    pub fn sequence(parties: &[&[u8]]) -> Vec<u8> {
+        tlv(0x30, &parties.concat())
+    }
+
+    /// Un SET OF, ses éléments triés (DER).
+    pub fn ensemble(parties: &[&[u8]]) -> Vec<u8> {
+        let mut triees = parties.to_vec();
+        triees.sort();
+        tlv(0x31, &triees.concat())
+    }
+
+    /// Un entier positif (ses octets, en grand-boutiste).
+    pub fn entier(octets: &[u8]) -> Vec<u8> {
+        let mut chiffres: Vec<u8> = octets.iter().copied().skip_while(|&o| o == 0).collect();
+        if chiffres.first().is_none_or(|&o| o & 0x80 != 0) {
+            chiffres.insert(0, 0);
+        }
+        tlv(0x02, &chiffres)
+    }
+
+    pub fn petit(n: u64) -> Vec<u8> {
+        entier(&n.to_be_bytes())
+    }
+
+    pub fn oid(texte: &str) -> Vec<u8> {
+        let arcs: Vec<u64> = texte.split('.').map(|a| a.parse().unwrap()).collect();
+        let mut contenu = Vec::new();
+        for (rang, &arc) in std::iter::once(&(arcs[0] * 40 + arcs[1]))
+            .chain(&arcs[2..])
+            .enumerate()
+        {
+            let _ = rang;
+            let mut septets = vec![(arc & 0x7f) as u8];
+            let mut reste = arc >> 7;
+            while reste > 0 {
+                septets.push((reste & 0x7f) as u8 | 0x80);
+                reste >>= 7;
+            }
+            septets.reverse();
+            contenu.extend(septets);
+        }
+        tlv(0x06, &contenu)
+    }
+
+    pub fn octets(contenu: &[u8]) -> Vec<u8> {
+        tlv(0x04, contenu)
+    }
+
+    pub fn bits(contenu: &[u8]) -> Vec<u8> {
+        tlv(0x03, &[&[0u8][..], contenu].concat())
+    }
+
+    pub fn utf8(texte: &str) -> Vec<u8> {
+        tlv(0x0c, texte.as_bytes())
+    }
+
+    pub fn nul() -> Vec<u8> {
+        vec![0x05, 0x00]
+    }
+
+    /// `[n]`, construit (EXPLICIT, ou IMPLICIT d'une structure).
+    pub fn contexte(n: u8, contenu: &[u8]) -> Vec<u8> {
+        tlv(0xa0 | n, contenu)
+    }
+
+    fn chiffres(secondes: i64) -> String {
+        crate::cms::iso(secondes)
+            .chars()
+            .filter(char::is_ascii_digit)
+            .collect()
+    }
+
+    pub fn utc(secondes: i64) -> Vec<u8> {
+        tlv(0x17, format!("{}Z", &chiffres(secondes)[2..]).as_bytes())
+    }
+
+    pub fn generalise(secondes: i64) -> Vec<u8> {
+        tlv(0x18, format!("{}Z", chiffres(secondes)).as_bytes())
+    }
+
+    /// Un nom X.509 : nom commun, et organisation.
+    pub fn nom(cn: &str, organisation: Option<&str>) -> Vec<u8> {
+        let mut parties = vec![ensemble(&[&sequence(&[&oid("2.5.4.3"), &utf8(cn)])])];
+        if let Some(organisation) = organisation {
+            parties.push(ensemble(&[&sequence(&[
+                &oid("2.5.4.10"),
+                &utf8(organisation),
+            ])]));
+        }
+        let references: Vec<&[u8]> = parties.iter().map(Vec::as_slice).collect();
+        sequence(&references)
+    }
+}
+
+/// Un hasard déterministe (SHA-256 d'une graine et d'un compteur) : des clés d'essai qui ne
+/// changent pas d'une fois sur l'autre, sans dépendre du système.
+pub struct Hasard {
+    graine: Vec<u8>,
+    compteur: u64,
+}
+
+impl Hasard {
+    pub fn new(graine: &str) -> Self {
+        Self {
+            graine: graine.as_bytes().to_vec(),
+            compteur: 0,
+        }
+    }
+}
+
+impl rsa::rand_core::TryRng for Hasard {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut octets = [0; 4];
+        self.try_fill_bytes(&mut octets)?;
+        Ok(u32::from_le_bytes(octets))
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut octets = [0; 8];
+        self.try_fill_bytes(&mut octets)?;
+        Ok(u64::from_le_bytes(octets))
+    }
+
+    fn try_fill_bytes(&mut self, sortie: &mut [u8]) -> Result<(), Self::Error> {
+        use sha2::Digest;
+        for morceau in sortie.chunks_mut(32) {
+            let bloc = sha2::Sha256::new()
+                .chain_update(&self.graine)
+                .chain_update(self.compteur.to_le_bytes())
+                .finalize();
+            self.compteur += 1;
+            morceau.copy_from_slice(&bloc[..morceau.len()]);
+        }
+        Ok(())
+    }
+}
+
+impl rsa::rand_core::TryCryptoRng for Hasard {}
+
+pub fn sha256(donnees: &[u8]) -> Vec<u8> {
+    use sha2::Digest;
+    sha2::Sha256::digest(donnees).to_vec()
+}
+
+/// Une clé d'essai : RSA (signature PKCS #1 v1.5 ou PSS) ou ECDSA P-256.
+pub enum CleEssai {
+    Rsa(Arc<rsa::PrivateKey>),
+    RsaPss(Arc<rsa::PrivateKey>),
+    P256(Box<p256::ecdsa::SigningKey>),
+}
+
+impl CleEssai {
+    /// Une clé RSA 2048 bits, faite une fois par graine (c'est un peu long).
+    pub fn rsa(graine: &str) -> Arc<rsa::PrivateKey> {
+        static CLES: Mutex<Vec<(String, Arc<rsa::PrivateKey>)>> = Mutex::new(Vec::new());
+        let mut cles = CLES.lock().unwrap();
+        if let Some((_, cle)) = cles.iter().find(|(g, _)| g == graine) {
+            return cle.clone();
+        }
+        let cle = Arc::new(rsa::PrivateKey::new(&mut Hasard::new(graine), 2048).unwrap());
+        cles.push((graine.into(), cle.clone()));
+        cle
+    }
+
+    pub fn p256(graine: &str) -> Self {
+        Self::P256(Box::new(
+            p256::ecdsa::SigningKey::from_slice(&sha256(graine.as_bytes())).unwrap(),
+        ))
+    }
+
+    /// La clé publique (SubjectPublicKeyInfo).
+    pub fn spki(&self) -> Vec<u8> {
+        use rsa::traits::PublicKeyParts;
+        match self {
+            Self::Rsa(cle) | Self::RsaPss(cle) => {
+                let publique = der::sequence(&[
+                    &der::entier(&cle.n().to_be_bytes()),
+                    &der::entier(&cle.e().to_be_bytes()),
+                ]);
+                der::sequence(&[
+                    &der::sequence(&[&der::oid("1.2.840.113549.1.1.1"), &der::nul()]),
+                    &der::bits(&publique),
+                ])
+            }
+            Self::P256(cle) => der::sequence(&[
+                &der::sequence(&[
+                    &der::oid("1.2.840.10045.2.1"),
+                    &der::oid("1.2.840.10045.3.1.7"),
+                ]),
+                &der::bits(&cle.verifying_key().to_sec1_bytes()),
+            ]),
+        }
+    }
+
+    /// L'algorithme de signature, avec SHA-256.
+    pub fn algorithme(&self) -> Vec<u8> {
+        match self {
+            Self::Rsa(_) => der::sequence(&[&der::oid("1.2.840.113549.1.1.11"), &der::nul()]),
+            Self::RsaPss(_) => {
+                let sha256 = der::sequence(&[&der::oid("2.16.840.1.101.3.4.2.1"), &der::nul()]);
+                let mgf1 = der::sequence(&[&der::oid("1.2.840.113549.1.1.8"), &sha256]);
+                der::sequence(&[
+                    &der::oid("1.2.840.113549.1.1.10"),
+                    &der::sequence(&[
+                        &der::contexte(0, &sha256),
+                        &der::contexte(1, &mgf1),
+                        &der::contexte(2, &der::petit(32)),
+                    ]),
+                ])
+            }
+            Self::P256(_) => der::sequence(&[&der::oid("1.2.840.10045.4.3.2")]),
+        }
+    }
+
+    /// Signe l'empreinte SHA-256 `hache`.
+    pub fn signer(&self, hache: &[u8]) -> Vec<u8> {
+        use p256::ecdsa::signature::hazmat::PrehashSigner;
+        let mut hasard = Hasard::new("signature");
+        match self {
+            Self::Rsa(cle) => cle
+                .pkcs1v15_sign_prehash_with_rng::<sha2::Sha256, _>(&mut hasard, hache)
+                .unwrap(),
+            Self::RsaPss(cle) => cle
+                .pss_sign_prehash_with_rng::<sha2::Sha256, _>(&mut hasard, hache)
+                .unwrap(),
+            Self::P256(cle) => {
+                let signature: p256::ecdsa::Signature = cle.sign_prehash(hache).unwrap();
+                signature.to_der().to_bytes().to_vec()
+            }
+        }
+    }
+}
+
+/// Une identité d'essai : sa clé, son nom, son numéro de série et son certificat.
+pub struct Identite {
+    pub cle: CleEssai,
+    pub nom: Vec<u8>,
+    pub serie: Vec<u8>,
+    pub certificat: Vec<u8>,
+}
+
+/// Le 1er janvier 2026 et le 1er janvier 2036, en secondes depuis 1970.
+pub const DEBUT_2026: i64 = 1_767_225_600;
+pub const DEBUT_2036: i64 = 2_082_758_400;
+
+fn certificat_essai(
+    sujet: &[u8],
+    cle_sujet: &CleEssai,
+    emetteur: &[u8],
+    cle_emetteur: &CleEssai,
+    serie: &[u8],
+    autorite: bool,
+) -> Vec<u8> {
+    let mut parties = vec![
+        der::contexte(0, &der::petit(2)),
+        der::entier(serie),
+        cle_emetteur.algorithme(),
+        emetteur.to_vec(),
+        der::sequence(&[&der::utc(DEBUT_2026), &der::utc(DEBUT_2036)]),
+        sujet.to_vec(),
+        cle_sujet.spki(),
+    ];
+    if autorite {
+        let oui = [0x01, 0x01, 0xff];
+        let contraintes = der::sequence(&[
+            &der::oid("2.5.29.19"),
+            &oui,
+            &der::octets(&der::sequence(&[&oui])),
+        ]);
+        parties.push(der::contexte(3, &der::sequence(&[&contraintes])));
+    }
+    let references: Vec<&[u8]> = parties.iter().map(Vec::as_slice).collect();
+    let tbs = der::sequence(&references);
+    let signature = cle_emetteur.signer(&sha256(&tbs));
+    der::sequence(&[&tbs, &cle_emetteur.algorithme(), &der::bits(&signature)])
+}
+
+impl Identite {
+    /// Une autorité de certification d'essai (son certificat fait par elle-même).
+    pub fn autorite(cle: CleEssai, nom: &str) -> Self {
+        let nom = der::nom(nom, Some("Automat-PDF (essais)"));
+        let serie = vec![1];
+        let certificat = certificat_essai(&nom, &cle, &nom, &cle, &serie, true);
+        Self {
+            cle,
+            nom,
+            serie,
+            certificat,
+        }
+    }
+
+    /// Une identité dont le certificat est émis par `autorite`.
+    pub fn emise_par(
+        autorite: &Identite,
+        cle: CleEssai,
+        nom: &str,
+        organisation: Option<&str>,
+        serie: u64,
+    ) -> Self {
+        let nom = der::nom(nom, organisation);
+        let serie = serie.to_be_bytes().to_vec();
+        let certificat = certificat_essai(&nom, &cle, &autorite.nom, &autorite.cle, &serie, false);
+        Self {
+            cle,
+            nom,
+            serie,
+            certificat,
+        }
+    }
+}
+
+const DATA: &str = "1.2.840.113549.1.7.1";
+const TST_INFO: &str = "1.2.840.113549.1.9.16.1.4";
+
+/// Une signature CMS de `donnees` (détachée), ou de `encapsule` (un jeton d'horodatage), par
+/// `signataire`, les certificats `autres` joints ; `date` : attribut signingTime ; `horodatage` :
+/// un jeton de la signature par cette autorité, à cette date.
+pub fn cms_essai(
+    signataire: &Identite,
+    autres: &[&[u8]],
+    donnees: &[&[u8]],
+    encapsule: Option<&[u8]>,
+    date: Option<i64>,
+    horodatage: Option<(&Identite, i64)>,
+) -> Vec<u8> {
+    let type_contenu = if encapsule.is_some() { TST_INFO } else { DATA };
+    let empreinte = match encapsule {
+        Some(contenu) => sha256(contenu),
+        None => sha256(&donnees.concat()),
+    };
+    let mut attributs = vec![
+        der::sequence(&[
+            &der::oid("1.2.840.113549.1.9.3"),
+            &der::ensemble(&[&der::oid(type_contenu)]),
+        ]),
+        der::sequence(&[
+            &der::oid("1.2.840.113549.1.9.4"),
+            &der::ensemble(&[&der::octets(&empreinte)]),
+        ]),
+    ];
+    if let Some(date) = date {
+        attributs.push(der::sequence(&[
+            &der::oid("1.2.840.113549.1.9.5"),
+            &der::ensemble(&[&der::utc(date)]),
+        ]));
+    }
+    let references: Vec<&[u8]> = attributs.iter().map(Vec::as_slice).collect();
+    let ensemble = der::ensemble(&references);
+    let signature = signataire.cle.signer(&sha256(&ensemble));
+    let implicites = [&[0xa0][..], &ensemble[1..]].concat();
+    let sha256_alg = der::sequence(&[&der::oid("2.16.840.1.101.3.4.2.1"), &der::nul()]);
+    let mut info = vec![
+        der::petit(1),
+        der::sequence(&[
+            &signataire_emetteur(signataire),
+            &der::entier(&signataire.serie),
+        ]),
+        sha256_alg.clone(),
+        implicites,
+        signataire.cle.algorithme(),
+        der::octets(&signature),
+    ];
+    if let Some((autorite, date)) = horodatage {
+        let jeton = jeton_horodatage(autorite, &[&signature], date);
+        info.push(der::tlv(
+            0xa1,
+            &der::sequence(&[
+                &der::oid("1.2.840.113549.1.9.16.2.14"),
+                &der::ensemble(&[&jeton]),
+            ]),
+        ));
+    }
+    let references: Vec<&[u8]> = info.iter().map(Vec::as_slice).collect();
+    let info = der::sequence(&references);
+    let mut certificats = signataire.certificat.clone();
+    for autre in autres {
+        certificats.extend_from_slice(autre);
+    }
+    let encapsule = match encapsule {
+        Some(contenu) => der::sequence(&[
+            &der::oid(type_contenu),
+            &der::contexte(0, &der::octets(contenu)),
+        ]),
+        None => der::sequence(&[&der::oid(type_contenu)]),
+    };
+    let donnees_signees = der::sequence(&[
+        &der::petit(1),
+        &der::ensemble(&[&sha256_alg]),
+        &encapsule,
+        &der::contexte(0, &certificats),
+        &der::ensemble(&[&info]),
+    ]);
+    der::sequence(&[
+        &der::oid("1.2.840.113549.1.7.2"),
+        &der::contexte(0, &donnees_signees),
+    ])
+}
+
+/// L'émetteur du certificat de `identite` (le nom de son autorité), lu dans son certificat.
+fn signataire_emetteur(identite: &Identite) -> Vec<u8> {
+    let certificat = crate::cms::premier(&identite.certificat).unwrap();
+    crate::cms::certificat(certificat)
+        .unwrap()
+        .emetteur_der
+        .to_vec()
+}
+
+/// Un jeton d'horodatage (RFC 3161) de `donnees`, par `autorite`, à la date `date`.
+pub fn jeton_horodatage(autorite: &Identite, donnees: &[&[u8]], date: i64) -> Vec<u8> {
+    let sha256_alg = der::sequence(&[&der::oid("2.16.840.1.101.3.4.2.1"), &der::nul()]);
+    let info = der::sequence(&[
+        &der::petit(1),
+        &der::oid("1.3.6.1.4.1.99999.1"),
+        &der::sequence(&[&sha256_alg, &der::octets(&sha256(&donnees.concat()))]),
+        &der::petit(7),
+        &der::generalise(date),
+    ]);
+    cms_essai(autorite, &[], &[], Some(&info), None, None)
+}
+
+/// Ce qu'il faut pour un PDF signé d'essai.
+pub struct PdfSigne<'a> {
+    pub signataire: &'a Identite,
+    /// Certificats joints en plus de celui du signataire (son autorité).
+    pub autres: Vec<&'a [u8]>,
+    pub sous_filtre: &'a str,
+    /// Date de signature (secondes depuis 1970).
+    pub date: i64,
+    /// Horodatage de la signature : autorité et date.
+    pub horodatage: Option<(&'a Identite, i64)>,
+    /// Signature de certification : modifications permises (1, 2, 3).
+    pub certification: Option<i64>,
+    /// Horodatage du document (pas de signature : un jeton d'horodatage de ses octets).
+    pub horodatage_du_document: bool,
+}
+
+/// Place réservée à la signature, en octets.
+const PLACE_SIGNATURE: usize = 12_000;
+/// Nombre écrit dans /ByteRange avant de connaître les vraies plages (dix chiffres).
+const RESERVE: i64 = 9_999_999_999;
+
+/// Un contrat d'une page, signé numériquement comme le ferait un logiciel de signature : un champ
+/// de signature visible, sa signature (/ByteRange, /Contents) calculée sur le fichier écrit.
+pub fn pdf_signe(options: &PdfSigne) -> Vec<u8> {
+    use lopdf::{Stream, StringFormat};
+
+    let texte = crate::annotations::texte_pdf;
+    let mut document = Document::with_version("1.7");
+    let arbre = document.new_object_id();
+    let page = document.new_object_id();
+    let police = document.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica", "Encoding" => "WinAnsiEncoding",
+    });
+    let contenu = document.add_object(Stream::new(
+        dictionary! {},
+        b"BT /F1 22 Tf 72 760 Td (Contrat de prestation) Tj ET\nBT /F1 11 Tf 72 728 Td (Entre la societe Exemple et son client, pour l'annee 2027.) Tj ET\nBT /F1 11 Tf 72 150 Td (Signature du prestataire :) Tj ET".to_vec(),
+    ));
+    let signataire =
+        crate::cms::certificat(crate::cms::premier(&options.signataire.certificat).unwrap())
+            .unwrap()
+            .sujet
+            .lisible()
+            .unwrap();
+    let apparence = document.add_object(Stream::new(
+        dictionary! {
+            "Type" => "XObject", "Subtype" => "Form",
+            "BBox" => vec![0.into(), 0.into(), 220.into(), 60.into()],
+            "Resources" => dictionary! { "Font" => dictionary! { "F1" => police } },
+        },
+        format!("0.2 0.3 0.6 rg BT /F1 10 Tf 8 36 Td (Signe numeriquement par {signataire}) Tj ET")
+            .into_bytes(),
+    ));
+    let (type_, filtre) = if options.horodatage_du_document {
+        ("DocTimeStamp", "ETSI.RFC3161")
+    } else {
+        ("Sig", options.sous_filtre)
+    };
+    let mut signature = dictionary! {
+        "Type" => type_,
+        "Filter" => "Adobe.PPKLite",
+        "SubFilter" => Object::Name(filtre.as_bytes().to_vec()),
+        "ByteRange" => vec![0.into(), RESERVE.into(), RESERVE.into(), RESERVE.into()],
+        "Contents" => Object::String(vec![0; PLACE_SIGNATURE], StringFormat::Hexadecimal),
+    };
+    if !options.horodatage_du_document {
+        signature.set("M", texte("D:20261126091200+01'00'"));
+        signature.set("Name", texte("Jeanne Martin"));
+        signature.set("Reason", texte("J'approuve ce contrat"));
+        signature.set("Location", texte("Lyon"));
+    }
+    if let Some(permissions) = options.certification {
+        signature.set(
+            "Reference",
+            vec![
+                dictionary! {
+                    "Type" => "SigRef", "TransformMethod" => "DocMDP",
+                    "TransformParams" => dictionary! { "Type" => "TransformParams", "P" => permissions, "V" => "1.2" },
+                }
+                .into(),
+            ],
+        );
+    }
+    let id_signature = document.add_object(signature);
+    let champ = document.add_object(dictionary! {
+        "Type" => "Annot", "Subtype" => "Widget", "FT" => "Sig", "T" => texte("Signature1"),
+        "Rect" => vec![300.into(), 120.into(), 520.into(), 180.into()], "F" => 4, "P" => page,
+        "AP" => dictionary! { "N" => apparence }, "V" => id_signature,
+    });
+    document.objects.insert(
+        page,
+        dictionary! {
+            "Type" => "Page", "Parent" => arbre,
+            "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+            "Contents" => contenu,
+            "Resources" => dictionary! { "Font" => dictionary! { "F1" => police } },
+            "Annots" => vec![champ.into()],
+        }
+        .into(),
+    );
+    document.objects.insert(
+        arbre,
+        dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 }.into(),
+    );
+    let mut catalogue = dictionary! {
+        "Type" => "Catalog", "Pages" => arbre,
+        "AcroForm" => dictionary! { "Fields" => vec![champ.into()], "SigFlags" => 3 },
+    };
+    if options.certification.is_some() {
+        catalogue.set("Perms", dictionary! { "DocMDP" => id_signature });
+    }
+    let racine = document.add_object(catalogue);
+    document.trailer.set("Root", racine);
+    let mut octets = Vec::new();
+    document.save_to(&mut octets).unwrap();
+
+    // Les plages signées : tout, sauf la place de la signature (« <000…> »).
+    let place = [&b"<"[..], &vec![b'0'; 2 * PLACE_SIGNATURE], &b">"[..]].concat();
+    let debut = octets
+        .windows(place.len())
+        .position(|f| f == place.as_slice())
+        .unwrap();
+    let fin = debut + place.len();
+    let reserve = format!("{RESERVE} {RESERVE} {RESERVE}");
+    let position = octets
+        .windows(reserve.len())
+        .position(|f| f == reserve.as_bytes())
+        .unwrap();
+    let plages = format!("{debut:<10} {fin:<10} {:<10}", octets.len() - fin);
+    octets[position..position + reserve.len()].copy_from_slice(plages.as_bytes());
+    let morceaux = [&octets[..debut], &octets[fin..]];
+    let signature = if options.horodatage_du_document {
+        jeton_horodatage(options.signataire, &morceaux, options.date)
+    } else {
+        cms_essai(
+            options.signataire,
+            &options.autres,
+            &morceaux,
+            None,
+            Some(options.date),
+            options.horodatage,
+        )
+    };
+    let hexa: String = signature.iter().map(|o| format!("{o:02X}")).collect();
+    assert!(hexa.len() <= 2 * PLACE_SIGNATURE, "signature trop grande");
+    octets[debut + 1..debut + 1 + hexa.len()].copy_from_slice(hexa.as_bytes());
+    octets
+}

@@ -4,7 +4,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use lopdf::{Dictionary, Document, LoadOptions, Object, ObjectId, dictionary};
+use lopdf::{Dictionary, Document, IncrementalDocument, LoadOptions, Object, ObjectId, dictionary};
 
 use crate::erreur::Erreur;
 
@@ -196,6 +196,35 @@ pub(crate) fn ecrire(mut document: Document) -> Result<Vec<u8>, Erreur> {
     document.compress();
     let mut octets = Vec::new();
     document
+        .save_to(&mut octets)
+        .map_err(|erreur| Erreur::simple(format!("Le PDF n'a pas pu être écrit : {erreur}")))?;
+    Ok(octets)
+}
+
+/// Le document modifié, enregistré comme une révision ajoutée à la suite du PDF d'origine (ISO
+/// 32000, 7.5.6) : les octets d'origine restent tels quels, et avec eux ses signatures numériques,
+/// valables pour la version qu'elles signent. `base` est l'origine chargée par `charger`, à
+/// laquelle `modifie` est comparé objet par objet : seuls les objets changés ou nouveaux s'ajoutent.
+pub(crate) fn ecrire_a_la_suite(
+    origine: &[u8],
+    base: &Document,
+    modifie: Document,
+) -> Result<Vec<u8>, Erreur> {
+    let erreur =
+        |erreur: lopdf::Error| Erreur::simple(format!("Le PDF n'a pas pu être écrit : {erreur}"));
+    let precedent =
+        Document::load_mem_with_options(origine, LoadOptions::with_password("")).map_err(erreur)?;
+    let mut suite = IncrementalDocument::create_from(origine.to_vec(), precedent);
+    let max_id = modifie.max_id;
+    for (id, objet) in modifie.objects {
+        if base.objects.get(&id) != Some(&objet) {
+            suite.new_document.objects.insert(id, objet);
+        }
+    }
+    suite.new_document.max_id = suite.new_document.max_id.max(max_id);
+    suite.new_document.compress();
+    let mut octets = Vec::new();
+    suite
         .save_to(&mut octets)
         .map_err(|erreur| Erreur::simple(format!("Le PDF n'a pas pu être écrit : {erreur}")))?;
     Ok(octets)

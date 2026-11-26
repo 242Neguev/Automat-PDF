@@ -123,10 +123,11 @@ export const apposerImage = (chemin: string, image: string, placement: Placement
 /**
  * Enregistre dans `sortie` le PDF annoté dans le lecteur (surlignages, notes, texte, images), avec
  * ses retouches (commentaires du PDF, champs remplis) ; `aplatir` : son formulaire rejoint ses
- * pages et n'est plus modifiable.
+ * pages et n'est plus modifiable. Avec `retouches`, le cœur les refait depuis le PDF d'origine, et
+ * un PDF signé numériquement s'enregistre à la suite de l'original : ses signatures restent valables.
  */
-export const annoterPdf = (chemin: string, annotations: ReturnType<typeof pourLeCoeur>, sortie: string, aplatir = false) =>
-  invoke<void>("annoter_pdf", { chemin, annotations, sortie, aplatir });
+export const annoterPdf = (chemin: string, annotations: ReturnType<typeof pourLeCoeur>, sortie: string, aplatir = false, retouches?: RetouchesPdf) =>
+  invoke<void>("annoter_pdf", { chemin, annotations, sortie, aplatir, retouches });
 
 /** Zone à noircir, en fractions de la page affichée, depuis son coin en haut à gauche. */
 export interface Zone {
@@ -357,6 +358,86 @@ export interface FormulairePdf {
 
 /** Les champs du formulaire d'un PDF, d'après son contenu d'origine. */
 export const formulairePdf = (chemin: string) => invoke<FormulairePdf>("formulaire_pdf", { chemin });
+
+/** Ce que le système (Windows, macOS) dit du certificat d'une signature numérique. */
+export type ConfianceCertificat = "reconnue" | "nonReconnue" | "horsValidite" | "revoquee" | "inconnue";
+
+/** La signature correspond-elle au document signé ? */
+export type IntegriteSignature = "intacte" | "alteree" | "fausse" | "nonPriseEnCharge" | "illisible";
+
+/** Signature ordinaire, certification (l'auteur fixe les modifications permises), horodatage du document. */
+export type SorteSignature = "approbation" | "certification" | "horodatage";
+
+/** Ce qui a changé depuis la version signée. */
+export interface ModificationsSignature {
+  formulaire: boolean;
+  /** Autres signatures, horodatages ou données de validation. */
+  signatures: boolean;
+  commentaires: boolean;
+  /** Contenu des pages, pages ajoutées, retirées ou déplacées. */
+  pages: boolean;
+  /** Actions à l'ouverture, scripts, signets… */
+  autres: boolean;
+}
+
+export interface CertificatSignature {
+  sujet: string | null;
+  organisation: string | null;
+  courriel: string | null;
+  emetteur: string | null;
+  /** Valable du … au … (ISO 8601). */
+  debut: string | null;
+  fin: string | null;
+  /** « RSA 2048 bits », « ECDSA P-256 ». */
+  cle: string;
+  numero: string;
+  /** Empreinte SHA-256 du certificat, en hexadécimal. */
+  empreinte: string;
+}
+
+export interface HorodatageSignature {
+  date: string | null;
+  autorite: string | null;
+  valide: boolean;
+  confiance: ConfianceCertificat;
+}
+
+/** Une signature numérique d'un PDF, vérifiée par le cœur. */
+export interface SignaturePdf {
+  champ: string;
+  /** Page (à partir de 0) et zone de la signature visible, en points depuis le haut à gauche ; null : invisible. */
+  page: number | null;
+  zone: [number, number, number, number] | null;
+  sorte: SorteSignature;
+  /** Modifications permises par une certification : 1 aucune ; 2 remplir et signer ; 3 aussi commenter. */
+  permissions: number | null;
+  signataire: string | null;
+  raison: string | null;
+  lieu: string | null;
+  contact: string | null;
+  /** Date (ISO 8601) : celle de l'horodatage vérifié, sinon celle de l'ordinateur du signataire. */
+  date: string | null;
+  dateHorodatee: boolean;
+  horodatage: HorodatageSignature | null;
+  integrite: IntegriteSignature;
+  nonPrisEnCharge: string | null;
+  empreinte: string | null;
+  /** SHA-1 : ancienne, ne protège plus assez. */
+  empreinteAncienne: boolean;
+  confiance: ConfianceCertificat;
+  certificat: CertificatSignature | null;
+  /** La signature porte sur tout le fichier ; sinon, ce qui a changé depuis. */
+  entiere: boolean;
+  modifications: ModificationsSignature;
+  /** Taille de la version signée, en octets. */
+  fin: number;
+}
+
+/** Les signatures numériques d'un PDF, vérifiées (le PDF est relu tel qu'il est sur le disque). */
+export const signaturesPdf = (chemin: string) => invoke<SignaturePdf[]>("signatures_pdf", { chemin });
+
+/** Écrit, dans un dossier temporaire, la version d'un PDF qu'a signée une signature ; rend son chemin. */
+export const versionSignee = (chemin: string, fin: number) => invoke<string>("version_signee", { chemin, fin });
 
 /** La signature et les initiales dessinées, gardées sur cet ordinateur (JSON ; vide : aucune). */
 export const signaturesGardees = () => invoke<string>("lire_signatures");

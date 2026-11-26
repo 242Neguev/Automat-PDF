@@ -591,6 +591,20 @@ pub fn formulaire(document: &Document) -> Formulaire {
     }
 }
 
+/// Les champs de signature signés (signature numérique) : nom complet, valeur (/V, le dictionnaire
+/// de la signature) et place de leurs widgets sur les pages affichées.
+pub(crate) fn champs_signes(document: &Document) -> Vec<(String, Object, Vec<Widget>)> {
+    let (noeuds, _) = noeuds(document);
+    // `formulaire` garde, dans l'ordre, les champs d'une sorte connue dont le dictionnaire se lit.
+    noeuds
+        .into_iter()
+        .filter(|noeud| noeud.sorte().is_some() && document.get_dictionary(noeud.id).is_ok())
+        .zip(formulaire(document).champs)
+        .filter(|(_, champ)| champ.sorte == Sorte::Signature && champ.signe)
+        .filter_map(|(noeud, champ)| Some((champ.nom, noeud.herite.valeur?, champ.widgets)))
+        .collect()
+}
+
 // ------------------------------------------------------------------------------- Apparences
 
 /// Style du texte d'un champ, d'après son apparence par défaut (/DA, « /Helv 10 Tf 0 g »).
@@ -2246,7 +2260,7 @@ mod tests {
         assert_eq!(std::fs::read(&chemin).unwrap(), pdf_formulaire());
         // Enregistré aplati : un PDF sans formulaire, où le nom et le bouton radio sont dessinés.
         let sortie = chemin.replace(".pdf", " - rempli.pdf");
-        crate::operations::annoter_pdf(&chemin, &[], &sortie, true).unwrap();
+        crate::operations::annoter_pdf(&chemin, &[], &sortie, true, None).unwrap();
         let octets = std::fs::read(&sortie).unwrap();
         assert!(formulaire(&charge(&octets)).champs.is_empty());
         assert!(plus_sombre(&octets, NOM) < 120);
