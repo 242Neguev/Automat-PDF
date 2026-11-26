@@ -340,6 +340,12 @@ export function nomRempli(nom: string): string {
   return `${base} - rempli.pdf`;
 }
 
+/** Nom proposé pour le PDF avec son texte reconnu : « Scan.pdf » → « Scan - texte reconnu.pdf ». */
+export function nomTexteReconnu(nom: string): string {
+  const base = nom.replace(/\.pdf$/i, "");
+  return `${base} - texte reconnu.pdf`;
+}
+
 /** Nom proposé pour le PDF signé : « Contrat.pdf » → « Contrat - signé.pdf ». */
 export function nomSigne(nom: string): string {
   const base = nom.replace(/\.pdf$/i, "");

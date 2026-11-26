@@ -595,6 +595,18 @@ export const pdfEnWord = (fichiers: string[], dossier: string) => invoke<Convers
 export const reconnaitreTexte = (fichiers: string[], dossier: string) => invoke<Conversions>("reconnaitre_texte", { fichiers, dossier });
 /** Le PDF semble-t-il numérisé (aucun texte sur ses premières pages) ? */
 export const sembleNumerise = (chemin: string) => invoke<boolean>("semble_numerise", { chemin });
+/** Ce qu'a donné la reconnaissance du texte d'un PDF. */
+export interface BilanReconnaissance {
+  /** Pages sans texte, confiées au moteur. */
+  pagesLues: number;
+  /** Parmi elles, celles où il a reconnu du texte. */
+  pagesReconnues: number;
+  mots: number;
+}
+/** Reconnaît, en mémoire seulement, le texte des pages numérisées du PDF (progression-reconnaissance : pages lues, pages à lire). */
+export const reconnaitreLecture = (chemin: string) => invoke<BilanReconnaissance>("reconnaitre_lecture", { chemin });
+/** Enregistre le PDF du lecteur tel qu'il est en mémoire (texte reconnu, retouches). */
+export const enregistrerLecture = (chemin: string, sortie: string) => invoke<void>("enregistrer_lecture", { chemin, sortie });
 
 /** Ce qui permet de convertir les documents Office sur ce PC. */
 export interface Convertisseurs {

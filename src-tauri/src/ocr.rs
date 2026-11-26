@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use lopdf::{Document, Object, ObjectId};
+use serde::Serialize;
 
 use crate::erreur::{Echec, Erreur};
 use crate::geometrie::Cadre;
@@ -43,7 +44,8 @@ const HAUTEUR_LIGNE: f64 = 0.925;
 const DESCENTE: f64 = 0.207;
 
 /// Ce qu'a donné la reconnaissance d'un PDF.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Bilan {
     /// Pages sans texte, confiées au moteur.
     pub pages_lues: usize,
@@ -220,6 +222,24 @@ fn dessin_texte(nom: &str, lignes: &[Ligne], (largeur, hauteur): (f64, f64)) -> 
     }
     dessin.push_str("ET\n");
     dessin
+}
+
+/// Le texte des pages numérisées du PDF `chemin`, reconnu en mémoire seulement (`memoire::reconnaitre`) :
+/// le lecteur y cherche et en copie le texte, Séparer par personne y repère les personnes, sans
+/// rien écrire sur le disque. `avancement(pages lues, pages à lire)`.
+pub fn reconnaitre_en_memoire(
+    chemin: &str,
+    avancement: &(dyn Fn(usize, usize) + Sync),
+) -> Result<Bilan, Erreur> {
+    disponible()?;
+    let nom = crate::operations::nom_de(chemin);
+    let mut bilan = Bilan::default();
+    memoire::reconnaitre(chemin, |octets| {
+        let (avec_texte, lu) = reconnaitre_pdf(octets, &nom, avancement)?;
+        bilan = lu;
+        Ok(avec_texte)
+    })?;
+    Ok(bilan)
 }
 
 /// PDF numérisés rendus cherchables : chacun devient « … - texte reconnu.pdf » dans `dossier`.
@@ -686,6 +706,26 @@ mod tests {
                 "Lettre - texte reconnu.pdf"
             ]
         );
+    }
+
+    /// Vision, pour de vrai, en mémoire : le scan d'un fichier devient cherchable dans le lecteur,
+    /// sans que le fichier change ; l'onglet fermé, il redevient tel quel.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn reconnait_en_memoire_sans_toucher_au_fichier() {
+        let octets = scan("Attestation de travail");
+        let chemin = crate::essais::fichier_temporaire("ocr-memoire", "Attestation.pdf", &octets);
+        let bilan = reconnaitre_en_memoire(&chemin, &|_, _| {}).unwrap();
+        assert_eq!(bilan.pages_reconnues, 1);
+        let textes = texte::textes(memoire::pdf(&chemin).unwrap(), "Attestation.pdf").unwrap();
+        assert!(
+            textes[0].contains("Attestation de travail"),
+            "{:?}",
+            textes[0]
+        );
+        assert_eq!(std::fs::read(&chemin).unwrap(), octets);
+        memoire::reverrouiller(&chemin);
+        assert!(semble_numerise(memoire::pdf(&chemin).unwrap(), "Attestation.pdf").unwrap());
     }
 
     /// Vision, pour de vrai : un scan de « Bulletin de paie 1 » devient cherchable.

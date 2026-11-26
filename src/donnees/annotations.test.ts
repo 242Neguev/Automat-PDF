@@ -12,6 +12,7 @@ import {
   nombreDeModifications,
   nomRempli,
   nomSigne,
+  nomTexteReconnu,
   ordreDeLecture,
   policeCss,
   pourLeCoeur,
@@ -84,6 +85,7 @@ describe("envoi au cœur", () => {
 
   it("propose un nom à côté de l'original", () => {
     expect(nomAnnote("Contrat de travail.PDF")).toBe("Contrat de travail - annoté.pdf");
+    expect(nomTexteReconnu("Scan du 3 mars.pdf")).toBe("Scan du 3 mars - texte reconnu.pdf");
   });
 });
 

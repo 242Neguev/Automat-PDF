@@ -22,6 +22,9 @@ struct Entree {
     /// Contenu d'avant les retouches du lecteur (commentaires du PDF supprimés ou changés) : les
     /// retouches se refont toujours depuis lui, et il revient quand elles sont toutes défaites.
     origine: Option<Arc<Vec<u8>>>,
+    /// Contenu lu, quand le texte de ses pages numérisées a été reconnu en mémoire (`reconnaitre`) :
+    /// il revient quand l'onglet se ferme.
+    avant_reconnaissance: Option<Arc<Vec<u8>>>,
 }
 
 fn entrees() -> &'static Mutex<Vec<Entree>> {
@@ -57,6 +60,7 @@ pub fn pdf(chemin: &str) -> Result<Arc<Vec<u8>>, Erreur> {
             octets: octets.clone(),
             deverrouille: false,
             origine: None,
+            avant_reconnaissance: None,
         },
     );
     limiter(&mut entrees);
@@ -67,10 +71,9 @@ pub fn pdf(chemin: &str) -> Result<Arc<Vec<u8>>, Erreur> {
 /// un PDF retouché dans le lecteur passe, comme un PDF déverrouillé, après les autres.
 fn limiter(entrees: &mut Vec<Entree>) {
     while entrees.len() > FICHIERS_GARDES {
-        match entrees
-            .iter()
-            .rposition(|e| !e.deverrouille && e.origine.is_none())
-        {
+        match entrees.iter().rposition(|e| {
+            !e.deverrouille && e.origine.is_none() && e.avant_reconnaissance.is_none()
+        }) {
             Some(position) => drop(entrees.remove(position)),
             None if entrees.len() > 2 * FICHIERS_GARDES => drop(entrees.pop()),
             None => break,
@@ -107,17 +110,45 @@ pub fn deverrouiller(chemin: &str, mot_de_passe: &str, nom: &str) -> Result<(), 
 }
 
 /// Oublie ce que le lecteur a fait d'un PDF quand son onglet se ferme : son contenu déchiffré
-/// (comme à sa première ouverture, il redemandera son mot de passe) et ses retouches.
+/// (comme à sa première ouverture, il redemandera son mot de passe), le texte reconnu de ses pages
+/// numérisées et ses retouches.
 pub fn reverrouiller(chemin: &str) {
     let mut entrees = entrees()
         .lock()
         .unwrap_or_else(|empoisonne| empoisonne.into_inner());
     entrees.retain(|e| !(e.chemin == chemin && e.deverrouille));
     for entree in entrees.iter_mut().filter(|e| e.chemin == chemin) {
-        if let Some(origine) = entree.origine.take() {
+        if let Some(lu) = entree.avant_reconnaissance.take() {
+            entree.octets = lu;
+            entree.origine = None;
+        } else if let Some(origine) = entree.origine.take() {
             entree.octets = origine;
         }
     }
+}
+
+/// Le texte des pages numérisées d'un PDF, reconnu en mémoire seulement : `reconnaitre` reçoit son
+/// contenu (sans les retouches du lecteur) et rend le même avec son texte. Ce contenu sert ensuite
+/// de base : la recherche, la copie, Séparer par personne et les retouches le lisent (les retouches
+/// en cours sont à refaire : le lecteur les renvoie). Rien n'est écrit sur le disque ; le contenu
+/// lu revient quand l'onglet se ferme.
+pub fn reconnaitre(
+    chemin: &str,
+    reconnaitre: impl FnOnce(Arc<Vec<u8>>) -> Result<Vec<u8>, Erreur>,
+) -> Result<(), Erreur> {
+    let base = origine(chemin)?;
+    let avec_texte = Arc::new(reconnaitre(base.clone())?);
+    let mut entrees = entrees()
+        .lock()
+        .unwrap_or_else(|empoisonne| empoisonne.into_inner());
+    if let Some(entree) = entrees.iter_mut().find(|e| e.chemin == chemin) {
+        entree.avant_reconnaissance.get_or_insert(base);
+        if entree.origine.is_some() {
+            entree.origine = Some(avec_texte.clone());
+        }
+        entree.octets = avec_texte;
+    }
+    Ok(())
 }
 
 /// Le contenu d'un PDF tel qu'il était avant les retouches du lecteur (sinon, tel quel).
@@ -249,6 +280,34 @@ mod tests {
     }
 
     #[test]
+    fn reconnait_le_texte_en_memoire_puis_rend_le_fichier_a_la_fermeture() {
+        let chemin =
+            crate::essais::fichier_temporaire("memoire-reconnaissance", "Scan.pdf", b"%PDF scan");
+        reconnaitre(&chemin, |lu| {
+            assert_eq!(lu.as_slice(), b"%PDF scan");
+            Ok(b"%PDF scan avec texte".to_vec())
+        })
+        .unwrap();
+        assert_eq!(pdf(&chemin).unwrap().as_slice(), b"%PDF scan avec texte");
+        // Les retouches repartent du contenu avec texte ; défaites, il revient.
+        retoucher(&chemin, |base| {
+            assert_eq!(base, b"%PDF scan avec texte");
+            Ok(Some(b"%PDF avec texte et retouche".to_vec()))
+        })
+        .unwrap();
+        assert_eq!(
+            origine(&chemin).unwrap().as_slice(),
+            b"%PDF scan avec texte"
+        );
+        retoucher(&chemin, |_| Ok(None)).unwrap();
+        assert_eq!(pdf(&chemin).unwrap().as_slice(), b"%PDF scan avec texte");
+        // L'onglet fermé : le contenu lu revient. Le fichier n'a jamais changé.
+        reverrouiller(&chemin);
+        assert_eq!(pdf(&chemin).unwrap().as_slice(), b"%PDF scan");
+        assert_eq!(std::fs::read(&chemin).unwrap(), b"%PDF scan");
+    }
+
+    #[test]
     fn garde_les_pdf_deverrouilles_plus_longtemps_que_les_autres() {
         let entree = |chemin: String, deverrouille: bool| Entree {
             chemin,
@@ -257,6 +316,7 @@ mod tests {
             octets: Arc::new(Vec::new()),
             deverrouille,
             origine: None,
+            avant_reconnaissance: None,
         };
         // Le PDF déverrouillé est le plus ancien : les PDF ordinaires les plus anciens partent avant lui.
         let mut entrees: Vec<Entree> = (0..9)

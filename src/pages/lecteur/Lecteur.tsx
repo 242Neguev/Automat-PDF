@@ -40,6 +40,7 @@ import {
   commentairesPdf,
   formulairePdf,
   retoucherLecture,
+  enregistrerLecture,
   sembleNumerise,
   signaturesPdf,
   type ChampFormulaire,
@@ -54,6 +55,7 @@ import {
   type AvancementImpression,
   type NavigationPdf,
   type OptionsImpression,
+  type BilanReconnaissance,
   type SignaturePdf,
 } from "../../coeur";
 import { echelleAjustee, hautAffiche, premiereDeRangee, rangees, tourner, transformation, type Disposition, type Rotation } from "../../donnees/affichage";
@@ -62,6 +64,7 @@ import {
   appliquer,
   HISTORIQUE_VIDE,
   nomAnnote,
+  nomTexteReconnu,
   nombreDeModifications,
   nomRempli,
   nomSigne,
@@ -104,7 +107,8 @@ import FenetreImpression from "./Impression";
 import { PropositionLecteurParDefaut } from "./LecteurParDefaut";
 import PleinEcran from "./PleinEcran";
 import { MAC } from "../../systeme";
-import { motsDe, textesDe } from "./textes";
+import { motsDe, oublierTextes, textesDe } from "./textes";
+import { useReconnaissance } from "../commun/reconnaissance";
 
 const t = textes.lecteur;
 
@@ -255,6 +259,11 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   const [signatures, setSignatures] = useState<SignaturePdf[] | null>(null);
   /** Le PDF semble numérisé : aucun texte sur ses premières pages (0.8.0, OCR). */
   const [numerise, setNumerise] = useState(false);
+  /** Son texte, reconnu en mémoire : ce qu'a donné la reconnaissance. */
+  const reconnaissance = useReconnaissance();
+  const [reconnu, setReconnu] = useState<BilanReconnaissance | null>(null);
+  const [enregistrementTexte, setEnregistrementTexte] = useState(false);
+  useEffect(() => setReconnu(null), [chemin]);
   const [panneauSignatures, setPanneauSignatures] = useState<{ enAvant: string | null } | null>(null);
   // Après l'enregistrement d'un PDF signé : ses signatures restent valables, ou signalent les corrections.
   const [signaturesGardees, setSignaturesGardees] = useState<"gardees" | "pagesChangees" | null>(null);
@@ -690,6 +699,45 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   }
 
   /**
+   * Reconnaît, en mémoire, le texte du PDF numérisé : la recherche et la copie marchent ensuite, et
+   * les retouches en cours (commentaires, champs) se refont sur le PDF avec son texte.
+   */
+  async function reconnaitreTexte() {
+    if (!chemin) return;
+    const document = chemin;
+    try {
+      const bilan = await reconnaissance.lancer(document);
+      oublierTextes(document);
+      delete retouchesEnvoyees.current[document];
+      setReconnu(bilan);
+      setVersionImages((version) => version + 1);
+      setOuverture((n) => n + 1);
+    } catch (e) {
+      signalerErreur(e);
+    }
+  }
+
+  /** Enregistre, à côté de l'original, le PDF avec son texte reconnu (tel qu'il est en mémoire). */
+  async function enregistrerTexte() {
+    if (!chemin) return;
+    const sortie = await save({ defaultPath: aCote(chemin, nomTexteReconnu(nomDe(chemin))), filters: [{ name: t.filtre, extensions: ["pdf"] }] });
+    if (!sortie) return;
+    if (memeFichier(sortie, chemin)) {
+      signalerErreur({ message: t.annotation.memeFichier });
+      return;
+    }
+    setEnregistrementTexte(true);
+    try {
+      await enregistrerLecture(chemin, sortie);
+      notifications.show({ color: "green", message: t.numerise.enregistre(nomDe(sortie)), autoClose: 8000 });
+    } catch (e) {
+      signalerErreur(e);
+    } finally {
+      setEnregistrementTexte(false);
+    }
+  }
+
+  /**
    * Enregistre un nouveau PDF, à côté de l'original, puis l'affiche : les annotations, les retouches
    * des commentaires et les champs remplis ; `avecAplatir` : le formulaire rejoint ses pages.
    */
@@ -1099,12 +1147,15 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
         <BandeauSignatures signatures={signatures} onDetails={() => setPanneauSignatures({ enAvant: null })} />
       )}
 
-      {numerise && formats && !annoter && (
+      {(numerise || reconnu) && formats && !annoter && (
         <BandeauNumerise
-          onReconnaitre={(() => {
-            const ocr = outils.find((definition) => definition.cle === "ocr");
-            return ocr ? () => onOutil(ocr) : null;
-          })()}
+          enCours={reconnaissance.enCours}
+          avancement={reconnaissance.avancement}
+          bilan={reconnu}
+          enregistrement={enregistrementTexte}
+          onReconnaitre={() => void reconnaitreTexte()}
+          onEnregistrer={() => void enregistrerTexte()}
+          onFermer={() => setReconnu(null)}
         />
       )}
 
@@ -1494,6 +1545,8 @@ function PageLecteur({ chemin, index, format, echelle, rotation, version, racine
     };
   }, [proche, chemin, index, demandee, version]);
 
+  // Le PDF relu (texte reconnu, retouches) : ses mots sont redemandés.
+  useEffect(() => setMots(null), [version]);
   useEffect(() => {
     if (!proche || mots) return;
     let actuelle = true;

@@ -263,6 +263,8 @@ pub fn run() {
             commandes::pdf_en_word,
             commandes::reconnaitre_texte,
             commandes::semble_numerise,
+            commandes::reconnaitre_lecture,
+            commandes::enregistrer_lecture,
             commandes::convertisseurs_office,
             commandes::installer_libreoffice,
             commandes::ouvrir_page_libreoffice,

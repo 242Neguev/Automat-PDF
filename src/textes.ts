@@ -244,6 +244,13 @@ export const textes = {
     numerise: {
       bandeau: "Ce PDF semble numérisé : son texte n'est pas reconnu. On ne peut ni y chercher un mot ni en copier le texte.",
       reconnaitre: "Reconnaître le texte",
+      demarrage: "Reconnaissance du texte…",
+      enCours: (lues: number, pages: number) => `Reconnaissance du texte : page ${lues} sur ${pages}…`,
+      fait: (pages: number) =>
+        `Texte reconnu sur ${pages} page${pages > 1 ? "s" : ""} : vous pouvez y chercher un mot et en copier le texte. Il est gardé en mémoire ; l'original n'est pas modifié.`,
+      enregistrer: "Enregistrer le PDF avec son texte…",
+      enregistre: (nom: string) => `« ${nom} » enregistré, à côté de l'original.`,
+      fermer: "Fermer",
     },
     signaturesNumeriques: {
       titre: "Signatures numériques",
@@ -863,7 +870,9 @@ export const textes = {
     },
     lecture: "Lecture du texte des pages…",
     lu: (pages: number, avecTexte: number) => `${pages} page${pages > 1 ? "s" : ""}${avecTexte < pages ? ` · texte lu sur ${avecTexte}` : ""}`,
-    sansTexte: "Ce PDF ne contient pas de texte (pages numérisées sans reconnaissance de caractères) : impossible d'y repérer les personnes.",
+    sansTexteReconnaitre: "Ce PDF est numérisé : son texte doit d'abord être reconnu pour y repérer les personnes. Automat-PDF le reconnaît sur cet ordinateur, sans Internet.",
+    reconnaitre: "Reconnaître le texte",
+    reconnaissance: (lues: number, pages: number) => `Reconnaissance du texte : page ${lues} sur ${pages}…`,
     modes: { liste: "Avec la liste des personnes", repere: "D'après un repère imprimé" },
     identifiant: "Ce qui identifie chaque personne sur la page",
     identifiantAide:
@@ -1075,7 +1084,7 @@ export const textes = {
     word: {
       deposer: "Glissez vos PDF ici",
       deposerDetail: "Chacun deviendra un document Word modifiable (.docx).",
-      aide: "Par Microsoft Word s'il est installé, le plus fidèle ; sinon, Automat-PDF convertit lui-même : texte modifiable, images à leur place, colonnes alignées par des tabulations. Relisez le document obtenu. Un PDF numérisé sans texte reconnu ne donne que des images.",
+      aide: "Par Microsoft Word s'il est installé, le plus fidèle ; sinon, Automat-PDF convertit lui-même : texte modifiable, images à leur place, colonnes alignées par des tabulations. Relisez le document obtenu. Un PDF numérisé sans texte reconnu ne donne que des images : reconnaissez d'abord son texte (outil Reconnaître le texte).",
       sansWord: `Microsoft Word n'est pas installé sur ${CET_ORDINATEUR} : Automat-PDF convertira lui-même, avec une mise en page plus simple que celle de Word (paragraphes, polices, images ; les tableaux deviennent des colonnes alignées).`,
     },
     ocr: {

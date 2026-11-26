@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Group, List, Modal, Paper, Progress, SegmentedControl, Select, Stack, Switch, Table, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconAlertTriangle, IconCheck, IconDeviceFloppy, IconMail, IconSend, IconSettings, IconTrash, IconUsers } from "@tabler/icons-react";
+import { IconAlertTriangle, IconCheck, IconDeviceFloppy, IconMail, IconSend, IconSettings, IconTextScan2, IconTrash, IconUsers } from "@tabler/icons-react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
@@ -30,6 +30,7 @@ import ChampModele from "../commun/ChampModele";
 import Etape from "../commun/Etape";
 import EtapeListe from "../commun/EtapeListe";
 import { dela, useFichiersRecus } from "../commun/reception";
+import { useReconnaissance } from "../commun/reconnaissance";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
 import { useListe } from "../commun/useListe";
@@ -229,6 +230,19 @@ export default function SeparationParPersonne() {
     }
   });
 
+  // Un PDF numérisé : son texte est d'abord reconnu, en mémoire (OCR, 0.8.0), puis relu.
+  const reconnaissance = useReconnaissance();
+  async function reconnaitre() {
+    if (!source) return;
+    const lu = source;
+    try {
+      await reconnaissance.lancer(lu.chemin);
+      setSource({ ...lu, textes: await textesPdf(lu.chemin) });
+    } catch (e) {
+      signalerErreur(e);
+    }
+  }
+
   async function ouvrir(chemin: string) {
     setLecture(true);
     try {
@@ -405,7 +419,27 @@ export default function SeparationParPersonne() {
             {t.lecture}
           </Text>
         )}
-        {source && avecTexte === 0 && <Alert color="orange">{t.sansTexte}</Alert>}
+        {source && avecTexte === 0 && (
+          <Alert color="orange" data-sans-texte>
+            <Stack gap={8}>
+              <Text size="sm">{t.sansTexteReconnaitre}</Text>
+              {reconnaissance.enCours ? (
+                <div>
+                  <Text size="sm" c="dimmed" mb={4}>
+                    {reconnaissance.avancement ? t.reconnaissance(reconnaissance.avancement[0], reconnaissance.avancement[1]) : textes.lecteur.numerise.demarrage}
+                  </Text>
+                  <Progress value={reconnaissance.avancement ? (100 * reconnaissance.avancement[0]) / Math.max(1, reconnaissance.avancement[1]) : 0} animated={!reconnaissance.avancement} />
+                </div>
+              ) : (
+                <Group>
+                  <Button size="xs" radius="xl" leftSection={<IconTextScan2 size={15} />} onClick={() => void reconnaitre()} data-reconnaitre-texte>
+                    {t.reconnaitre}
+                  </Button>
+                </Group>
+              )}
+            </Stack>
+          </Alert>
+        )}
       </Etape>
 
       {source && avecTexte > 0 && (

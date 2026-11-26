@@ -484,6 +484,37 @@ pub async fn reconnaitre_texte<R: tauri::Runtime>(
     .await
 }
 
+/// Reconnaît, en mémoire seulement, le texte des pages numérisées du PDF du lecteur : la recherche,
+/// la copie et Séparer par personne le lisent aussitôt. L'avancement est annoncé par l'événement
+/// `progression-reconnaissance` : pages lues, pages à lire.
+#[tauri::command]
+pub async fn reconnaitre_lecture<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    chemin: String,
+) -> Result<crate::ocr::Bilan, Erreur> {
+    en_arriere_plan(move || {
+        crate::ocr::reconnaitre_en_memoire(&chemin, &|lues, pages| {
+            let _ = app.emit("progression-reconnaissance", (lues, pages));
+        })
+    })
+    .await
+}
+
+/// Enregistre dans `sortie` le PDF du lecteur tel qu'il est en mémoire : avec le texte reconnu de
+/// ses pages numérisées et les retouches du lecteur. L'original n'est pas modifié.
+#[tauri::command]
+pub async fn enregistrer_lecture(chemin: String, sortie: String) -> Result<(), Erreur> {
+    en_arriere_plan(move || {
+        if std::path::Path::new(&sortie) == std::path::Path::new(&chemin) {
+            return Err(Erreur::simple(
+                "Choisissez un autre nom : l'original n'est jamais remplacé.",
+            ));
+        }
+        crate::fichiers::enregistrer(&sortie, &crate::memoire::pdf(&chemin)?)
+    })
+    .await
+}
+
 /// Le PDF du lecteur semble-t-il numérisé (aucun texte sur ses premières pages) ?
 #[tauri::command]
 pub async fn semble_numerise(chemin: String) -> Result<bool, Erreur> {

@@ -16,6 +16,12 @@ export function textesDe(chemin: string): Promise<string[]> {
   return demande;
 }
 
+/** Oublie le texte et les mots d'un PDF qui a changé en mémoire (texte reconnu) : ils seront redemandés. */
+export function oublierTextes(chemin: string) {
+  textes.delete(chemin);
+  for (const cle of [...mots.keys()]) if (cle.startsWith(`${chemin}\u0000`)) mots.delete(cle);
+}
+
 /** Les mots de la page `page` (à partir de 0), avec leur place. */
 export function motsDe(chemin: string, page: number): Promise<Mot[]> {
   const cle = `${chemin}\u0000${page}`;
