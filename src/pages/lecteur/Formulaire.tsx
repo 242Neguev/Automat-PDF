@@ -4,10 +4,11 @@
 // champ devient une case de saisie ; la valeur saisie reste affichée jusqu'à la page redessinée.
 import { useEffect, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { Alert, Button, Checkbox, Group, Text, Tooltip } from "@mantine/core";
-import { IconDeviceFloppy, IconForms } from "@tabler/icons-react";
+import { IconDeviceFloppy, IconForms, IconSignature } from "@tabler/icons-react";
 import type { ChampFormulaire, FormulairePdf, WidgetChamp } from "../../coeur";
-import { memeValeur, type ValeurChamp } from "../../donnees/annotations";
-import { apresClic, coche, libelleDe, remplissable, tailleSaisie, texteDe } from "../../donnees/formulaire";
+import { memeValeur, type ValeurChamp, type Zone } from "../../donnees/annotations";
+import { apresClic, coche, libelleDe, remplissable, signable, tailleSaisie, texteDe } from "../../donnees/formulaire";
+import { dansLeCadre } from "../../donnees/signature";
 import { textes } from "../../textes";
 
 const t = textes.lecteur.formulaire;
@@ -21,6 +22,10 @@ interface PropsCouche {
   /** Version de l'image de la page affichée (−1 : pas encore là). */
   versionImage: number;
   onChanger: (champ: ChampFormulaire, valeur: ValeurChamp) => void;
+  /** Signatures dessinées déjà posées sur cette page : un champ de signature qui en a une n'invite plus à signer. */
+  signees?: Zone[];
+  /** Signer dans un champ de signature. */
+  onSigner?: (champ: ChampFormulaire, widget: WidgetChamp) => void;
 }
 
 /** Une valeur saisie, montrée par-dessus la page jusqu'à ce que la page redessinée l'affiche. */
@@ -31,7 +36,7 @@ interface Attente {
 }
 
 /** Les champs d'une page, posés à leur place (en pixels de la page droite). */
-export function CoucheFormulaire({ page, echelle, champs, valeurs, versionImage, onChanger }: PropsCouche) {
+export function CoucheFormulaire({ page, echelle, champs, valeurs, versionImage, onChanger, signees = [], onSigner }: PropsCouche) {
   const [edition, setEdition] = useState<string | null>(null);
   const [attentes, setAttentes] = useState<Record<string, Attente>>({});
 
@@ -49,12 +54,32 @@ export function CoucheFormulaire({ page, echelle, champs, valeurs, versionImage,
     onChanger(champ, valeur);
   }
 
-  const widgets = champs.filter(remplissable).flatMap((champ) => champ.widgets.map((widget, rang) => ({ champ, widget, cle: `${champ.nom}#${rang}` })));
+  const widgets = champs
+    .filter((champ) => remplissable(champ) || (onSigner && signable(champ)))
+    .flatMap((champ) => champ.widgets.map((widget, rang) => ({ champ, widget, cle: `${champ.nom}#${rang}` })));
   return (
     <div className="couche-formulaire" data-formulaire-page={page + 1}>
       {widgets
         .filter(({ widget }) => widget.page === page)
-        .map(({ champ, widget, cle }) => (
+        .map(({ champ, widget, cle }) =>
+          champ.sorte === "signature" ? (
+            // Un champ de signature : on y signe d'un clic, tant qu'aucune signature n'y est posée.
+            signees.some((zone) => dansLeCadre(zone, widget)) ? null : (
+              <button
+                key={cle}
+                type="button"
+                className="champ-pdf champ-pdf--signature"
+                style={{ left: widget.x * echelle, top: widget.y * echelle, width: widget.largeur * echelle, height: widget.hauteur * echelle }}
+                title={champ.libelle ?? textes.lecteur.signature.signerIci}
+                onClick={() => onSigner?.(champ, widget)}
+                data-champ={champ.nom}
+                data-sorte="signature"
+              >
+                <IconSignature size={Math.max(12, Math.min(20, widget.hauteur * echelle * 0.45))} stroke={1.8} />
+                <span>{textes.lecteur.signature.signerIci}</span>
+              </button>
+            )
+          ) : (
           <ChampSurLaPage
             key={cle}
             champ={champ}
@@ -66,7 +91,8 @@ export function CoucheFormulaire({ page, echelle, champs, valeurs, versionImage,
             onEdition={(ouvert) => setEdition(ouvert ? cle : (avant) => (avant === cle ? null : avant))}
             onChanger={(valeur) => changer(champ, valeur)}
           />
-        ))}
+          ),
+        )}
     </div>
   );
 }
@@ -248,8 +274,12 @@ function ChampSurLaPage({ champ, widget, echelle, valeur, enAttente, edition, on
 
 interface PropsBandeau {
   formulaire: FormulairePdf;
+  /** Des champs à remplir (sinon, seulement des champs où signer). */
+  aRemplir: boolean;
   /** Champs remplis dans le lecteur (pas encore enregistrés). */
   remplis: number;
+  /** Une signature dessinée est posée (pas encore enregistrée). */
+  signe: boolean;
   aplatir: boolean;
   onAplatir: (aplatir: boolean) => void;
   enregistrement: boolean;
@@ -257,7 +287,7 @@ interface PropsBandeau {
 }
 
 /** Le bandeau d'un formulaire : comment le remplir, et l'enregistrer (aplati, au choix). */
-export function BandeauFormulaire({ formulaire, remplis, aplatir, onAplatir, enregistrement, onEnregistrer }: PropsBandeau) {
+export function BandeauFormulaire({ formulaire, aRemplir, remplis, signe, aplatir, onAplatir, enregistrement, onEnregistrer }: PropsBandeau) {
   if (formulaire.xfaSeul) {
     return (
       <Alert color="orange" variant="light" icon={<IconForms size={20} />} py={8} data-bandeau-formulaire="xfa">
@@ -269,7 +299,7 @@ export function BandeauFormulaire({ formulaire, remplis, aplatir, onAplatir, enr
     <Alert color="blue" variant="light" icon={<IconForms size={20} />} py={8} data-bandeau-formulaire>
       <Group justify="space-between" gap="sm" wrap="wrap">
         <div style={{ minWidth: 0, flex: 1 }}>
-          <Text size="sm">{t.bandeau}</Text>
+          <Text size="sm">{aRemplir ? t.bandeau : t.bandeauSignature}</Text>
           {formulaire.calculs && (
             <Text size="xs" c="dimmed">
               {t.calculs}
@@ -278,14 +308,14 @@ export function BandeauFormulaire({ formulaire, remplis, aplatir, onAplatir, enr
         </div>
         <Group gap="sm" wrap="nowrap">
           <Text size="xs" c="dimmed" data-champs-remplis={remplis}>
-            {t.modifies(remplis)}
+            {remplis > 0 || !signe ? [t.modifies(remplis), signe ? t.signe : null].filter(Boolean).join(" · ") : t.signeSeul}
           </Text>
           <Tooltip label={t.aplatirAide} multiline w={300}>
             <Checkbox size="xs" label={t.aplatir} checked={aplatir} onChange={(evenement) => onAplatir(evenement.currentTarget.checked)} data-aplatir />
           </Tooltip>
           <Tooltip label={t.enregistrerAide}>
-            <Button size="xs" radius="xl" leftSection={<IconDeviceFloppy size={15} />} loading={enregistrement} disabled={remplis === 0 && !aplatir} onClick={onEnregistrer} data-enregistrer-formulaire>
-              {t.enregistrer}
+            <Button size="xs" radius="xl" leftSection={<IconDeviceFloppy size={15} />} loading={enregistrement} disabled={remplis === 0 && !signe && !aplatir} onClick={onEnregistrer} data-enregistrer-formulaire>
+              {remplis === 0 && signe ? t.enregistrerSigne : t.enregistrer}
             </Button>
           </Tooltip>
         </Group>

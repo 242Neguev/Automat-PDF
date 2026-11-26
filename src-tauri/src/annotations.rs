@@ -87,6 +87,16 @@ pub struct Point {
     pub y: f64,
 }
 
+/// Signature ou initiales dessinées à la main (0.7.0) : les traits, en fractions de leur boîte
+/// (0 à 1 ; y vers le bas), et l'épaisseur du trait, en fraction de sa hauteur. La boîte a pour
+/// largeur `proportion` fois sa hauteur : posée dans une zone de mêmes proportions, rien ne se déforme.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Trace {
+    pub proportion: f64,
+    pub traits: Vec<Vec<Point>>,
+    pub epaisseur: f64,
+}
+
 /// Forme tracée sur la page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -241,6 +251,16 @@ pub enum Annotation {
         #[serde(default)]
         date: Option<String>,
     },
+    /// Signature ou initiales dessinées à la main (0.7.0), dans la zone : écrites dans le contenu
+    /// de la page, comme une image, en traits vectoriels nets à toute taille.
+    Signature {
+        page: usize,
+        zone: Zone,
+        trace: Trace,
+        teinte: Teinte,
+        #[serde(default)]
+        initiales: bool,
+    },
 }
 
 impl Annotation {
@@ -256,7 +276,8 @@ impl Annotation {
             | Annotation::Barre { page, .. }
             | Annotation::Forme { page, .. }
             | Annotation::Dessin { page, .. }
-            | Annotation::Tampon { page, .. } => *page,
+            | Annotation::Tampon { page, .. }
+            | Annotation::Signature { page, .. } => *page,
         }
     }
 }
@@ -855,6 +876,79 @@ fn ecrire(
     )
 }
 
+/// Traits et points d'une signature au plus : au-delà, ce n'en est plus une ; le reste est laissé.
+const TRAITS_MAX: usize = 400;
+const POINTS_SIGNATURE_MAX: usize = 20_000;
+
+/// Le chemin lissé d'un trait, en opérateurs du contenu PDF : des courbes qui passent par le
+/// milieu de chaque segment (comme l'aperçu du lecteur) ; un seul point : un point rond.
+fn chemin_lisse(points: &[(f64, f64)]) -> String {
+    let milieu = |(xa, ya): (f64, f64), (xb, yb): (f64, f64)| ((xa + xb) / 2.0, (ya + yb) / 2.0);
+    match points {
+        [] => String::new(),
+        [(x, y)] => format!("{x:.2} {y:.2} m {x:.2} {y:.2} l\n"),
+        [(x0, y0), (x1, y1)] => format!("{x0:.2} {y0:.2} m {x1:.2} {y1:.2} l\n"),
+        _ => {
+            let mut chemin = format!("{:.2} {:.2} m\n", points[0].0, points[0].1);
+            let mut courant = points[0];
+            for paire in points[1..].windows(2) {
+                let (controle, fin) = (paire[0], milieu(paire[0], paire[1]));
+                // La courbe du second degré (courant, contrôle, fin), écrite en courbe du troisième.
+                let tiers = |a: (f64, f64)| {
+                    (
+                        a.0 + 2.0 / 3.0 * (controle.0 - a.0),
+                        a.1 + 2.0 / 3.0 * (controle.1 - a.1),
+                    )
+                };
+                let (c1, c2) = (tiers(courant), tiers(fin));
+                chemin.push_str(&format!(
+                    "{:.2} {:.2} {:.2} {:.2} {:.2} {:.2} c\n",
+                    c1.0, c1.1, c2.0, c2.1, fin.0, fin.1
+                ));
+                courant = fin;
+            }
+            let dernier = points[points.len() - 1];
+            chemin.push_str(&format!("{:.2} {:.2} l\n", dernier.0, dernier.1));
+            chemin
+        }
+    }
+}
+
+/// Signature ou initiales dessinées : leurs traits lissés, dans la zone de la page affichée, à
+/// l'encre choisie (bouts et angles arrondis, comme un stylo).
+fn signer(
+    document: &mut Document,
+    page: ObjectId,
+    hauteur: f64,
+    zone: &Zone,
+    trace: &Trace,
+    teinte: Teinte,
+) -> Result<(), Erreur> {
+    let bas = hauteur - zone.y - zone.hauteur;
+    let epaisseur = (trace.epaisseur * zone.hauteur).clamp(0.2, 12.0);
+    let mut dessin = format!("{} {epaisseur:.3} w 1 J 1 j\n", teinte.operateur(false));
+    let mut restants = POINTS_SIGNATURE_MAX;
+    for trait_ in trace.traits.iter().take(TRAITS_MAX) {
+        let points: Vec<(f64, f64)> = trait_
+            .iter()
+            .filter(|p| p.x.is_finite() && p.y.is_finite())
+            .take(restants)
+            .map(|p| {
+                (
+                    zone.x + p.x.clamp(0.0, 1.0) * zone.largeur,
+                    bas + (1.0 - p.y.clamp(0.0, 1.0)) * zone.hauteur,
+                )
+            })
+            .collect();
+        restants = restants.saturating_sub(points.len());
+        if !points.is_empty() {
+            dessin.push_str(&chemin_lisse(&points));
+            dessin.push_str("S\n");
+        }
+    }
+    marques::surimprimer(document, page, &[], |_| dessin)
+}
+
 /// Zone de la page affichée (depuis le haut) dans le repère de la page.
 fn en_page(vers_page: Matrice, hauteur: f64, zone: &Zone) -> Rect {
     let (haut, bas) = (hauteur - zone.y, hauteur - zone.y - zone.hauteur);
@@ -1145,6 +1239,12 @@ pub(crate) fn annoter(
                 *mot,
                 date.as_deref(),
             )?,
+            Annotation::Signature {
+                zone,
+                trace,
+                teinte,
+                ..
+            } => signer(document, page, hauteur, zone, trace, *teinte)?,
             // Déjà faits, avant le reste.
             Annotation::Correction { .. } | Annotation::Blanc { .. } => {}
         }
@@ -1761,6 +1861,60 @@ mod tests {
         assert_eq!(traits[0].as_array().unwrap().len(), 6, "trois points");
         let [r, _, b] = pixel(&sortie, 0, (150, 420));
         assert!(b > r + 40, "bleu marine au milieu du trait, vu {r} … {b}");
+    }
+
+    #[test]
+    fn signe_a_la_main_dans_la_zone_et_dans_la_page() {
+        let source = pdf_herite(1, "Contrat");
+        // Une boîte deux fois plus large que haute : un trait en zigzag, et un point en dessous.
+        let trace = Trace {
+            proportion: 2.0,
+            traits: vec![
+                vec![
+                    Point { x: 0.05, y: 0.5 },
+                    Point { x: 0.3, y: 0.2 },
+                    Point { x: 0.6, y: 0.8 },
+                    Point { x: 0.95, y: 0.5 },
+                ],
+                vec![Point { x: 0.5, y: 0.95 }],
+            ],
+            epaisseur: 0.06,
+        };
+        let zone = Zone {
+            x: 300.0,
+            y: 500.0,
+            largeur: 200.0,
+            hauteur: 100.0,
+        };
+        let sortie = annote(
+            &source,
+            &[Annotation::Signature {
+                page: 0,
+                zone,
+                trace,
+                teinte: Teinte::Marine,
+                initiales: false,
+            }],
+        );
+        // Le début du trait (à gauche, à mi-hauteur) : à l'encre bleu marine ; le coin : blanc.
+        let [r, _, b] = pixel(&sortie, 0, (312, 550));
+        assert!(r < 120 && b > r + 40, "encre bleu marine : {r} {b}");
+        assert_eq!(pixel(&sortie, 0, (302, 502)), [255, 255, 255]);
+        // Le point, en bas au milieu.
+        let [r, _, b] = pixel(&sortie, 0, (400, 595));
+        assert!(r < 120 && b > r + 40, "le point : {r} {b}");
+        // Pas d'annotation : la signature fait partie de la page, comme une image posée.
+        assert!(annotations_de(&sortie, 0).is_empty());
+        let document = charger(&sortie, "essai.pdf").unwrap();
+        let id = *document.get_pages().get(&1).unwrap();
+        let contenu = String::from_utf8_lossy(
+            &crate::pdf::contenu_page(&document, document.get_dictionary(id).unwrap()).unwrap(),
+        )
+        .into_owned();
+        assert!(
+            contenu.contains("1 J 1 j") && contenu.contains(" c\n"),
+            "traits lissés, bouts ronds"
+        );
     }
 
     #[test]

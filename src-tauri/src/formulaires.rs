@@ -139,6 +139,8 @@ pub struct Champ {
     pub saisie_libre: bool,
     /// Un bouton radio coché ne se décoche pas d'un clic.
     pub sans_decocher: bool,
+    /// Champ de signature déjà signé (signature numérique) : on n'y pose pas de signature dessinée.
+    pub signe: bool,
     pub widgets: Vec<Widget>,
 }
 
@@ -572,6 +574,12 @@ pub fn formulaire(document: &Document) -> Formulaire {
             multiple: sorte == Sorte::Liste && drapeaux & CHOIX_MULTIPLE != 0,
             saisie_libre: sorte == Sorte::Combo && drapeaux & SAISIE_LIBRE != 0,
             sans_decocher: sorte == Sorte::Radio && drapeaux & SANS_DECOCHER != 0,
+            signe: sorte == Sorte::Signature
+                && noeud
+                    .herite
+                    .valeur
+                    .as_ref()
+                    .is_some_and(|v| v.as_dict().is_ok()),
             widgets,
         });
     }
@@ -1490,6 +1498,137 @@ pub fn pour_l_affichage(document: &mut Document) -> bool {
     change
 }
 
+// ------------------------------------------------------------------------------- Signature dessinée
+
+/// Retire une référence d'un tableau (/Fields, /Kids, /Annots), écrit dans son dictionnaire ou
+/// objet à part. Renvoie vrai si le tableau est vide ensuite.
+fn retirer_de(
+    document: &mut Document,
+    proprietaire: ObjectId,
+    cle: &[u8],
+    cible: ObjectId,
+) -> bool {
+    let tableau = document
+        .get_dictionary(proprietaire)
+        .ok()
+        .and_then(|d| d.get(cle).ok())
+        .cloned();
+    let filtrer = |liste: &mut Vec<Object>| {
+        liste.retain(|o| o.as_reference().ok() != Some(cible));
+        liste.is_empty()
+    };
+    match tableau {
+        Some(Object::Reference(id)) => match document.get_object_mut(id) {
+            Ok(Object::Array(liste)) => filtrer(liste),
+            _ => false,
+        },
+        Some(Object::Array(_)) => match document
+            .get_dictionary_mut(proprietaire)
+            .ok()
+            .and_then(|d| d.get_mut(cle).ok())
+        {
+            Some(Object::Array(liste)) => filtrer(liste),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// Retire un champ de l'arbre du formulaire : des /Kids de son parent (et le parent, s'il n'en a
+/// plus), ou des /Fields du formulaire.
+fn retirer_champ(document: &mut Document, champ: ObjectId, profondeur: usize) {
+    if profondeur > PROFONDEUR_MAX {
+        return;
+    }
+    let parent = document
+        .get_dictionary(champ)
+        .ok()
+        .and_then(|d| d.get(b"Parent").ok())
+        .and_then(|o| o.as_reference().ok());
+    match parent {
+        Some(parent) => {
+            if retirer_de(document, parent, b"Kids", champ) {
+                retirer_champ(document, parent, profondeur + 1);
+            }
+        }
+        None => {
+            let formulaire = document
+                .catalog()
+                .ok()
+                .and_then(|c| c.get(b"AcroForm").ok())
+                .and_then(|o| o.as_reference().ok());
+            if let Some(formulaire) = formulaire {
+                retirer_de(document, formulaire, b"Fields", champ);
+            } else if let Ok(Object::Array(champs)) = document
+                .catalog_mut()
+                .and_then(|c| c.get_mut(b"AcroForm"))
+                .and_then(|f| f.as_dict_mut())
+                .and_then(|f| f.get_mut(b"Fields"))
+            {
+                champs.retain(|o| o.as_reference().ok() != Some(champ));
+            }
+        }
+    }
+}
+
+/// Les champs de signature (pas encore signés) où l'on a posé une signature dessinée — `signatures`
+/// : (page, zone x, y, largeur, hauteur en points de la page affichée) — s'en vont du formulaire :
+/// le PDF enregistré n'invite plus à signer là où c'est fait.
+pub fn retirer_champs_signes(document: &mut Document, signatures: &[(usize, [f64; 4])]) {
+    if signatures.is_empty() {
+        return;
+    }
+    let (noeuds, _) = noeuds(document);
+    let pages = pages_des_annotations(document);
+    let ids_pages: Vec<ObjectId> = document.get_pages().into_values().collect();
+    let mut a_retirer: Vec<(ObjectId, ObjectId, usize)> = Vec::new();
+    for noeud in noeuds
+        .iter()
+        .filter(|n| n.sorte() == Some(Sorte::Signature) && n.herite.valeur.is_none())
+    {
+        for &widget in &noeud.widgets {
+            let (Some(&page), Ok(dictionnaire)) =
+                (pages.get(&widget), document.get_dictionary(widget))
+            else {
+                continue;
+            };
+            let (Some([x0, y0, x1, y1]), Some(id_page)) = (
+                dictionnaire
+                    .get(b"Rect")
+                    .ok()
+                    .and_then(|r| rectangle(document, r)),
+                ids_pages.get(page),
+            ) else {
+                continue;
+            };
+            let Ok(dictionnaire_page) = document.get_dictionary(*id_page) else {
+                continue;
+            };
+            let cadre = Cadre::de_page(document, dictionnaire_page);
+            let (_, hauteur_page) = cadre.taille_vue();
+            let [gauche, bas, droite, haut] =
+                boite(cadre.vers_vue(), &[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]);
+            let (dessus, dessous) = (hauteur_page - haut, hauteur_page - bas);
+            let signe = signatures.iter().any(|&(p, [x, y, l, h])| {
+                let (cx, cy) = (x + l / 2.0, y + h / 2.0);
+                p == page && cx >= gauche && cx <= droite && cy >= dessus && cy <= dessous
+            });
+            if signe {
+                a_retirer.push((widget, noeud.id, page));
+            }
+        }
+    }
+    for (widget, champ, page) in a_retirer {
+        if let Some(&id_page) = ids_pages.get(page) {
+            retirer_de(document, id_page, b"Annots", widget);
+        }
+        // Champ et widget réunis, ou dernier widget du champ : le champ s'en va avec lui.
+        if widget == champ || retirer_de(document, champ, b"Kids", widget) {
+            retirer_champ(document, champ, 0);
+        }
+    }
+}
+
 // ------------------------------------------------------------------------------- Aplatissement
 
 /// Ajoute un formulaire (XObject) aux ressources d'une page, sous un nom libre ; renvoie ce nom.
@@ -1841,7 +1980,9 @@ mod tests {
         let visa = champ(&lu, "Visa");
         assert!(visa.lecture_seule);
         assert_eq!(visa.valeur, texte("En attente"));
-        assert_eq!(champ(&lu, "Signature").sorte, Sorte::Signature);
+        let signature = champ(&lu, "Signature");
+        assert_eq!(signature.sorte, Sorte::Signature);
+        assert!(!signature.signe, "pas encore signé");
     }
 
     #[test]
@@ -2047,6 +2188,38 @@ mod tests {
             .as_dict()
             .unwrap();
         assert!(apparences.get(b"N").unwrap().as_reference().is_ok());
+    }
+
+    #[test]
+    fn retire_le_champ_de_signature_ou_l_on_a_signe() {
+        let mut document = charge(&pdf_formulaire());
+        // Le champ « Signature » : x 56 à 260, y 290 à 340 (842 - 340 = 502 sur la page affichée).
+        // Une signature posée ailleurs ne le retire pas ; posée dedans, si.
+        retirer_champs_signes(&mut document, &[(0, [300.0, 500.0, 100.0, 30.0])]);
+        assert!(
+            formulaire(&document)
+                .champs
+                .iter()
+                .any(|c| c.nom == "Signature")
+        );
+        retirer_champs_signes(&mut document, &[(0, [80.0, 510.0, 120.0, 34.0])]);
+        let apres = formulaire(&document);
+        assert!(
+            !apres.champs.iter().any(|c| c.nom == "Signature"),
+            "champ retiré"
+        );
+        assert_eq!(apres.champs.len(), 11, "les autres champs restent");
+        let octets = ecrire(document).unwrap();
+        let relu = charge(&octets);
+        let page = relu
+            .get_dictionary(*relu.get_pages().get(&1).unwrap())
+            .unwrap();
+        let annotations = page.get(b"Annots").unwrap().as_array().unwrap();
+        assert_eq!(
+            annotations.len(),
+            13,
+            "14 widgets, moins celui de la signature"
+        );
     }
 
     #[test]

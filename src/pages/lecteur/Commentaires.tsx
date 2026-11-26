@@ -68,6 +68,8 @@ function resume(annotation: Annotation): { titre: string; detail: string | null 
     case "blanc":
     case "dessin":
       return { titre: t.sortes[annotation.sorte], detail: null };
+    case "signature":
+      return { titre: annotation.initiales ? t.sortes.initiales : t.sortes.signature, detail: null };
     case "suppression":
     case "retouche":
     case "champ":
@@ -84,6 +86,7 @@ function teinteDe(annotation: Annotation): string | undefined {
     case "texte":
     case "forme":
     case "dessin":
+    case "signature":
       return couleur(annotation.teinte);
     case "tampon":
       return `rgb(${TAMPONS[annotation.mot].rvb.join(", ")})`;

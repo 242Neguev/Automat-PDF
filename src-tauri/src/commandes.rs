@@ -503,6 +503,31 @@ pub async fn enregistrer_enchainements(app: AppHandle, contenu: String) -> Resul
         .await
 }
 
+/// Fichier de la signature et des initiales dessinées dans le lecteur (0.7.0), gardées sur cet
+/// ordinateur seulement, pour la prochaine fois.
+const SIGNATURES: &str = "signatures.json";
+/// Taille d'un fichier de signatures au plus (deux dessins : bien moins).
+const SIGNATURES_MAX: usize = 2_000_000;
+
+/// Signature et initiales gardées (JSON ; vide s'il n'y en a pas).
+#[tauri::command]
+pub async fn lire_signatures(app: AppHandle) -> Result<String, Erreur> {
+    let dossier = dossier_reglages(&app)?;
+    en_arriere_plan(move || operations::lire_reglages(&dossier, SIGNATURES)).await
+}
+
+/// Garde la signature et les initiales (JSON) sur cet ordinateur ; vide : les oublie.
+#[tauri::command]
+pub async fn enregistrer_signatures(app: AppHandle, contenu: String) -> Result<(), Erreur> {
+    if contenu.len() > SIGNATURES_MAX {
+        return Err(Erreur::simple(
+            "Cette signature est trop grande pour être gardée.",
+        ));
+    }
+    let dossier = dossier_reglages(&app)?;
+    en_arriere_plan(move || operations::enregistrer_reglages(&dossier, SIGNATURES, &contenu)).await
+}
+
 /// Fichier des réglages de la messagerie (moyen d'envoi, compte ; jamais le mot de passe).
 const MESSAGERIE: &str = "messagerie.json";
 

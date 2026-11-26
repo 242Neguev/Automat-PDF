@@ -11,6 +11,7 @@ import {
   nomAnnote,
   nombreDeModifications,
   nomRempli,
+  nomSigne,
   ordreDeLecture,
   policeCss,
   pourLeCoeur,
@@ -20,6 +21,7 @@ import {
   dateDuJour,
   prolonger,
   retouchesDe,
+  sorteDEnregistrement,
   TAMPONS,
   zoneDe,
   zoneTampon,
@@ -222,6 +224,18 @@ describe("commentaires : souligner, barrer, formes, dessin, tampons", () => {
     expect(memeValeur(["a"], "a")).toBe(true);
     expect(memeValeur("Off", "Oui")).toBe(false);
     expect(nomRempli("Demande de congés.pdf")).toBe("Demande de congés - rempli.pdf");
+  });
+
+  it("nomme le PDF enregistré d'après ce qui a été fait : signé, rempli ou annoté", () => {
+    const signature = { id: "s", sorte: "signature" as const, page: 0, zone: { x: 0, y: 0, largeur: 120, hauteur: 40 }, trace: { proportion: 3, traits: [[{ x: 0, y: 0 }]], epaisseur: 0.05 }, teinte: "marine" as const, initiales: false };
+    const champ: Annotation = { id: "c", sorte: "champ", page: 0, nom: "Nom", valeur: "NKOULOU" };
+    expect(sorteDEnregistrement([signature])).toBe("signe");
+    expect(sorteDEnregistrement([champ, signature])).toBe("rempli");
+    expect(sorteDEnregistrement([champ, note("n")])).toBe("annote");
+    expect(sorteDEnregistrement([])).toBe("annote");
+    expect(nomSigne("Contrat.pdf")).toBe("Contrat - signé.pdf");
+    // Une signature vide ne part pas au cœur.
+    expect(pourLeCoeur([{ ...signature, trace: { ...signature.trace, traits: [] } }])).toEqual([]);
   });
 
   it("liste les commentaires dans l'ordre de lecture", () => {

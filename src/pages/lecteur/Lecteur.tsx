@@ -61,11 +61,13 @@ import {
   nomAnnote,
   nombreDeModifications,
   nomRempli,
+  nomSigne,
   nouvelId,
   pourLeCoeur,
   retablir,
   retouchesDe,
   sans,
+  sorteDEnregistrement,
   valeursChamps,
   zoneDe,
   type Annotation,
@@ -75,7 +77,8 @@ import {
   type Zone,
 } from "../../donnees/annotations";
 import { aCote, nomDe } from "../../donnees/chemins";
-import { initialesDe, remplissable } from "../../donnees/formulaire";
+import { initialesDe, remplissable, signable } from "../../donnees/formulaire";
+import { zoneDansCadre, type SignatureChoisie } from "../../donnees/signature";
 import { motsCouverts, occurrences, type Occurrence } from "../../donnees/recherche-texte";
 import { formaterTaille } from "../../donnees/tailles";
 import { GROUPE_DE, type DefinitionOutil } from "../../outils";
@@ -88,6 +91,7 @@ import { ZoneDepot } from "../commun/ZoneFichier";
 import { BarreAnnotations, CoucheAnnotations, type ImageChargee, type OutilAnnotation, type ReglagesCommentaires } from "./Annotations";
 import ListeCommentaires from "./Commentaires";
 import { BandeauFormulaire, CoucheFormulaire } from "./Formulaire";
+import FenetreSignature from "./FenetreSignature";
 import MotDePasseLecture from "./MotDePasseLecture";
 import ColonneSignets from "./Signets";
 import FenetreImpression from "./Impression";
@@ -227,10 +231,16 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   const [enregistrement, setEnregistrement] = useState(false);
   /** Le PDF annoté (ou le formulaire rempli) qui vient d'être enregistré, et qui s'affiche. */
   const [enregistre, setEnregistre] = useState<string | null>(null);
-  const [sorteEnregistree, setSorteEnregistree] = useState<"annote" | "rempli">("annote");
+  const [sorteEnregistree, setSorteEnregistree] = useState<"annote" | "rempli" | "signe">("annote");
   /** Formulaire du PDF (0.7.0) : ses champs tels que reçus (null : pas encore lus) ; l'option « aplatir ». */
   const [formulaire, setFormulaire] = useState<FormulairePdf | null>(null);
   const [aplatir, setAplatir] = useState(false);
+  /**
+   * Signer (0.7.0) : la fenêtre de signature ouverte (et le champ de signature où poser, s'il y en
+   * a un) ; la signature que l'outil Signature pose d'un clic.
+   */
+  const [fenetreSignature, setFenetreSignature] = useState<{ cible: { page: number; zone: Zone } | null } | null>(null);
+  const [signatureChoisie, setSignatureChoisie] = useState<SignatureChoisie | null>(null);
   const cadre = useRef<HTMLDivElement>(null);
   const defilement = useRef<HTMLDivElement>(null);
   const champRecherche = useRef<HTMLInputElement>(null);
@@ -587,6 +597,27 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   function modifierCommentairePdf(commentaire: CommentairePdf, texte: string) {
     ajouterAnnotation({ id: nouvelId(), sorte: "retouche", page: commentaire.page, cible: commentaire.id, texte });
   }
+  /**
+   * La signature choisie dans la fenêtre : posée dans le champ de signature d'où l'on vient, à sa
+   * taille ; sinon, l'outil Signature la pose là où l'on clique.
+   */
+  function choisirSignature(choix: SignatureChoisie) {
+    const cible = fenetreSignature?.cible ?? null;
+    setFenetreSignature(null);
+    if (cible) {
+      ajouterAnnotation({ id: nouvelId(), sorte: "signature", page: cible.page, zone: zoneDansCadre(choix.trace, cible.zone), trace: choix.trace, teinte: choix.teinte, initiales: choix.initiales });
+      return;
+    }
+    setSignatureChoisie(choix);
+    setOutil("signature");
+    setSelection(null);
+  }
+  /** Une annotation posée sur la page ; après une signature, on revient à la sélection pour l'ajuster. */
+  function poser(annotation: Annotation) {
+    ajouterAnnotation(annotation);
+    if (annotation.sorte === "signature") setOutil("selection");
+  }
+
   /** Un champ du formulaire rempli : une étape de l'historique (annuler, rétablir). */
   function changerChamp(champ: ChampFormulaire, valeur: ValeurChamp) {
     ajouterAnnotation({ id: nouvelId(), sorte: "champ", page: champ.widgets[0]?.page ?? 0, nom: champ.nom, valeur });
@@ -596,8 +627,15 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     setSelection(null);
   }
 
-  /** Change d'outil ; « Image » demande d'abord l'image, posée au milieu de la page lue. */
+  /**
+   * Change d'outil ; « Image » demande d'abord l'image, posée au milieu de la page lue ;
+   * « Signature » ouvre d'abord la fenêtre où l'on dessine (ou retrouve) sa signature.
+   */
   async function choisirOutil(nouvel: OutilAnnotation) {
+    if (nouvel === "signature") {
+      setFenetreSignature({ cible: null });
+      return;
+    }
     if (nouvel !== "image") {
       setOutil(nouvel);
       if (nouvel !== "selection") setSelection(null);
@@ -627,8 +665,9 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
    */
   async function enregistrer(avecAplatir = false) {
     if (!chemin || (annotations.length === 0 && !avecAplatir)) return;
-    const rempli = annotations.every((a) => a.sorte === "champ");
-    const sortie = await save({ defaultPath: aCote(chemin, rempli ? nomRempli(nomDe(chemin)) : nomAnnote(nomDe(chemin))), filters: [{ name: t.filtre, extensions: ["pdf"] }] });
+    const sorte = sorteDEnregistrement(annotations);
+    const nom = (sorte === "signe" ? nomSigne : sorte === "rempli" ? nomRempli : nomAnnote)(nomDe(chemin));
+    const sortie = await save({ defaultPath: aCote(chemin, nom), filters: [{ name: t.filtre, extensions: ["pdf"] }] });
     if (!sortie) return;
     if (memeFichier(sortie, chemin)) {
       signalerErreur({ message: t.annotation.memeFichier });
@@ -648,7 +687,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
       setSelection(null);
       setAnnoter(false);
       setAplatir(false);
-      setSorteEnregistree(rempli ? "rempli" : "annote");
+      setSorteEnregistree(sorte);
       setEnregistre(sortie);
       onChoisir(sortie);
     } catch (e) {
@@ -662,7 +701,9 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   const initiales = useMemo(() => initialesDe(formulaire), [formulaire]);
   const valeurs = useMemo(() => ({ ...initiales, ...valeursChamps(annotations) }), [initiales, annotations]);
   const champsRemplissables = useMemo(() => formulaire?.champs.filter(remplissable) ?? [], [formulaire]);
-  const aFormulaire = champsRemplissables.length > 0 || Boolean(formulaire?.xfaSeul);
+  /** Les champs posés sur les pages : ceux à remplir, et ceux où signer. */
+  const champsSurLesPages = useMemo(() => formulaire?.champs.filter((champ) => remplissable(champ) || signable(champ)) ?? [], [formulaire]);
+  const aFormulaire = champsSurLesPages.length > 0 || Boolean(formulaire?.xfaSeul);
 
   // Les retouches du PDF (ses commentaires, ses champs) suivent l'historique : envoyées au cœur (qui
   // les applique à sa copie en mémoire, depuis l'origine), puis les pages et les vignettes relues.
@@ -996,7 +1037,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
         <Alert
           color="teal"
           icon={<IconCircleCheck size={20} />}
-          title={sorteEnregistree === "rempli" ? t.formulaire.enregistre : t.annotation.enregistre}
+          title={sorteEnregistree === "rempli" ? t.formulaire.enregistre : sorteEnregistree === "signe" ? t.signature.enregistre : t.annotation.enregistre}
           withCloseButton
           onClose={() => setEnregistre(null)}
           py={8}
@@ -1014,7 +1055,9 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
       {formulaire && formats && !annoter && aFormulaire && (
         <BandeauFormulaire
           formulaire={formulaire}
+          aRemplir={champsRemplissables.length > 0}
           remplis={retouches.champs.length}
+          signe={annotations.some((a) => a.sorte === "signature")}
           aplatir={aplatir}
           onAplatir={setAplatir}
           enregistrement={enregistrement}
@@ -1042,6 +1085,17 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
           onImprimer={(options) => void lancerImpression(options)}
         />
       )}
+
+      <FenetreSignature
+        ouvert={fenetreSignature !== null}
+        onFermer={() => setFenetreSignature(null)}
+        onChoisir={choisirSignature}
+        onImage={() => {
+          setFenetreSignature(null);
+          if (!annoter) setAnnoter(true);
+          void choisirOutil("image");
+        }}
+      />
 
       {pleinEcran && chemin && formats && (
         <PleinEcran
@@ -1146,9 +1200,18 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
                       liens={annoter ? undefined : navigation?.liens[index]}
                       onLien={(lien) => suivreLien(lien.destination, lien.adresse)}
                       formulaire={
-                        !annoter && champsRemplissables.some((champ) => champ.widgets.some((w) => w.page === index))
+                        !annoter && champsSurLesPages.some((champ) => champ.widgets.some((w) => w.page === index))
                           ? (versionImage) => (
-                              <CoucheFormulaire page={index} echelle={echelle} champs={champsRemplissables} valeurs={valeurs} versionImage={versionImage} onChanger={changerChamp} />
+                              <CoucheFormulaire
+                                page={index}
+                                echelle={echelle}
+                                champs={champsSurLesPages}
+                                valeurs={valeurs}
+                                versionImage={versionImage}
+                                onChanger={changerChamp}
+                                signees={annotations.flatMap((a) => (a.sorte === "signature" && a.page === index ? [a.zone] : []))}
+                                onSigner={(_champ, widget) => setFenetreSignature({ cible: { page: widget.page, zone: { x: widget.x, y: widget.y, largeur: widget.largeur, hauteur: widget.hauteur } } })}
+                              />
                             )
                           : undefined
                       }
@@ -1173,11 +1236,12 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
                                 images={imagesChargees}
                                 selection={selection}
                                 onSelection={setSelection}
-                                onAjouter={ajouterAnnotation}
+                                onAjouter={poser}
                                 onModifier={modifierAnnotation}
                                 onSupprimer={supprimerAnnotation}
                                 onEffacer={effacerAnnotations}
                                 repere={repere?.page === index ? repere.zone : null}
+                                signature={outil === "signature" ? signatureChoisie : null}
                               />
                             )
                           : undefined

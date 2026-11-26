@@ -9,6 +9,9 @@ const REMPLISSABLES = new Set(["texte", "case", "radio", "liste", "combo"]);
 /** Un champ que l'on peut remplir : de ces sortes, pas en lecture seule, et affiché sur une page. */
 export const remplissable = (champ: ChampFormulaire) => REMPLISSABLES.has(champ.sorte) && !champ.lectureSeule && champ.widgets.length > 0;
 
+/** Un champ de signature où poser une signature dessinée : pas encore signé, affiché sur une page. */
+export const signable = (champ: ChampFormulaire) => champ.sorte === "signature" && !champ.signe && !champ.lectureSeule && champ.widgets.length > 0;
+
 /** Les valeurs reçues avec le PDF, par nom de champ. */
 export function initialesDe(formulaire: FormulairePdf | null): Record<string, ValeurChamp> {
   const initiales: Record<string, ValeurChamp> = {};

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChampFormulaire, WidgetChamp } from "../coeur";
-import { apresClic, coche, initialesDe, libelleDe, remplissable, tailleSaisie, texteDe } from "./formulaire";
+import { apresClic, coche, initialesDe, libelleDe, remplissable, signable, tailleSaisie, texteDe } from "./formulaire";
 
 const widget = (etat: string | null, plus: Partial<WidgetChamp> = {}): WidgetChamp => ({ page: 0, x: 0, y: 0, largeur: 100, hauteur: 20, etat, taille: 0, alignement: 0, ...plus });
 
@@ -19,6 +19,7 @@ const champ = (plus: Partial<ChampFormulaire>): ChampFormulaire => ({
   multiple: false,
   saisieLibre: false,
   sansDecocher: false,
+  signe: false,
   widgets: [widget(null)],
   ...plus,
 });
@@ -30,6 +31,10 @@ describe("formulaires", () => {
     expect(remplissable(champ({ sorte: "signature" }))).toBe(false);
     expect(remplissable(champ({ sorte: "bouton" }))).toBe(false);
     expect(remplissable(champ({ widgets: [] }))).toBe(false);
+    // Un champ de signature : on y signe tant qu'il n'est pas signé (signature numérique).
+    expect(signable(champ({ sorte: "signature" }))).toBe(true);
+    expect(signable(champ({ sorte: "signature", signe: true }))).toBe(false);
+    expect(signable(champ({}))).toBe(false);
   });
 
   it("coche et décoche une case d'un clic", () => {

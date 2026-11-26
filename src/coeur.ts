@@ -341,6 +341,8 @@ export interface ChampFormulaire {
   saisieLibre: boolean;
   /** Un bouton radio coché ne se décoche pas d'un clic. */
   sansDecocher: boolean;
+  /** Champ de signature déjà signé (signature numérique) : pas de signature dessinée dessus. */
+  signe: boolean;
   widgets: WidgetChamp[];
 }
 
@@ -355,6 +357,12 @@ export interface FormulairePdf {
 
 /** Les champs du formulaire d'un PDF, d'après son contenu d'origine. */
 export const formulairePdf = (chemin: string) => invoke<FormulairePdf>("formulaire_pdf", { chemin });
+
+/** La signature et les initiales dessinées, gardées sur cet ordinateur (JSON ; vide : aucune). */
+export const signaturesGardees = () => invoke<string>("lire_signatures");
+
+/** Garde la signature et les initiales sur cet ordinateur (JSON ; vide : les oublie). */
+export const garderSignatures = (contenu: string) => invoke<void>("enregistrer_signatures", { contenu });
 
 /**
  * Propose de faire d'Automat-PDF le lecteur des PDF : la fenêtre de choix de Windows (ou, à défaut,

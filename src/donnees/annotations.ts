@@ -14,6 +14,17 @@ export const TEINTES_TRAIT: Teinte[] = ["rouge", "marine", "noir"];
  */
 export type ValeurChamp = string | string[];
 
+/**
+ * Signature ou initiales dessinées à la main (0.7.0) : les traits, en fractions de leur boîte (0 à
+ * 1 ; y vers le bas), et l'épaisseur du trait, en fraction de sa hauteur. La boîte a pour largeur
+ * `proportion` fois sa hauteur : posée dans une zone de mêmes proportions, rien ne se déforme.
+ */
+export interface Trace {
+  proportion: number;
+  traits: Point[][];
+  epaisseur: number;
+}
+
 /** Les mêmes couleurs que le cœur (annotations.rs), pour l'aperçu. */
 export const RVB: Record<Teinte, [number, number, number]> = {
   jaune: [255, 219, 31],
@@ -117,7 +128,9 @@ export type Annotation =
   | { id: string; sorte: "suppression"; page: number; cible: string }
   | { id: string; sorte: "retouche"; page: number; cible: string; texte: string }
   /** Champ du formulaire (`nom` : son nom complet) rempli (0.7.0). */
-  | { id: string; sorte: "champ"; page: number; nom: string; valeur: ValeurChamp };
+  | { id: string; sorte: "champ"; page: number; nom: string; valeur: ValeurChamp }
+  /** Signature ou initiales dessinées (0.7.0), posées dans la zone. */
+  | { id: string; sorte: "signature"; page: number; zone: Zone; trace: Trace; teinte: Teinte; initiales: boolean };
 
 /**
  * Les retouches du PDF lui-même (ses commentaires supprimés ou changés, ses champs remplis) : une
@@ -136,6 +149,7 @@ export function pourLeCoeur(annotations: Annotation[]) {
       if (a.sorte === "surlignage" || a.sorte === "soulignage" || a.sorte === "barre") return a.zones.length > 0;
       if (a.sorte === "dessin") return a.points.length >= 2;
       if (a.sorte === "forme") return Math.hypot(a.fin.x - a.debut.x, a.fin.y - a.debut.y) >= 1;
+      if (a.sorte === "signature") return a.trace.traits.some((trait) => trait.length > 0);
       return true;
     })
     .map((annotation) => {
@@ -326,6 +340,22 @@ export function nomRempli(nom: string): string {
   return `${base} - rempli.pdf`;
 }
 
+/** Nom proposé pour le PDF signé : « Contrat.pdf » → « Contrat - signé.pdf ». */
+export function nomSigne(nom: string): string {
+  const base = nom.replace(/\.pdf$/i, "");
+  return `${base} - signé.pdf`;
+}
+
+/**
+ * Ce qu'est le PDF à enregistrer, pour son nom : signé (seulement des signatures), rempli (des champs
+ * du formulaire, signés ou non), ou annoté (dès qu'il y a autre chose).
+ */
+export function sorteDEnregistrement(annotations: Annotation[]): "signe" | "rempli" | "annote" {
+  if (annotations.length > 0 && annotations.every((a) => a.sorte === "signature")) return "signe";
+  if (annotations.some((a) => a.sorte === "champ") && annotations.every((a) => a.sorte === "champ" || a.sorte === "signature")) return "rempli";
+  return "annote";
+}
+
 /** Les annotations sans celles effacées d'un geste de gomme (une seule étape à annuler). */
 export function sans(annotations: Annotation[], effacees: Iterable<string>): Annotation[] {
   const ids = new Set(effacees);
@@ -372,6 +402,7 @@ export function zoneDe(annotation: Annotation): Zone {
     case "blanc":
     case "correction":
     case "tampon":
+    case "signature":
       return annotation.zone;
     case "note":
       return { x: annotation.x, y: annotation.y, largeur: 20, hauteur: 20 };

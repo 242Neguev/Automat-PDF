@@ -370,6 +370,17 @@ pub fn annoter_pdf(
 ) -> Result<(), Erreur> {
     let octets = memoire::pdf(chemin)?;
     let mut document = pdf::charger(&octets, &nom_de(chemin))?;
+    // Un champ de signature où l'on a signé à la main ne demande plus de signature.
+    let signatures: Vec<(usize, [f64; 4])> = annotations
+        .iter()
+        .filter_map(|annotation| match annotation {
+            Annotation::Signature { page, zone, .. } => {
+                Some((*page, [zone.x, zone.y, zone.largeur, zone.hauteur]))
+            }
+            _ => None,
+        })
+        .collect();
+    formulaires::retirer_champs_signes(&mut document, &signatures);
     annotations::annoter(&mut document, annotations, |image| {
         images::image_decodee(&fichiers::lire(image, Nature::Image)?, &nom_de(image))
     })?;

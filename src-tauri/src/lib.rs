@@ -233,6 +233,8 @@ pub fn run() {
             commandes::commentaires_pdf,
             commandes::formulaire_pdf,
             commandes::retoucher_lecture,
+            commandes::lire_signatures,
+            commandes::enregistrer_signatures,
             commandes::imprimer_pdf,
             commandes::imprimantes,
             commandes::feuille_imprimante,

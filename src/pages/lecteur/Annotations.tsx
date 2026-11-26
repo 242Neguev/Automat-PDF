@@ -21,6 +21,7 @@ import {
   IconRubberStamp,
   IconScribble,
   IconShape,
+  IconSignature,
   IconSquare,
   IconStrikethrough,
   IconTrash,
@@ -55,6 +56,7 @@ import {
   type Zone,
 } from "../../donnees/annotations";
 import { versLaPage, type Rotation } from "../../donnees/affichage";
+import { chemin, zoneSignature, type SignatureChoisie } from "../../donnees/signature";
 import { textes } from "../../textes";
 
 const t = textes.lecteur.annotation;
@@ -70,6 +72,7 @@ export type OutilAnnotation =
   | "dessin"
   | "tampon"
   | "image"
+  | "signature"
   | "corriger"
   | "correcteur"
   | "gomme";
@@ -85,11 +88,12 @@ const ICONES: Record<OutilAnnotation, typeof IconPointer> = {
   dessin: IconScribble,
   tampon: IconRubberStamp,
   image: IconPhoto,
+  signature: IconSignature,
   corriger: IconCursorText,
   correcteur: IconSquare,
   gomme: IconEraser,
 };
-const ORDRE: OutilAnnotation[] = ["selection", "surligner", "souligner", "barrer", "note", "texte", "forme", "dessin", "tampon", "image", "corriger", "correcteur", "gomme"];
+const ORDRE: OutilAnnotation[] = ["selection", "surligner", "souligner", "barrer", "note", "texte", "forme", "dessin", "tampon", "image", "signature", "corriger", "correcteur", "gomme"];
 
 const ICONES_FORMES: Record<Forme, typeof IconPointer> = { rectangle: IconRectangle, ellipse: IconCircle, ligne: IconLine, fleche: IconArrowNarrowRight };
 const FORMES: Forme[] = ["rectangle", "ellipse", "ligne", "fleche"];
@@ -105,6 +109,7 @@ const OUTIL_DE: Record<Annotation["sorte"], OutilAnnotation> = {
   dessin: "dessin",
   tampon: "tampon",
   image: "image",
+  signature: "signature",
   correction: "corriger",
   blanc: "correcteur",
   // Retouches du PDF (commentaires, champs remplis) : jamais montrées comme des annotations.
@@ -332,6 +337,8 @@ interface PropsCouche {
   onEffacer: (ids: string[]) => void;
   /** Un commentaire du PDF choisi dans la liste : un cadre le montre un instant sur la page. */
   repere?: Zone | null;
+  /** La signature (ou les initiales) que l'outil Signature pose d'un clic. */
+  signature?: SignatureChoisie | null;
 }
 
 /** Passage surligné, souligné ou barré : la même façon de choisir les mots. */
@@ -346,7 +353,12 @@ type Geste =
   | { sorte: "forme"; debut: Point; courant: Point }
   | { sorte: "dessin"; points: Point[] }
   | { sorte: "deplacer"; annotation: Annotation; debut: Point; courant: Point }
-  | { sorte: "taille"; annotation: Annotation & { sorte: "image" | "tampon" }; debut: Point; courant: Point };
+  | { sorte: "taille"; annotation: Agrandissable; debut: Point; courant: Point };
+
+/** Ce qui s'agrandit par sa poignée, sans se déformer. */
+type Agrandissable = Annotation & { sorte: "image" | "tampon" | "signature" };
+const agrandissable = (annotation: Annotation): annotation is Agrandissable =>
+  annotation.sorte === "image" || annotation.sorte === "tampon" || annotation.sorte === "signature";
 
 /** L'annotation décalée de (dx, dy) points. */
 function decaler(annotation: Annotation, dx: number, dy: number): Annotation {
@@ -359,6 +371,7 @@ function decaler(annotation: Annotation, dx: number, dy: number): Annotation {
     case "image":
     case "blanc":
     case "tampon":
+    case "signature":
       return { ...annotation, zone: { ...annotation.zone, x: annotation.zone.x + dx, y: annotation.zone.y + dy } };
     case "forme":
       return { ...annotation, debut: point(annotation.debut), fin: point(annotation.fin) };
@@ -375,9 +388,9 @@ function decaler(annotation: Annotation, dx: number, dy: number): Annotation {
   }
 }
 
-/** L'image ou le tampon agrandi de `dx` points en largeur, sans déformation. */
-function agrandir(annotation: Annotation & { sorte: "image" | "tampon" }, dx: number, proportion: number): Annotation {
-  const largeur = Math.max(annotation.sorte === "tampon" ? 40 : 12, annotation.zone.largeur + dx);
+/** L'image, le tampon ou la signature agrandi de `dx` points en largeur, sans déformation. */
+function agrandir(annotation: Agrandissable, dx: number, proportion: number): Annotation {
+  const largeur = Math.max(annotation.sorte === "tampon" ? 40 : annotation.sorte === "signature" ? 16 : 12, annotation.zone.largeur + dx);
   return { ...annotation, zone: { ...annotation.zone, largeur, hauteur: largeur / proportion } };
 }
 
@@ -439,9 +452,10 @@ export function CoucheAnnotations(props: PropsCouche) {
     return { x: ici.x / echelle, y: ici.y / echelle };
   };
 
-  /** Largeur sur hauteur d'une image ou d'un tampon, gardée quand on l'agrandit. */
-  const proportion = (annotation: Annotation & { sorte: "image" | "tampon" }) =>
-    (annotation.sorte === "image" ? props.images[annotation.chemin]?.proportion : undefined) ?? annotation.zone.largeur / Math.max(1, annotation.zone.hauteur);
+  /** Largeur sur hauteur d'une image, d'un tampon ou d'une signature, gardée quand on l'agrandit. */
+  const proportion = (annotation: Agrandissable) =>
+    (annotation.sorte === "image" ? props.images[annotation.chemin]?.proportion : annotation.sorte === "signature" ? annotation.trace.proportion : undefined) ??
+    annotation.zone.largeur / Math.max(1, annotation.zone.hauteur);
 
   /** Les annotations de cette page sous le pointeur (là où passe la gomme). */
   function touchees(evenement: { clientX: number; clientY: number }): string[] {
@@ -510,6 +524,12 @@ export function CoucheAnnotations(props: PropsCouche) {
       const tampon: Annotation = { id: nouvelId(), sorte: "tampon", page, zone: zoneTampon(reglages.tampon, ici), mot: reglages.tampon, date: reglages.avecDate ? dateDuJour() : null };
       props.onAjouter(tampon);
       onSelection(tampon.id);
+    } else if (outil === "signature" && props.signature) {
+      evenement.preventDefault();
+      const { trace, teinte, initiales } = props.signature;
+      const signature: Annotation = { id: nouvelId(), sorte: "signature", page, zone: zoneSignature(trace, ici, initiales), trace, teinte, initiales };
+      props.onAjouter(signature);
+      onSelection(signature.id);
     } else if (outil === "corriger" || outil === "correcteur") {
       capturer(evenement, { sorte: outil, debut: ici, courant: ici });
       setSurvol([]);
@@ -601,7 +621,7 @@ export function CoucheAnnotations(props: PropsCouche) {
     // passer les clics vers le texte de la page).
     evenement.currentTarget.setPointerCapture(evenement.pointerId);
     const ici = point(evenement);
-    if (sorte === "taille" && (annotation.sorte === "image" || annotation.sorte === "tampon")) setGeste({ sorte: "taille", annotation, debut: ici, courant: ici });
+    if (sorte === "taille" && agrandissable(annotation)) setGeste({ sorte: "taille", annotation, debut: ici, courant: ici });
     else setGeste({ sorte: "deplacer", annotation, debut: ici, courant: ici });
   }
 
@@ -831,6 +851,29 @@ export function CoucheAnnotations(props: PropsCouche) {
             style={{ left: px(annotation.zone.x), top: px(annotation.zone.y), width: px(annotation.zone.largeur), height: px(annotation.zone.hauteur), pointerEvents: touchables ? "auto" : "none" }}
           >
             {image && <img src={image.adresse} alt="" draggable={false} />}
+            {choisie && enSelection && <span className="poignee-annotation" aria-label={t.redimensionner} onPointerDown={prise("taille")} onPointerMove={pointeurMouvement} onPointerUp={pointeurHaut} />}
+          </div>
+        );
+      }
+      case "signature": {
+        const { trace } = annotation;
+        return (
+          <div
+            key={annotation.id}
+            data-annotation-id={annotation.id}
+            className="annotation-image annotation-signature"
+            data-selectionnee={choisie}
+            data-initiales={annotation.initiales || undefined}
+            onPointerDown={enSelection ? prise() : undefined}
+            onPointerMove={pointeurMouvement}
+            onPointerUp={pointeurHaut}
+            style={{ left: px(annotation.zone.x), top: px(annotation.zone.y), width: px(annotation.zone.largeur), height: px(annotation.zone.hauteur), pointerEvents: touchables ? "auto" : "none" }}
+          >
+            <svg viewBox={`0 0 ${trace.proportion} 1`} preserveAspectRatio="none" aria-hidden>
+              {trace.traits.map((trait, rang) => (
+                <path key={rang} d={chemin(trait, trace.proportion, 1)} stroke={couleur(annotation.teinte)} strokeWidth={trace.epaisseur} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              ))}
+            </svg>
             {choisie && enSelection && <span className="poignee-annotation" aria-label={t.redimensionner} onPointerDown={prise("taille")} onPointerMove={pointeurMouvement} onPointerUp={pointeurHaut} />}
           </div>
         );
