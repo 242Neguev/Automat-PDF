@@ -189,7 +189,7 @@ struct Conversion {
 
 /// Chemins des fichiers à créer : le nom de chaque source avec la nouvelle extension, sans écraser
 /// un fichier existant ni un autre de la série (« Rapport (2).pdf »).
-fn cibles(sources: &[PathBuf], dossier: &Path, extension: &str) -> Vec<PathBuf> {
+pub(crate) fn cibles(sources: &[PathBuf], dossier: &Path, extension: &str) -> Vec<PathBuf> {
     let mut pris = HashSet::new();
     sources
         .iter()

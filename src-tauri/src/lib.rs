@@ -38,6 +38,7 @@ pub mod operations;
 mod outlook;
 mod ouverture;
 mod pdf;
+mod pdf_en_texte;
 mod pdf_en_word;
 mod pilotage;
 mod pixels;
@@ -266,6 +267,7 @@ pub fn run() {
             commandes::office_en_pdf,
             commandes::pdf_en_word,
             commandes::reconnaitre_texte,
+            commandes::pdf_en_texte,
             commandes::semble_numerise,
             commandes::reconnaitre_lecture,
             commandes::enregistrer_lecture,

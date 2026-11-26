@@ -62,6 +62,30 @@ pub fn pdf_herite(n: usize, texte: &str) -> Vec<u8> {
     construire(n, texte, false)
 }
 
+/// Un PDF d'une page A4 qui n'a que l'image de `pdf_herite(1, texte)`, comme un scan.
+pub fn scan(texte: &str) -> Vec<u8> {
+    let source = Arc::new(pdf_herite(1, texte));
+    let (largeur, hauteur, rvb) = crate::rendu::pixels_page(source, "source.pdf", 0, 200).unwrap();
+    let mut png = Vec::new();
+    image::RgbImage::from_raw(largeur, hauteur, rvb)
+        .unwrap()
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    crate::images::images_en_pdf(
+        &[crate::images::ImageSource {
+            nom: "scan.png".into(),
+            octets: &png,
+            rotation: 0,
+            ppp: None,
+        }],
+        crate::images::OptionsImages {
+            format: crate::images::FormatFeuille::A4,
+            marge_mm: 0.0,
+        },
+    )
+    .unwrap()
+}
+
 /// PDF de `n` pages dont la première a un lien interne vers la dernière.
 pub fn pdf_avec_lien(n: usize, texte: &str) -> Vec<u8> {
     construire(n, texte, true)

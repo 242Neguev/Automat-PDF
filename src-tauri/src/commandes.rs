@@ -467,6 +467,29 @@ pub async fn pdf_en_word(
     .await
 }
 
+/// Le texte de PDF dans des fichiers texte (« nom.txt ») ; celui des pages numérisées est reconnu
+/// si `reconnaitre`. L'avancement est annoncé par l'événement `progression-conversion` : fichiers
+/// faits, fichiers, pages lues du fichier en cours, ses pages à lire.
+#[tauri::command]
+pub async fn pdf_en_texte<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    fichiers: Vec<String>,
+    dossier: String,
+    reconnaitre: bool,
+) -> Result<Conversions, Erreur> {
+    en_arriere_plan(move || {
+        crate::pdf_en_texte::pdf_en_texte(
+            &fichiers,
+            &dossier,
+            reconnaitre,
+            |fait, total, page, pages| {
+                let _ = app.emit("progression-conversion", (fait, total, page, pages));
+            },
+        )
+    })
+    .await
+}
+
 /// PDF numérisés rendus cherchables (OCR, moteur du système) : chacun devient « … - texte
 /// reconnu.pdf » dans `dossier`. L'avancement est annoncé par l'événement `progression-conversion` :
 /// fichiers faits, fichiers, pages lues du fichier en cours, ses pages à lire.

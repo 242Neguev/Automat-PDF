@@ -568,6 +568,12 @@ export const textes = {
       sousTitre: "Convertir des PDF en documents Word modifiables (.docx), avec ou sans Microsoft Word.",
       motsCles: "word docx modifier modifiable éditer retoucher convertir transformer texte",
     },
+    pdfEnTexte: {
+      titre: "PDF en texte",
+      description: "Fichier texte (.txt)",
+      sousTitre: "Enregistrer le texte de PDF dans des fichiers texte, page après page ; celui des pages numérisées est reconnu sur l'ordinateur.",
+      motsCles: "texte txt extraire extraction exporter export copier contenu brut bloc-notes notepad textedit convertir transformer",
+    },
     numeriser: {
       titre: "Numériser",
       description: "Du scanner au PDF",
@@ -1127,6 +1133,20 @@ export const textes = {
       deposerDetail: "Chacun deviendra un document Word modifiable (.docx).",
       aide: "Par Microsoft Word s'il est installé, le plus fidèle ; sinon, Automat-PDF convertit lui-même : texte modifiable, images à leur place, colonnes alignées par des tabulations. Relisez le document obtenu. Un PDF numérisé sans texte reconnu ne donne que des images : reconnaissez d'abord son texte (outil Reconnaître le texte).",
       sansWord: `Microsoft Word n'est pas installé sur ${CET_ORDINATEUR} : Automat-PDF convertira lui-même, avec une mise en page plus simple que celle de Word (paragraphes, polices, images ; les tableaux deviennent des colonnes alignées).`,
+    },
+    texte: {
+      deposer: "Glissez vos PDF ici",
+      deposerDetail: "Le texte de chacun sera enregistré dans un fichier texte (.txt).",
+      aide: "Le texte suit l'ordre des lignes de chaque page ; les colonnes d'un tableau sont séparées par des tabulations, les pages par une ligne vide. Les fichiers texte s'ouvrent avec tous les éditeurs. Les PDF ne sont pas modifiés.",
+      reconnaitre: "Reconnaître le texte des pages numérisées",
+      reconnaitreAide: `Les pages sans texte (scans) sont lues par ${SYSTEME}, sur ${CET_ORDINATEUR}, sans Internet. Relisez ce qui compte : une lecture automatique peut se tromper.`,
+      bouton: "Enregistrer en texte…",
+      choisirDossier: "Dossier où enregistrer les fichiers texte",
+      cree: (n: number) => `${n} fichier${n > 1 ? "s" : ""} texte enregistré${n > 1 ? "s" : ""}`,
+      aucun: "Aucun fichier texte n'a été enregistré",
+      echecs: (n: number) => `${n} PDF sans fichier texte :`,
+      progression: (fichier: number, fichiers: number, page: number, pages: number) =>
+        fichiers > 1 ? `Fichier ${fichier} sur ${fichiers} · reconnaissance du texte, page ${page} sur ${pages}` : `Reconnaissance du texte : page ${page} sur ${pages}`,
     },
     ocr: {
       deposer: "Glissez vos PDF numérisés ici",

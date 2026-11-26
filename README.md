@@ -198,6 +198,8 @@ src-tauri/               Cœur Rust (Tauri)
   src/office_mac.rs      Office pour Mac : documents copiés dans le conteneur de Word, Excel ou PowerPoint
                          (où leur bac à sable les laisse écrire sans rien demander), fichiers créés rangés à leur place
   src/pdf_en_word.rs     PDF en Word sans Word : lignes, paragraphes, colonnes et images remis en page
+  src/pdf_en_texte.rs    PDF en texte : le texte des pages dans des fichiers .txt (lignes de la page, colonnes
+                         séparées par des tabulations) ; celui des pages numérisées reconnu en mémoire
   src/contenu.rs         Contenu des pages lu par hayro : caractères (police, taille, couleur), images
   src/docx.rs            Document Word (DOCX) écrit directement : sections, paragraphes, taquets, images
   src/libreoffice.rs     LibreOffice trouvé (registre, dossiers des programmes), ou installé par winget

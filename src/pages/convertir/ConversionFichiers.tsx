@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ActionIcon, Alert, Button, Group, List, Paper, Progress, Stack, Text, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconFilePlus, IconTransform, IconX } from "@tabler/icons-react";
@@ -27,6 +27,8 @@ interface Props {
   deposerDetail: string;
   aide: string;
   convertir: (fichiers: string[], dossier: string) => Promise<Conversions>;
+  /** Réglages de l'outil, sous la liste des fichiers. */
+  options?: ReactNode;
   /** Libellés propres à l'outil, à la place de ceux d'une conversion. */
   libelles?: Partial<Libelles>;
 }
@@ -43,7 +45,7 @@ interface Libelles {
 
 
 /** Une liste de fichiers à convertir, chacun en un fichier du même nom dans le dossier choisi. */
-export default function ConversionFichiers({ outil, filtre, deposer, deposerDetail, aide, convertir, libelles = {} }: Props) {
+export default function ConversionFichiers({ outil, filtre, deposer, deposerDetail, aide, convertir, options, libelles = {} }: Props) {
   const l = {
     bouton: t.convertir,
     choisirDossier: t.choisirDossier,
@@ -136,6 +138,7 @@ export default function ConversionFichiers({ outil, filtre, deposer, deposerDeta
           </Paper>
         </>
       )}
+      {options}
       <Text size="sm" c="dimmed">
         {aide}
       </Text>

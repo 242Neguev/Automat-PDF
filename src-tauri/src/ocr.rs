@@ -242,6 +242,32 @@ pub fn reconnaitre_en_memoire(
     Ok(bilan)
 }
 
+/// Le texte reconnu des pages données (à partir de 0), sans toucher au PDF : la couche de texte est
+/// posée sur une copie en mémoire, puis relue comme le texte d'un PDF ordinaire, ligne après ligne
+/// d'après la place des mots (les colonnes d'un tableau séparées par des tabulations).
+/// `avancement(pages lues, pages à lire)`.
+pub fn textes_reconnus(
+    octets: &Arc<Vec<u8>>,
+    nom: &str,
+    pages: &[usize],
+    avancement: &(dyn Fn(usize, usize) + Sync),
+) -> Result<Vec<(usize, String)>, Erreur> {
+    disponible()?;
+    let lues = lire_pages(octets, nom, pages, avancement)?;
+    let mut document = pdf::charger(octets, nom)?;
+    let ids: Vec<ObjectId> = document.get_pages().into_values().collect();
+    for (page, lignes) in &lues {
+        if let (Some(&id), false) = (ids.get(*page), lignes.is_empty()) {
+            poser(&mut document, id, lignes)?;
+        }
+    }
+    let textes = texte::textes(Arc::new(pdf::ecrire(document)?), nom)?;
+    Ok(pages
+        .iter()
+        .map(|&page| (page, textes.get(page).cloned().unwrap_or_default()))
+        .collect())
+}
+
 /// PDF numérisés rendus cherchables : chacun devient « … - texte reconnu.pdf » dans `dossier`.
 /// `avancement(fichiers faits, fichiers, pages lues du fichier en cours, ses pages à lire)`.
 pub fn reconnaitre_fichiers(
@@ -578,37 +604,13 @@ mod systeme {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::essais::pdf_herite;
+    use crate::essais::{pdf_herite, scan};
 
     fn mot(texte: &str, boite: [f64; 4]) -> Mot {
         Mot {
             texte: texte.into(),
             boite,
         }
-    }
-
-    /// Un PDF d'une page A4 qui n'a que l'image de `pdf_herite(1, texte)`, comme un scan.
-    fn scan(texte: &str) -> Vec<u8> {
-        let source = Arc::new(pdf_herite(1, texte));
-        let (largeur, hauteur, rvb) = rendu::pixels_page(source, "source.pdf", 0, 200).unwrap();
-        let mut png = Vec::new();
-        image::RgbImage::from_raw(largeur, hauteur, rvb)
-            .unwrap()
-            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
-            .unwrap();
-        crate::images::images_en_pdf(
-            &[crate::images::ImageSource {
-                nom: "scan.png".into(),
-                octets: &png,
-                rotation: 0,
-                ppp: None,
-            }],
-            crate::images::OptionsImages {
-                format: crate::images::FormatFeuille::A4,
-                marge_mm: 0.0,
-            },
-        )
-        .unwrap()
     }
 
     #[test]
