@@ -92,6 +92,18 @@ pub async fn enregistrer_pages(pages: Vec<PageChoisie>, sortie: String) -> Resul
     en_arriere_plan(move || operations::enregistrer_pages(&pages, &sortie)).await
 }
 
+/// Un PDF par page choisie, dans un nouveau dossier (chemin renvoyé).
+#[tauri::command]
+pub async fn extraire_pages(
+    chemin: String,
+    pages: Vec<usize>,
+    dossier: String,
+    sous_dossier: String,
+) -> Result<String, Erreur> {
+    en_arriere_plan(move || operations::extraire_pages(&chemin, &pages, &dossier, &sous_dossier))
+        .await
+}
+
 /// Vignette JPEG d'une image (redressée).
 #[tauri::command]
 pub async fn vignette_image(chemin: String, largeur: u32) -> Result<Response, Erreur> {

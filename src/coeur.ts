@@ -47,6 +47,10 @@ export const vignettePdf = (chemin: string, page: number, largeur: number) => in
 /** Enregistre dans `sortie` un PDF fait des pages choisies, dans l'ordre. */
 export const enregistrerPages = (pages: PageChoisie[], sortie: string) => invoke<void>("enregistrer_pages", { pages, sortie });
 
+/** Un PDF par page choisie (à partir de 0), dans le dossier `sousDossier` créé dans `dossier` ; renvoie son chemin. */
+export const extrairePages = (chemin: string, pages: number[], dossier: string, sousDossier: string) =>
+  invoke<string>("extraire_pages", { chemin, pages, dossier, sousDossier });
+
 /** Vignette JPEG d'une image (redressée), large de `largeur` pixels au plus. */
 export const vignetteImage = (chemin: string, largeur: number) => invoke<ArrayBuffer>("vignette_image", { chemin, largeur });
 

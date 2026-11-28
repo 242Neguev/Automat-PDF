@@ -5,6 +5,7 @@ import {
   IconArrowsMinimize,
   IconEyeOff,
   IconFeather,
+  IconFileExport,
   IconFiles,
   IconFileTypeDocx,
   IconFileTypePdf,
@@ -43,6 +44,7 @@ import MiseEnPage from "./pages/mise-en-page/MiseEnPage";
 import Compresser from "./pages/optimiser/Compresser";
 import OrganiserPdf from "./pages/organiser/OrganiserPdf";
 import MotDePasse from "./pages/securite/MotDePasse";
+import ExtrairePages from "./pages/separation/ExtrairePages";
 import SeparationParPersonne from "./pages/separation/SeparationParPersonne";
 import SeparationPdf from "./pages/separation/SeparationPdf";
 import { textes } from "./textes";
@@ -90,6 +92,7 @@ export const GROUPES: Groupe[] = [
     teinte: "lavande",
     icone: IconScissors,
     outils: [
+      { cle: "extraire", icone: IconFileExport, page: ExtrairePages, accepte: ["pdf"] },
       { cle: "separer", icone: IconScissors, page: SeparationPdf, accepte: ["pdf", "liste"] },
       { cle: "parPersonne", icone: IconUsers, page: SeparationParPersonne, accepte: ["pdf", "liste"] },
     ],

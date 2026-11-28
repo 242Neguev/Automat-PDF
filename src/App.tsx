@@ -16,7 +16,7 @@ import { destination } from "./donnees/destination";
 import { ajouterRecent, ecrireRecents, lireRecents, retirerRecent, type DocumentRecent } from "./donnees/recents";
 import { BandeauMiseAJour, useMiseAJour } from "./MiseAJour";
 import { GROUPE_DE, GROUPES, OUTILS, type DefinitionOutil, type Outil } from "./outils";
-import { sortesDe, transmettre } from "./pages/commun/reception";
+import { OUTIL_DEMANDE, sortesDe, transmettre, type DemandeOutil } from "./pages/commun/reception";
 import { MAC } from "./systeme";
 import Vignette from "./pages/commun/Vignette";
 import Lecteur from "./pages/lecteur/Lecteur";
@@ -106,6 +106,19 @@ export default function App() {
     );
     if (laisses.length > 0) notifications.show({ color: "orange", title: tr.ignores(laisses.length), message: laisses.map(nomDe).join(", "), autoClose: 10000 });
   }
+
+  // Un outil en fait ouvrir un autre avec ses fichiers (Séparer → Extraire des pages).
+  const confierDemande = useRef(confier);
+  confierDemande.current = confier;
+  useEffect(() => {
+    const demande = (evenement: Event) => {
+      const { outil, fichiers } = (evenement as CustomEvent<DemandeOutil>).detail;
+      const definition = OUTILS.find((candidat) => candidat.cle === outil);
+      if (definition) confierDemande.current(definition, fichiers);
+    };
+    window.addEventListener(OUTIL_DEMANDE, demande);
+    return () => window.removeEventListener(OUTIL_DEMANDE, demande);
+  }, []);
 
   /** Ouvre un PDF dans le lecteur, dans un nouvel onglet (ou le sien) ; il passe en tête des documents récents. */
   function lire(chemin: string) {

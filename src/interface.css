@@ -502,6 +502,31 @@ html[data-fenetre="verre"][data-mantine-color-scheme="light"] {
   background-color: var(--automat-actif-fond);
 }
 
+/* Choisir des pages en les voyant : vignettes à cocher ; celle montrée en grand est entourée de tirets. */
+.vignette-choix {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+}
+.vignette-choix:hover {
+  background-color: var(--automat-survol-fond);
+}
+.vignette-choix[data-choisie] {
+  border-color: var(--automat-accent-bord);
+  background-color: var(--automat-accent-fond);
+}
+.vignette-choix[data-vue] {
+  outline: 2px dashed var(--automat-accent-bord);
+  outline-offset: 2px;
+}
+.vignette-choix .coche {
+  color: var(--mantine-color-eau-6);
+}
+
 /* Panneau de gauche du lecteur : vignettes des pages, ou signets (sommaire) quand le PDF en a. */
 .panneau-lateral {
   display: flex;

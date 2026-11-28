@@ -22,6 +22,34 @@ export function lirePlages(texte: string, total: number): Plages {
   return { pages };
 }
 
+/** Pages (à partir de 0) écrites comme on les tape : « 3, 5-7 » ; dans l'ordre du document, sans doublon. */
+export function ecrirePlages(pages: number[]): string {
+  const triees = [...new Set(pages)].sort((a, b) => a - b);
+  const morceaux: string[] = [];
+  for (let debut = 0; debut < triees.length; ) {
+    let fin = debut;
+    while (fin + 1 < triees.length && triees[fin + 1] === triees[fin] + 1) fin++;
+    morceaux.push(fin > debut ? `${triees[debut] + 1}-${triees[fin] + 1}` : `${triees[debut] + 1}`);
+    debut = fin + 1;
+  }
+  return morceaux.join(", ");
+}
+
+/**
+ * Nom proposé pour un PDF fait de pages choisies (à partir de 0) d'un PDF nommé `base` (sans
+ * « .pdf ») : « Rapport - page 3.pdf », « Rapport - pages 3 à 5.pdf », « Rapport - pages 2, 5 et
+ * 7.pdf », au-delà de quatre pages éparses « Rapport - 9 pages.pdf ».
+ */
+export function nomExtrait(base: string, pages: number[]): string {
+  const numeros = [...new Set(pages)].sort((a, b) => a - b).map((page) => page + 1);
+  const dernier = numeros[numeros.length - 1];
+  if (numeros.length === 0) return `${base}.pdf`;
+  if (numeros.length === 1) return `${base} - page ${dernier}.pdf`;
+  if (dernier - numeros[0] === numeros.length - 1) return `${base} - pages ${numeros[0]} à ${dernier}.pdf`;
+  if (numeros.length <= 4) return `${base} - pages ${numeros.slice(0, -1).join(", ")} et ${dernier}.pdf`;
+  return `${base} - ${numeros.length} pages.pdf`;
+}
+
 /** Façons de choisir les pages concernées par une opération. */
 export type ChoixPages = "toutes" | "sauf-premiere" | "cette" | "derniere" | "certaines";
 

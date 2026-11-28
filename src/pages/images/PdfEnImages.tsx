@@ -1,13 +1,14 @@
-import { useMemo, useState } from "react";
-import { Group, Paper, SegmentedControl, Select, Stack, Text, TextInput } from "@mantine/core";
-import { IconPhoto } from "@tabler/icons-react";
+import { useState } from "react";
+import { Button, Group, Modal, Paper, SegmentedControl, Select, Stack, Text } from "@mantine/core";
+import { IconLayoutGrid, IconPhoto } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { pagesPdf, pdfEnImages } from "../../coeur";
 import { dossierDe, nomDe } from "../../donnees/chemins";
-import { lirePlages } from "../../donnees/plages";
+import { ecrirePlages } from "../../donnees/plages";
 import { textes } from "../../textes";
 import Action from "../commun/Action";
 import BarreAction from "../commun/BarreAction";
+import ChoixPages from "../commun/ChoixPages";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -20,13 +21,15 @@ const t = textes.enImages;
 export default function PdfEnImages() {
   const [source, setSource] = useState<{ chemin: string; nom: string; pages: number } | null>(null);
   const [choix, setChoix] = useState<"toutes" | "certaines">("toutes");
-  const [plages, setPlages] = useState("1");
+  // Pages choisies en les voyant (« Certaines pages ») ; la première, au départ.
+  const [choisies, setChoisies] = useState<number[]>([0]);
+  const [vue, setVue] = useState(0);
+  const [choixOuvert, setChoixOuvert] = useState(false);
   const [format, setFormat] = useState<"png" | "jpeg">("png");
   const [resolution, setResolution] = useState("150");
   const [enCours, setEnCours] = useState(false);
   const [cree, setCree] = useState<Cree | null>(null);
-  const lecture = useMemo(() => (source && choix === "certaines" ? lirePlages(plages, source.pages) : null), [source, choix, plages]);
-  const nombre = !source ? 0 : !lecture ? source.pages : "pages" in lecture ? lecture.pages.length : 0;
+  const nombre = !source ? 0 : choix === "toutes" ? source.pages : choisies.length;
 
   async function choisir() {
     const chemin = await open({ multiple: false, directory: false, filters: [{ name: textes.pdf.filtre, extensions: ["pdf"] }] });
@@ -36,6 +39,8 @@ export default function PdfEnImages() {
   async function ouvrir(chemin: string) {
     try {
       setSource({ chemin, nom: nomDe(chemin), pages: (await pagesPdf(chemin)).length });
+      setChoisies([0]);
+      setVue(0);
       setCree(null);
     } catch (e) {
       signalerErreur(e);
@@ -44,13 +49,13 @@ export default function PdfEnImages() {
   useFichiersRecus("enImages", (fichiers) => void ouvrir(fichiers[0]));
 
   async function creer() {
-    if (!source || (lecture && "erreur" in lecture)) return;
+    if (!source || nombre === 0) return;
     const dossier = await open({ directory: true, multiple: false, title: t.choisirDossier, defaultPath: dossierDe(source.chemin) || undefined });
     if (typeof dossier !== "string") return;
     setEnCours(true);
     setCree(null);
     try {
-      const cible = await pdfEnImages(source.chemin, lecture?.pages ?? [], format, Number(resolution), dossier);
+      const cible = await pdfEnImages(source.chemin, choix === "toutes" ? [] : choisies, format, Number(resolution), dossier);
       setCree({ titre: t.cree(nombre), chemin: cible, dossier: true });
     } catch (e) {
       signalerErreur(e);
@@ -81,13 +86,14 @@ export default function PdfEnImages() {
                 <SegmentedControl value={choix} onChange={(valeur) => setChoix(valeur as typeof choix)} data={(["toutes", "certaines"] as const).map((value) => ({ value, label: t[value] }))} />
               </Stack>
               {choix === "certaines" && (
-                <TextInput
-                  label={t.plages}
-                  description={t.plagesAide}
-                  value={plages}
-                  onChange={(e) => setPlages(e.currentTarget.value)}
-                  error={lecture && "erreur" in lecture ? lecture.erreur : undefined}
-                />
+                <Group gap="sm" align="center">
+                  <Text size="sm" data-pages-choisies>
+                    {choisies.length > 0 ? t.choisies(ecrirePlages(choisies)) : t.aucune}
+                  </Text>
+                  <Button size="xs" variant="light" leftSection={<IconLayoutGrid size={14} />} onClick={() => setChoixOuvert(true)}>
+                    {t.voirPages}
+                  </Button>
+                </Group>
               )}
               <Group gap="xl" align="flex-start">
                 <Stack gap={4}>
@@ -118,6 +124,12 @@ export default function PdfEnImages() {
         </Paper>
       )}
       <Resultat cree={cree} onFermer={() => setCree(null)} />
+      <Modal opened={choixOuvert && source !== null} onClose={() => setChoixOuvert(false)} size="90%" title={t.plages}>
+        {source && <ChoixPages chemin={source.chemin} total={source.pages} choisies={choisies} onChoisies={setChoisies} vue={vue} onVue={setVue} />}
+        <Group justify="flex-end" mt="md">
+          <Button onClick={() => setChoixOuvert(false)}>{t.valider}</Button>
+        </Group>
+      </Modal>
     </Stack>
   );
 }

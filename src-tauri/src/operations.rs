@@ -172,6 +172,47 @@ pub fn enregistrer_pages(pages: &[PageChoisie], sortie: &str) -> Result<(), Erre
     fichiers::enregistrer(sortie, &pdf::assembler_pages(&sources, &assemblees)?)
 }
 
+/// Un PDF par page choisie (à partir de 0), dans le dossier `sous_dossier` créé dans `dossier`
+/// (chemin renvoyé) : « Rapport - page 003.pdf ». Le PDF d'origine ne change pas.
+pub fn extraire_pages(
+    chemin: &str,
+    pages: &[usize],
+    dossier: &str,
+    sous_dossier: &str,
+) -> Result<String, Erreur> {
+    if pages.is_empty() {
+        return Err(Erreur::simple("Aucune page à extraire."));
+    }
+    let octets = memoire::pdf(chemin)?;
+    let nom = nom_de(chemin);
+    let total = pdf::nombre_de_pages(&octets, &nom)?;
+    if let Some(page) = pages.iter().find(|&&page| page >= total) {
+        return Err(Erreur::simple(format!(
+            "La page {} n'existe pas : le PDF en compte {total}.",
+            page + 1
+        )));
+    }
+    let base = sans_extension(&nom);
+    let chiffres = total.to_string().len().max(3);
+    let sources = [(nom.clone(), octets.as_slice())];
+    let a_ecrire = pages
+        .iter()
+        .map(|&page| {
+            let une = [PageAssemblee {
+                source: 0,
+                page,
+                rotation: 0,
+            }];
+            Ok(FichierAEcrire {
+                nom: format!("{base} - page {:0chiffres$}.pdf", page + 1),
+                texte: None,
+                octets: Some(pdf::assembler_pages(&sources, &une)?),
+            })
+        })
+        .collect::<Result<Vec<_>, Erreur>>()?;
+    fichiers::ecrire(dossier, sous_dossier, &a_ecrire)
+}
+
 /// Une image choisie : son fichier et la rotation ajoutée (degrés, sens horaire).
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -953,6 +994,38 @@ mod tests {
         // Un fichier modifié est relu, pas pris dans la mémoire.
         enregistrer_pages(&[choix(&a, 1)], &sortie).unwrap();
         assert_eq!(pages_pdf(&sortie).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn extrait_un_pdf_par_page_choisie() {
+        let pdf = fichier_temporaire("extraire", "Rapport.pdf", &pdf_herite(12, "R"));
+        let dossier = std::env::temp_dir()
+            .join("automat-pdf-tests")
+            .join("extraire");
+        let _ = std::fs::remove_dir_all(dossier.join("Rapport - pages extraites"));
+        let cible = extraire_pages(
+            &pdf,
+            &[10, 1],
+            dossier.to_str().unwrap(),
+            "Rapport - pages extraites",
+        )
+        .unwrap();
+        let mut noms: Vec<String> = std::fs::read_dir(&cible)
+            .unwrap()
+            .map(|f| f.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        noms.sort();
+        assert_eq!(noms, ["Rapport - page 002.pdf", "Rapport - page 011.pdf"]);
+        // Chaque fichier a une page : la bonne.
+        for (nom, attendu) in noms.iter().zip(["R 2", "R 11"]) {
+            let octets = std::fs::read(Path::new(&cible).join(nom)).unwrap();
+            let textes = texte::textes(Arc::new(octets), nom).unwrap();
+            assert_eq!(textes.len(), 1);
+            assert!(textes[0].contains(attendu), "{nom} : {:?}", textes[0]);
+        }
+        let erreur = extraire_pages(&pdf, &[12], dossier.to_str().unwrap(), "x").unwrap_err();
+        assert!(erreur.message.contains("page 13"));
+        assert!(extraire_pages(&pdf, &[], dossier.to_str().unwrap(), "x").is_err());
     }
 
     #[test]

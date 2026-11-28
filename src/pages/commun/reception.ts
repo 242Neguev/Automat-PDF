@@ -23,6 +23,8 @@ export function sortesDe(chemin: string): SorteFichier[] {
 export const dela = (fichiers: string[], sorte: SorteFichier) => fichiers.filter((fichier) => sortesDe(fichier).includes(sorte));
 
 const gestionnaires = new Map<string, (fichiers: string[]) => void>();
+/** Pages confiées par le lecteur avec leur PDF (voir `confierPage`). */
+const pagesConfiees = new Map<string, number>();
 
 /** L'outil `outil` reçoit les fichiers qui lui sont confiés (déjà triés : il les accepte). */
 export function useFichiersRecus(outil: string, gestionnaire: (fichiers: string[]) => void) {
@@ -40,6 +42,35 @@ export function useFichiersRecus(outil: string, gestionnaire: (fichiers: string[
 /** Confie des fichiers à un outil ; `false` s'il ne sait pas les recevoir. */
 export function transmettre(outil: string, fichiers: string[]): boolean {
   const gestionnaire = gestionnaires.get(outil);
-  gestionnaire?.(fichiers);
+  try {
+    gestionnaire?.(fichiers);
+  } finally {
+    // Une page confiée ne vaut que pour cette remise.
+    pagesConfiees.clear();
+  }
   return gestionnaire !== undefined;
+}
+
+/**
+ * La page (à partir de 0) que le lecteur montrait de ce PDF quand il l'a confié à un outil : un
+ * outil qui choisit des pages peut partir de celle-là. Elle ne vaut que pour la remise qui suit.
+ */
+export function confierPage(chemin: string, page: number) {
+  pagesConfiees.set(chemin, page);
+}
+
+/** La page confiée avec ce PDF (à lire dès sa réception, avant tout `await`). */
+export const pageConfiee = (chemin: string): number | undefined => pagesConfiees.get(chemin);
+
+/** Événement : un outil en fait ouvrir un autre, avec des fichiers (l'application le reçoit). */
+export const OUTIL_DEMANDE = "automat-pdf:outil-demande";
+
+export interface DemandeOutil {
+  outil: string;
+  fichiers: string[];
+}
+
+/** Ouvre l'outil `outil` avec ces fichiers, comme le fait le lecteur. */
+export function demanderOutil(outil: string, fichiers: string[]) {
+  window.dispatchEvent(new CustomEvent<DemandeOutil>(OUTIL_DEMANDE, { detail: { outil, fichiers } }));
 }

@@ -91,6 +91,7 @@ import { formaterTaille } from "../../donnees/tailles";
 import { GROUPE_DE, type DefinitionOutil } from "../../outils";
 import { textes } from "../../textes";
 import { varsTeinte } from "../../theme";
+import { confierPage } from "../commun/reception";
 import Vignette from "../commun/Vignette";
 import { imagePage, relire } from "../commun/vignettes";
 import { signalerErreur } from "../commun/signalerErreur";
@@ -1411,7 +1412,17 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
               const Icone = definition.icone;
               const { titre, description } = textes.outils[definition.cle];
               return (
-                <UnstyledButton key={definition.cle} className="carte-action" onClick={() => onOutil(definition)} disabled={!formats} data-action={definition.cle}>
+                <UnstyledButton
+                  key={definition.cle}
+                  className="carte-action"
+                  onClick={() => {
+                    // La page lue part avec le PDF : Extraire des pages la propose déjà choisie.
+                    if (chemin) confierPage(chemin, courante_.current);
+                    onOutil(definition);
+                  }}
+                  disabled={!formats}
+                  data-action={definition.cle}
+                >
                   <span className="pastille" style={varsTeinte(GROUPE_DE[definition.cle].teinte)}>
                     <Icone size={17} stroke={1.8} />
                   </span>

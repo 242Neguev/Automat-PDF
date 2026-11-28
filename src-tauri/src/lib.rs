@@ -225,6 +225,7 @@ pub fn run() {
             commandes::pages_pdf,
             commandes::vignette_pdf,
             commandes::enregistrer_pages,
+            commandes::extraire_pages,
             commandes::vignette_image,
             commandes::lire_image,
             commandes::images_en_pdf,

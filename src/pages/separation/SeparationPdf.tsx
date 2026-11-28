@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Alert, List, NumberInput, SegmentedControl, Stack, Text } from "@mantine/core";
-import { IconScissors } from "@tabler/icons-react";
+import { Alert, Button, Group, List, NumberInput, SegmentedControl, Stack, Text } from "@mantine/core";
+import { IconFileExport, IconScissors } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { infosPdf, separerPdf } from "../../coeur";
 import { dossierDe, nomDe } from "../../donnees/chemins";
@@ -12,7 +12,7 @@ import BarreAction from "../commun/BarreAction";
 import ChampModele from "../commun/ChampModele";
 import Etape from "../commun/Etape";
 import EtapeListe from "../commun/EtapeListe";
-import { dela, useFichiersRecus } from "../commun/reception";
+import { dela, demanderOutil, useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
 import { signalerErreur } from "../commun/signalerErreur";
 import { useListe } from "../commun/useListe";
@@ -109,6 +109,16 @@ export default function SeparationPdf() {
               onChange={(valeur) => setMode(valeur as typeof mode)}
               data={(["page", "groupe"] as const).map((value) => ({ value, label: ts.modes[value] }))}
             />
+            {mode === "page" && (
+              <Alert variant="light" icon={<IconFileExport size={18} />} data-vers-extraire>
+                <Group justify="space-between" gap="sm">
+                  <Text size="sm">{ts.versExtraire}</Text>
+                  <Button size="xs" variant="light" leftSection={<IconFileExport size={14} />} onClick={() => demanderOutil("extraire", [source.chemin])}>
+                    {ts.boutonExtraire}
+                  </Button>
+                </Group>
+              </Alert>
+            )}
             {mode === "groupe" && (
               <NumberInput
                 w={260}

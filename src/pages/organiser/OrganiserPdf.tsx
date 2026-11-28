@@ -6,6 +6,7 @@ import {
   IconDeviceFloppy,
   IconFileExport,
   IconFilePlus,
+  IconMaximize,
   IconRotate,
   IconRotateClockwise,
   IconSelectAll,
@@ -16,6 +17,7 @@ import { rectSortingStrategy, SortableContext, sortableKeyboardCoordinates } fro
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { enregistrerPages, pagesPdf } from "../../coeur";
 import { aCote, nomDe } from "../../donnees/chemins";
+import { nomExtrait } from "../../donnees/plages";
 import { textes } from "../../textes";
 import { useFichiersRecus } from "../commun/reception";
 import Resultat, { type Cree } from "../commun/Resultat";
@@ -155,6 +157,16 @@ export default function OrganiserPdf() {
     }
   }
 
+  /** Nom proposé pour la sélection extraite : d'après ses pages (« … - page 3.pdf »), si elles viennent toutes du même PDF. */
+  function nomDeLExtrait(): string {
+    const premiere = choisies[0];
+    if (!premiere || choisies.some((page) => page.source !== premiere.source)) return t.nomExtrait;
+    return nomExtrait(
+      sources[premiere.source].nom.replace(/\.pdf$/i, ""),
+      choisies.map((page) => page.page),
+    );
+  }
+
   function clavier(evenement: KeyboardEvent) {
     const commande = evenement.ctrlKey || evenement.metaKey;
     if ((evenement.key === "Delete" || evenement.key === "Backspace") && selection.size > 0) supprimer(selection);
@@ -225,6 +237,16 @@ export default function OrganiserPdf() {
                   {t.selection(selection.size)}
                 </Badge>
               )}
+              <Button
+                size="xs"
+                variant="default"
+                leftSection={<IconMaximize size={16} />}
+                disabled={selection.size !== 1}
+                onClick={() => setApercu(pages.findIndex((page) => selection.has(page.id)))}
+                data-agrandir-selection
+              >
+                {t.agrandir}
+              </Button>
               <Button size="xs" variant="default" leftSection={<IconRotate size={16} />} disabled={selection.size === 0} onClick={() => modifier(pivoter(pages, selection, -1))}>
                 {t.pivoterGauche}
               </Button>
@@ -234,7 +256,7 @@ export default function OrganiserPdf() {
               <Button size="xs" variant="default" color="red" leftSection={<IconTrash size={16} />} disabled={selection.size === 0} onClick={() => supprimer(selection)}>
                 {t.supprimer}
               </Button>
-              <Button size="xs" variant="default" leftSection={<IconFileExport size={16} />} disabled={selection.size === 0} loading={enCours} onClick={() => enregistrer(choisies, t.nomExtrait)}>
+              <Button size="xs" variant="default" leftSection={<IconFileExport size={16} />} disabled={selection.size === 0} loading={enCours} onClick={() => enregistrer(choisies, nomDeLExtrait())}>
                 {t.extraire}
               </Button>
               <Button
