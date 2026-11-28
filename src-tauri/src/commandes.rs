@@ -8,7 +8,7 @@ use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::annotations::Annotation;
-use crate::caviardage::{ModeCaviardage, PageACaviarder, Rapport};
+use crate::caviardage::{ModeCaviardage, PageACaviarder, Rapport, Zone};
 use crate::commentaires::{Commentaire, Retouches};
 use crate::compression::{Bilan, Niveau};
 use crate::confidentialite::Confidentialite;
@@ -102,6 +102,42 @@ pub async fn extraire_pages(
 ) -> Result<String, Erreur> {
     en_arriere_plan(move || operations::extraire_pages(&chemin, &pages, &dossier, &sous_dossier))
         .await
+}
+
+/// Copie dans le presse-papiers l'image d'une zone de page (lecteur, « Capturer »).
+#[tauri::command]
+pub async fn copier_zone(chemin: String, page: usize, zone: Zone, dpi: u32) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::copier_zone(&chemin, page, zone, dpi)).await
+}
+
+/// Enregistre l'image d'une zone de page (PNG ou JPG, d'après l'extension de `sortie`).
+#[tauri::command]
+pub async fn enregistrer_zone_image(
+    chemin: String,
+    page: usize,
+    zone: Zone,
+    dpi: u32,
+    sortie: String,
+) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::enregistrer_zone_image(&chemin, page, zone, dpi, &sortie))
+        .await
+}
+
+/// Enregistre un PDF qui ne garde que la zone ; `true` : elle y a été reprise en image.
+#[tauri::command]
+pub async fn enregistrer_zone_pdf(
+    chemin: String,
+    page: usize,
+    zone: Zone,
+    sortie: String,
+) -> Result<bool, Erreur> {
+    en_arriere_plan(move || operations::enregistrer_zone_pdf(&chemin, page, zone, &sortie)).await
+}
+
+/// Copie un texte dans le presse-papiers (le texte d'une zone capturée).
+#[tauri::command]
+pub async fn copier_texte(texte: String) -> Result<(), Erreur> {
+    en_arriere_plan(move || crate::capture::copier_texte(&texte)).await
 }
 
 /// Vignette JPEG d'une image (redressée).

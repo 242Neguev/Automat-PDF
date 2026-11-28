@@ -189,7 +189,7 @@ fn rendre(
     Ok((u32::from(pixmap.width()), u32::from(pixmap.height()), rvb))
 }
 
-fn encoder(
+pub(crate) fn encoder(
     (largeur, hauteur, rvb): (u32, u32, Vec<u8>),
     format: FormatImage,
     qualite: u8,

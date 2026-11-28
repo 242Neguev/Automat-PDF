@@ -51,6 +51,28 @@ export const enregistrerPages = (pages: PageChoisie[], sortie: string) => invoke
 export const extrairePages = (chemin: string, pages: number[], dossier: string, sousDossier: string) =>
   invoke<string>("extraire_pages", { chemin, pages, dossier, sousDossier });
 
+/** Zone d'une page, en fractions de la page affichée, depuis son coin en haut à gauche. */
+export interface ZoneFractions {
+  x: number;
+  y: number;
+  largeur: number;
+  hauteur: number;
+}
+
+/** Copie dans le presse-papiers l'image d'une zone de la page `page` (à partir de 0), à `dpi` points par pouce. */
+export const copierZone = (chemin: string, page: number, zone: ZoneFractions, dpi: number) => invoke<void>("copier_zone", { chemin, page, zone, dpi });
+
+/** Enregistre l'image d'une zone : PNG ou JPG, d'après l'extension de `sortie`. */
+export const enregistrerZoneImage = (chemin: string, page: number, zone: ZoneFractions, dpi: number, sortie: string) =>
+  invoke<void>("enregistrer_zone_image", { chemin, page, zone, dpi, sortie });
+
+/** Enregistre un PDF qui ne garde que la zone ; `true` : elle y a été reprise en image. */
+export const enregistrerZonePdf = (chemin: string, page: number, zone: ZoneFractions, sortie: string) =>
+  invoke<boolean>("enregistrer_zone_pdf", { chemin, page, zone, sortie });
+
+/** Copie un texte dans le presse-papiers du système. */
+export const copierTexte = (texte: string) => invoke<void>("copier_texte", { texte });
+
 /** Vignette JPEG d'une image (redressée), large de `largeur` pixels au plus. */
 export const vignetteImage = (chemin: string, largeur: number) => invoke<ArrayBuffer>("vignette_image", { chemin, largeur });
 

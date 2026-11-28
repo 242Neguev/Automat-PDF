@@ -1,6 +1,7 @@
 mod annotations;
 #[cfg(target_os = "macos")]
 mod applescript;
+mod capture;
 mod caviardage;
 mod cms;
 mod commandes;
@@ -226,6 +227,10 @@ pub fn run() {
             commandes::vignette_pdf,
             commandes::enregistrer_pages,
             commandes::extraire_pages,
+            commandes::copier_zone,
+            commandes::enregistrer_zone_image,
+            commandes::enregistrer_zone_pdf,
+            commandes::copier_texte,
             commandes::vignette_image,
             commandes::lire_image,
             commandes::images_en_pdf,

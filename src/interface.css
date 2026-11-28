@@ -1151,3 +1151,23 @@ textarea.champ-pdf__saisie {
   border: 1px solid var(--mantine-color-eau-6);
   background-color: var(--automat-encart);
 }
+
+/* Lecteur, « Capturer » : la couche où se trace le cadre couvre la page ; autour du cadre, la page
+   s'assombrit (l'ombre du cadre, coupée au bord de la page). */
+.couche-capture {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+}
+.cadre-capture {
+  position: absolute;
+  outline: 2px dashed var(--mantine-color-eau-6);
+  box-shadow: 0 0 0 100000px rgba(20, 24, 28, 0.38);
+  pointer-events: none;
+}
+.barre-capture {
+  background-color: var(--automat-encart);
+}

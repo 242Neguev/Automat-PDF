@@ -19,6 +19,7 @@ import {
   IconPlus,
   IconPrinter,
   IconRotateClockwise,
+  IconScreenshot,
   IconSearch,
   IconZoomIn,
   IconZoomOut,
@@ -29,7 +30,11 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   annoterPdf,
   AVANCEMENT_IMPRESSION,
+  copierTexte,
+  copierZone,
   enErreur,
+  enregistrerZoneImage,
+  enregistrerZonePdf,
   imprimerPdf,
   lireImage,
   montrerDansDossier,
@@ -82,6 +87,7 @@ import {
   type ValeurChamp,
   type Zone,
 } from "../../donnees/annotations";
+import { enFractions, texteDansZone, type ZonePoints } from "../../donnees/capture";
 import { aCote, nomDe } from "../../donnees/chemins";
 import { initialesDe, remplissable, signable } from "../../donnees/formulaire";
 import { signaturesDeLaPage } from "../../donnees/signatures";
@@ -97,6 +103,7 @@ import { imagePage, relire } from "../commun/vignettes";
 import { signalerErreur } from "../commun/signalerErreur";
 import { ZoneDepot } from "../commun/ZoneFichier";
 import { BarreAnnotations, CoucheAnnotations, type ImageChargee, type OutilAnnotation, type ReglagesCommentaires } from "./Annotations";
+import { BarreCapture, CoucheCapture, type QualiteCapture, type TravailCapture } from "./Capture";
 import ListeCommentaires from "./Commentaires";
 import { BandeauFormulaire, CoucheFormulaire } from "./Formulaire";
 import FenetreSignature from "./FenetreSignature";
@@ -240,6 +247,16 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   const [selection, setSelection] = useState<string | null>(null);
   const [imagesChargees, setImagesChargees] = useState<Record<string, ImageChargee>>({});
   const [enregistrement, setEnregistrement] = useState(false);
+  /**
+   * Capturer une zone (0.9.0) : le mode, le cadre tracé et sa page, le nombre de ses mots (null : pas
+   * encore lus), la qualité de l'image, le travail en cours, et la dernière capture enregistrée.
+   */
+  const [capturer, setCapturer] = useState(false);
+  const [capture, setCapture] = useState<{ page: number; zone: ZonePoints } | null>(null);
+  const [texteCapture, setTexteCapture] = useState<{ texte: string; mots: number } | null>(null);
+  const [qualiteCapture, setQualiteCapture] = useState<QualiteCapture>("300");
+  const [travailCapture, setTravailCapture] = useState<TravailCapture>(null);
+  const [captureEnregistree, setCaptureEnregistree] = useState<{ chemin: string; enImage: boolean } | null>(null);
   /** Le PDF annoté (ou le formulaire rempli) qui vient d'être enregistré, et qui s'affiche. */
   const [enregistre, setEnregistre] = useState<string | null>(null);
   const [sorteEnregistree, setSorteEnregistree] = useState<"annote" | "rempli" | "signe">("annote");
@@ -812,6 +829,103 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
     return () => window.clearTimeout(minuterie);
   }, [repere]);
 
+  // Capturer : l'éditeur et la capture ne vont pas ensemble ; un autre document (la capture
+  // enregistrée qu'on ouvre, un autre onglet) se lit normalement.
+  useEffect(() => {
+    if (annoter) setCapturer(false);
+  }, [annoter]);
+  useEffect(() => {
+    setCapturer(false);
+    setCapture(null);
+  }, [chemin]);
+  useEffect(() => {
+    if (!capturer) setCapture(null);
+  }, [capturer]);
+  // Le texte du cadre, lu dans les mots de sa page (aussi ceux d'un scan dont le texte est reconnu).
+  useEffect(() => {
+    setTexteCapture(null);
+    if (!chemin || !capture) return;
+    let actuel = true;
+    motsDe(chemin, capture.page).then(
+      (mots) => actuel && setTexteCapture(texteDansZone(mots, capture.zone)),
+      () => actuel && setTexteCapture({ texte: "", mots: 0 }),
+    );
+    return () => {
+      actuel = false;
+    };
+  }, [chemin, capture, versionImages]);
+  // Échap efface le cadre tracé, puis quitte la capture (pas pendant une saisie).
+  useEffect(() => {
+    if (!actif || pleinEcran || !capturer) return;
+    const touche = (evenement: KeyboardEvent) => {
+      const cible = evenement.target as HTMLElement | null;
+      if (evenement.key !== "Escape" || (cible && (cible.tagName === "INPUT" || cible.tagName === "TEXTAREA"))) return;
+      if (capture) setCapture(null);
+      else setCapturer(false);
+    };
+    window.addEventListener("keydown", touche);
+    return () => window.removeEventListener("keydown", touche);
+  }, [actif, pleinEcran, capturer, capture]);
+
+  /** La zone capturée, comme le cœur la prend : sa page et ses fractions de page. */
+  function zoneCapturee() {
+    if (!chemin || !capture || !formats?.[capture.page]) return null;
+    return { chemin, page: capture.page, zone: enFractions(capture.zone, formats[capture.page]) };
+  }
+
+  async function copierImageCapture() {
+    const cible = zoneCapturee();
+    if (!cible) return;
+    setTravailCapture("image");
+    try {
+      await copierZone(cible.chemin, cible.page, cible.zone, Number(qualiteCapture));
+      notifications.show({ color: "teal", title: t.capture.imageCopiee, message: t.capture.imageCopieeDetail, autoClose: 6000 });
+    } catch (e) {
+      signalerErreur(e);
+    } finally {
+      setTravailCapture(null);
+    }
+  }
+
+  async function copierTexteCapture() {
+    if (!texteCapture?.mots) return;
+    try {
+      await copierTexte(texteCapture.texte);
+      notifications.show({ color: "teal", title: t.capture.texteCopie, message: t.capture.texteCopieDetail(texteCapture.mots), autoClose: 6000 });
+    } catch (e) {
+      signalerErreur(e);
+    }
+  }
+
+  /** Enregistre la capture en image (PNG ou JPG, d'après le nom choisi) ou en PDF. */
+  async function enregistrerCapture(enPdf: boolean) {
+    const cible = zoneCapturee();
+    if (!cible) return;
+    const base = nomDe(cible.chemin).replace(/\.pdf$/i, "");
+    const sortie = await save({
+      defaultPath: aCote(cible.chemin, t.capture.nom(base, cible.page + 1, enPdf ? "pdf" : "png")),
+      filters: enPdf
+        ? [{ name: t.filtre, extensions: ["pdf"] }]
+        : [
+            { name: t.capture.filtrePng, extensions: ["png"] },
+            { name: t.capture.filtreJpg, extensions: ["jpg", "jpeg"] },
+          ],
+    });
+    if (!sortie) return;
+    setTravailCapture(enPdf ? "pdf" : "fichier");
+    setCaptureEnregistree(null);
+    try {
+      let enImage = false;
+      if (enPdf) enImage = await enregistrerZonePdf(cible.chemin, cible.page, cible.zone, sortie);
+      else await enregistrerZoneImage(cible.chemin, cible.page, cible.zone, Number(qualiteCapture), sortie);
+      setCaptureEnregistree({ chemin: sortie, enImage });
+    } catch (e) {
+      signalerErreur(e);
+    } finally {
+      setTravailCapture(null);
+    }
+  }
+
   // Raccourcis de l'éditeur (et d'un formulaire) : annuler, rétablir ; dans l'éditeur, supprimer
   // l'annotation choisie. Pas pendant une saisie.
   useEffect(() => {
@@ -947,6 +1061,26 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
               data-annoter
             >
               {t.annotation.annoter}
+            </Button>
+          </Tooltip>
+          <Tooltip label={t.capture.aide} multiline w={300}>
+            <Button
+              radius="xl"
+              color="eau"
+              variant={capturer ? "filled" : "light"}
+              leftSection={<IconScreenshot size={17} stroke={1.8} />}
+              onClick={() => {
+                if (!capturer) {
+                  setAnnoter(false);
+                  setSelection(null);
+                }
+                setCapturer((avant) => !avant);
+              }}
+              disabled={!formats}
+              aria-pressed={capturer}
+              data-capturer
+            >
+              {t.capture.bouton}
             </Button>
           </Tooltip>
           <Tooltip label={t.vignettes}>
@@ -1117,6 +1251,46 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
           }}
           signe={(signatures ?? []).some((s) => s.integrite === "intacte")}
         />
+      )}
+      {capturer && formats && (
+        <BarreCapture
+          capture={capture}
+          mots={texteCapture?.mots ?? null}
+          qualite={qualiteCapture}
+          onQualite={setQualiteCapture}
+          enCours={travailCapture}
+          onCopierImage={() => void copierImageCapture()}
+          onCopierTexte={() => void copierTexteCapture()}
+          onEnregistrerImage={() => void enregistrerCapture(false)}
+          onEnregistrerPdf={() => void enregistrerCapture(true)}
+          onTerminer={() => setCapturer(false)}
+        />
+      )}
+      {captureEnregistree && (
+        <Alert color="teal" icon={<IconCircleCheck size={20} />} title={t.capture.enregistree} withCloseButton onClose={() => setCaptureEnregistree(null)} py={8} data-capture-enregistree>
+          <Group justify="space-between" gap="sm" wrap="wrap">
+            <Stack gap={2}>
+              <Text size="sm">{t.capture.enregistreeDetail(nomDe(captureEnregistree.chemin))}</Text>
+              {captureEnregistree.enImage && <Text size="sm">{t.capture.enImage}</Text>}
+            </Stack>
+            <Group gap="xs">
+              <Button
+                size="xs"
+                variant="default"
+                leftSection={<IconExternalLink size={15} />}
+                onClick={() =>
+                  /\.pdf$/i.test(captureEnregistree.chemin) ? onChoisir(captureEnregistree.chemin) : void ouvrirFichier(captureEnregistree.chemin).catch(signalerErreur)
+                }
+                data-ouvrir-capture
+              >
+                {t.capture.ouvrir}
+              </Button>
+              <Button size="xs" variant="default" leftSection={<IconFolder size={15} />} onClick={() => void montrerDansDossier(captureEnregistree.chemin).catch(signalerErreur)}>
+                {textes.resultat.montrer}
+              </Button>
+            </Group>
+          </Group>
+        </Alert>
       )}
       {enregistre && chemin && memeFichier(enregistre, chemin) && (
         <Alert
@@ -1317,7 +1491,7 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
                       racine={defilement.current}
                       requete={resultats && resultats.length > 0 ? recherche : ""}
                       rangActuel={occurrenceActuelle?.page === index ? occurrenceActuelle.rang : -1}
-                      liens={annoter ? undefined : navigation?.liens[index]}
+                      liens={annoter || capturer ? undefined : navigation?.liens[index]}
                       onLien={(lien) => suivreLien(lien.destination, lien.adresse)}
                       formulaire={
                         !annoter && champsSurLesPages.some((champ) => champ.widgets.some((w) => w.page === index))
@@ -1343,6 +1517,21 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
                       refPage={(element) => {
                         pages.current[index] = element;
                       }}
+                      coucheCapture={
+                        capturer ? (
+                          <CoucheCapture
+                            page={index}
+                            format={formats[index]}
+                            echelle={echelle}
+                            rotation={rotation}
+                            zone={capture?.page === index ? capture.zone : null}
+                            onZone={(page, zone) => {
+                              setCaptureEnregistree(null);
+                              setCapture(zone ? { page, zone } : null);
+                            }}
+                          />
+                        ) : undefined
+                      }
                       couche={
                         annoter || annotations.some((a) => a.page === index)
                           ? (mots) => (
@@ -1517,6 +1706,8 @@ interface PropsPage {
   formulaire?: (versionImage: number) => ReactNode;
   /** Signatures numériques visibles sur la page : un clic les vérifie. */
   coucheSignatures?: ReactNode;
+  /** Capturer une zone : la couche où se trace le cadre, au-dessus de tout le reste. */
+  coucheCapture?: ReactNode;
 }
 
 /**
@@ -1524,7 +1715,7 @@ interface PropsPage {
  * de l'écran. Les mots, invisibles, se sélectionnent et se copient ; ceux que la recherche trouve sont
  * surlignés.
  */
-function PageLecteur({ chemin, index, format, echelle, rotation, version, racine, requete, rangActuel, refPage, couche, liens, onLien, formulaire, coucheSignatures }: PropsPage) {
+function PageLecteur({ chemin, index, format, echelle, rotation, version, racine, requete, rangActuel, refPage, couche, liens, onLien, formulaire, coucheSignatures, coucheCapture }: PropsPage) {
   const boite = useRef<HTMLDivElement | null>(null);
   const [proche, setProche] = useState(false);
   /** L'image affichée, et la version du PDF qu'elle montre. */
@@ -1633,6 +1824,7 @@ function PageLecteur({ chemin, index, format, echelle, rotation, version, racine
         {formulaire?.(image?.version ?? -1)}
         {coucheSignatures}
         {couche?.(mots)}
+        {coucheCapture}
       </div>
     </Box>
   );

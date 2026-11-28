@@ -85,7 +85,7 @@ fn contient(grand: &Rect, petit: &Rect) -> bool {
 }
 
 /// Zones dans le repère de la page (elles restent des rectangles : les rotations vont par quarts de tour).
-fn zones_page(cadre: &Cadre, zones: &[Zone]) -> Vec<Rect> {
+pub(crate) fn zones_page(cadre: &Cadre, zones: &[Zone]) -> Vec<Rect> {
     let (largeur, hauteur) = cadre.taille_vue();
     let depuis_vue = cadre.depuis_vue();
     zones

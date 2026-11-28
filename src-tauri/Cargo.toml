@@ -32,6 +32,8 @@ getrandom = "0.4"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "tiff", "bmp", "gif"] }
 # Compression sans perte des images allégées, plus rapide que celle de lopdf (déjà utilisé par lopdf).
 flate2 = "1"
+# Presse-papiers du système (lecteur, « Capturer une zone ») : une image ou un texte à coller ailleurs.
+arboard = "3.7"
 # Envoi des e-mails par la messagerie de l'utilisateur (SMTP), sans Outlook ; chiffrement par le
 # système (Schannel sous Windows, Secure Transport sous macOS) : ni OpenSSL, ni certificats à part.
 lettre = "0.11"

@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, WebviewWindow};
 
 use crate::annotations::{self, Annotation};
-use crate::caviardage::{self, ModeCaviardage, PageACaviarder, Rapport};
+use crate::capture;
+use crate::caviardage::{self, ModeCaviardage, PageACaviarder, Rapport, Zone};
 use crate::commentaires::{self, Commentaire, Retouches};
 use crate::compression::{self, Bilan, Niveau};
 use crate::confidentialite::{self, Confidentialite};
@@ -110,6 +111,57 @@ pub fn separer_pdf(
         })
         .collect();
     fichiers::ecrire(dossier, sous_dossier, &a_ecrire)
+}
+
+/// Format d'une image d'après l'extension du fichier choisi : JPG pour .jpg et .jpeg, sinon PNG.
+fn format_selon(sortie: &str) -> FormatImage {
+    match Path::new(sortie)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("jpg" | "jpeg") => FormatImage::Jpeg,
+        _ => FormatImage::Png,
+    }
+}
+
+/// Copie dans le presse-papiers l'image d'une zone de page, telle que le lecteur la montre
+/// (lecteur, « Capturer »).
+pub fn copier_zone(chemin: &str, page: usize, zone: Zone, dpi: u32) -> Result<(), Erreur> {
+    let pixels = capture::pixels_zone(memoire::pdf(chemin)?, &nom_de(chemin), page, zone, dpi)?;
+    capture::copier_image(pixels)
+}
+
+/// Enregistre l'image d'une zone de page, en PNG ou en JPG d'après l'extension de `sortie`.
+pub fn enregistrer_zone_image(
+    chemin: &str,
+    page: usize,
+    zone: Zone,
+    dpi: u32,
+    sortie: &str,
+) -> Result<(), Erreur> {
+    let image = capture::image_zone(
+        memoire::pdf(chemin)?,
+        &nom_de(chemin),
+        page,
+        zone,
+        dpi,
+        format_selon(sortie),
+    )?;
+    fichiers::enregistrer(sortie, &image)
+}
+
+/// Enregistre un PDF qui ne garde que la zone ; `true` : elle y a été reprise en image.
+pub fn enregistrer_zone_pdf(
+    chemin: &str,
+    page: usize,
+    zone: Zone,
+    sortie: &str,
+) -> Result<bool, Erreur> {
+    let (pdf, en_image) = capture::pdf_zone(memoire::pdf(chemin)?, &nom_de(chemin), page, zone)?;
+    fichiers::enregistrer(sortie, &pdf)?;
+    Ok(en_image)
 }
 
 /// Une page choisie dans l'organiseur : un PDF, sa page (à partir de 0) et la rotation ajoutée
