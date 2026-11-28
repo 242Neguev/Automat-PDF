@@ -23,13 +23,15 @@ interface PropsCouche {
   /** La zone tracée sur cette page (points de la page), s'il y en a une. */
   zone: ZonePoints | null;
   onZone: (page: number, zone: ZonePoints | null) => void;
+  /** Faux : le cadre est seulement montré, on ne le trace pas. */
+  actif?: boolean;
 }
 
 /**
  * Sur une page, en capture : le cadre se trace en glissant (un simple clic l'efface) ; autour de
  * lui, la page s'assombrit. La couche couvre la page : liens, texte et champs ne réagissent plus.
  */
-export function CoucheCapture({ page, format, echelle, rotation, zone, onZone }: PropsCouche) {
+export function CoucheCapture({ page, format, echelle, rotation, zone, onZone, actif = true }: PropsCouche) {
   const couche = useRef<HTMLDivElement>(null);
   const [trace, setTrace] = useState<{ debut: Point; courant: Point } | null>(null);
 
@@ -47,8 +49,9 @@ export function CoucheCapture({ page, format, echelle, rotation, zone, onZone }:
       ref={couche}
       className="couche-capture"
       data-couche-capture={page + 1}
+      style={actif ? undefined : { cursor: "default" }}
       onPointerDown={(evenement) => {
-        if (evenement.button !== 0) return;
+        if (!actif || evenement.button !== 0) return;
         evenement.preventDefault();
         evenement.currentTarget.setPointerCapture(evenement.pointerId);
         const ici = point(evenement);

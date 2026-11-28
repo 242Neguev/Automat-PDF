@@ -236,6 +236,8 @@ pub fn run() {
             commandes::enregistrer_image_pdf,
             commandes::copier_image_pdf,
             commandes::extraire_images,
+            commandes::recadrer_pdf,
+            commandes::bords_du_contenu,
             commandes::vignette_image,
             commandes::lire_image,
             commandes::images_en_pdf,

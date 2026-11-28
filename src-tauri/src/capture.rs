@@ -4,7 +4,8 @@
 
 use std::sync::Arc;
 
-use lopdf::{Object, ObjectId};
+use lopdf::{Document, Object, ObjectId};
+use serde::Serialize;
 
 use crate::caviardage::{self, Nettoyage, Zone};
 use crate::erreur::Erreur;
@@ -102,15 +103,8 @@ pub fn pdf_zone(
         &document,
         document.get_dictionary(id).map_err(|_| illisible())?,
     );
-    let [x0, y0, x1, y1] = caviardage::zones_page(&cadre, &[zone])[0];
-    let [a0, b0, a1, b1] = [x0 - DEBORD, y0 - DEBORD, x1 + DEBORD, y1 + DEBORD];
-    let autour = [
-        [-LOIN, -LOIN, LOIN, b0],
-        [-LOIN, b1, LOIN, LOIN],
-        [-LOIN, b0, a0, b1],
-        [a1, b0, LOIN, b1],
-    ];
-    if caviardage::nettoyer_page(&mut document, id, &autour, Nettoyage::Blanc).is_none() {
+    let boite = caviardage::zones_page(&cadre, &[zone])[0];
+    if caviardage::nettoyer_page(&mut document, id, &autour(boite), Nettoyage::Blanc).is_none() {
         let png = image_zone(
             octets,
             nom,
@@ -131,20 +125,130 @@ pub fn pdf_zone(
         };
         return Ok((images::images_en_pdf(&[source], options)?, true));
     }
+    poser_boite(&mut document, id, boite).map_err(|_| illisible())?;
+    let max_id = document.max_id;
+    Ok((pdf::assembler(document.objects, &pages, max_id)?, false))
+}
+
+/// Autour d'un cadre (repère de la page), jusqu'au-delà de la page : quatre rectangles, à
+/// `DEBORD` points du cadre.
+fn autour([x0, y0, x1, y1]: [f64; 4]) -> [[f64; 4]; 4] {
+    let [a0, b0, a1, b1] = [x0 - DEBORD, y0 - DEBORD, x1 + DEBORD, y1 + DEBORD];
+    [
+        [-LOIN, -LOIN, LOIN, b0],
+        [-LOIN, b1, LOIN, LOIN],
+        [-LOIN, b0, a0, b1],
+        [a1, b0, LOIN, b1],
+    ]
+}
+
+/// La page recadrée sur `boite` (repère de la page) : ses boîtes de page ne montrent plus que lui.
+fn poser_boite(document: &mut Document, page: ObjectId, boite: [f64; 4]) -> Result<(), ()> {
     let boite = Object::Array(
-        [x0, y0, x1, y1]
+        boite
             .into_iter()
             .map(|valeur| Object::Real(valeur as f32))
             .collect(),
     );
-    let dictionnaire = document.get_dictionary_mut(id).map_err(|_| illisible())?;
+    let dictionnaire = document.get_dictionary_mut(page).map_err(|_| ())?;
     dictionnaire.set("MediaBox", boite.clone());
     dictionnaire.set("CropBox", boite);
     for cle in [b"TrimBox".as_slice(), b"BleedBox", b"ArtBox"] {
         dictionnaire.remove(cle);
     }
-    let max_id = document.max_id;
-    Ok((pdf::assembler(document.objects, &pages, max_id)?, false))
+    Ok(())
+}
+
+/// Ce qu'a donné un recadrage : les pages (à partir de 1) dont le contenu hors du cadre n'a pas pu
+/// être retiré (formulaire, image dans un format particulier), où il est seulement caché ; les
+/// pages blanches, laissées telles quelles quand chaque page suit son contenu.
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Recadrage {
+    pub pages_cachees: Vec<usize>,
+    pub pages_blanches: Vec<usize>,
+}
+
+/// Recadre les pages choisies (à partir de 0 ; vide : toutes) sur `zone`, donnée en fractions de
+/// chaque page affichée ; sans zone, chaque page sur son contenu (ses marges retirées). Ce qui est
+/// hors du cadre est retiré, comme pour une capture ; le reste du document (les autres pages,
+/// signets, liens) est gardé.
+pub fn recadrer(
+    octets: Arc<Vec<u8>>,
+    nom: &str,
+    pages: &[usize],
+    zone: Option<Zone>,
+) -> Result<(Vec<u8>, Recadrage), Erreur> {
+    let zone = zone.map(borner).transpose()?;
+    let mut document = pdf::charger(&octets, nom)?;
+    let toutes: Vec<ObjectId> = document.get_pages().into_values().collect();
+    let choisies: Vec<usize> = if pages.is_empty() {
+        (0..toutes.len()).collect()
+    } else {
+        pages.to_vec()
+    };
+    let mut bilan = Recadrage::default();
+    for page in choisies {
+        let illisible = || Erreur::simple(format!("La page {} n'a pas pu être lue.", page + 1));
+        let &id = toutes.get(page).ok_or_else(|| {
+            Erreur::simple(format!(
+                "La page {} n'existe pas : le PDF en compte {}.",
+                page + 1,
+                toutes.len()
+            ))
+        })?;
+        let cette_zone = match zone {
+            Some(zone) => zone,
+            None => match bords_du_contenu(octets.clone(), nom, page)? {
+                Some(bords) => bords,
+                None => {
+                    bilan.pages_blanches.push(page + 1);
+                    continue;
+                }
+            },
+        };
+        let cadre = Cadre::de_page(
+            &document,
+            document.get_dictionary(id).map_err(|_| illisible())?,
+        );
+        let boite = caviardage::zones_page(&cadre, &[cette_zone])[0];
+        if caviardage::nettoyer_page(&mut document, id, &autour(boite), Nettoyage::Blanc).is_none()
+        {
+            bilan.pages_cachees.push(page + 1);
+        }
+        poser_boite(&mut document, id, boite).map_err(|_| illisible())?;
+    }
+    Ok((pdf::ecrire(document)?, bilan))
+}
+
+/// Le cadre de ce qui est dessiné sur la page (tout ce qui n'est pas blanc), un peu élargi, en
+/// fractions de la page : pour retirer ses marges. `None` : la page est blanche.
+pub fn bords_du_contenu(
+    octets: Arc<Vec<u8>>,
+    nom: &str,
+    page: usize,
+) -> Result<Option<Zone>, Erreur> {
+    let (largeur, hauteur, rvb) = rendu::pixels_page(octets, nom, page, 72)?;
+    let (l, h) = (largeur as usize, hauteur as usize);
+    let (mut x0, mut y0, mut x1, mut y1) = (l, h, 0, 0);
+    for (rang, &[rouge, vert, bleu]) in rvb.as_chunks::<3>().0.iter().enumerate() {
+        if rouge.min(vert).min(bleu) < 235 {
+            let (x, y) = (rang % l, rang / l);
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+        }
+    }
+    if x1 <= x0 || y1 <= y0 {
+        return Ok(None);
+    }
+    // Un peu d'air autour du contenu : 6 pixels à 72 ppp, 6 points.
+    let (x0, y0) = (x0.saturating_sub(6), y0.saturating_sub(6));
+    let (x1, y1) = ((x1 + 6).min(l), (y1 + 6).min(h));
+    Ok(Some(Zone {
+        x: x0 as f64 / l as f64,
+        y: y0 as f64 / h as f64,
+        largeur: (x1 - x0) as f64 / l as f64,
+        hauteur: (y1 - y0) as f64 / h as f64,
+    }))
 }
 
 fn presse_papiers(erreur: arboard::Error) -> Erreur {
@@ -297,6 +401,88 @@ mod tests {
         assert!(
             (420..=422).contains(&l) && (594..=596).contains(&h),
             "{l} × {h}"
+        );
+    }
+
+    #[test]
+    fn recadre_les_pages_choisies() {
+        // Trois pages ; « R 1 », « R 2 », « R 3 » en haut à gauche.
+        let pdf = pdf_herite(3, "R");
+        let haut = Zone {
+            x: 0.05,
+            y: 0.08,
+            largeur: 0.5,
+            hauteur: 0.1,
+        };
+        let pdf = Arc::new(pdf);
+        let (recadre, bilan) = recadrer(pdf.clone(), "a.pdf", &[0, 2], Some(haut)).unwrap();
+        assert!(bilan.pages_cachees.is_empty());
+        let formats = rendu::formats(Arc::new(recadre.clone()), "a.pdf").unwrap();
+        assert_eq!(formats.len(), 3);
+        assert!((formats[0].largeur - 297.5).abs() < 1.0, "{:?}", formats[0]);
+        assert!((formats[2].hauteur - 84.2).abs() < 1.0, "{:?}", formats[2]);
+        // La page 2 n'est pas recadrée.
+        assert!((formats[1].largeur - 595.0).abs() < 1.0, "{:?}", formats[1]);
+        let lus = textes(&recadre);
+        assert!(lus[0].contains("R 1") && lus[1].contains("R 2") && lus[2].contains("R 3"));
+        // Toutes les pages, sur leur bas : le texte du haut est retiré, pas caché.
+        let bas = Zone {
+            x: 0.0,
+            y: 0.6,
+            largeur: 1.0,
+            hauteur: 0.4,
+        };
+        let (vide, _) = recadrer(pdf.clone(), "a.pdf", &[], Some(bas)).unwrap();
+        assert!(textes(&vide).iter().all(|texte| !texte.contains('R')));
+        assert!(recadrer(pdf.clone(), "a.pdf", &[3], Some(haut)).is_err());
+        // Chaque page sur son contenu : « R n » seul, ses marges retirées.
+        let (serre, bilan) = recadrer(pdf, "a.pdf", &[], None).unwrap();
+        assert!(bilan.pages_blanches.is_empty());
+        let formats = rendu::formats(Arc::new(serre.clone()), "a.pdf").unwrap();
+        assert!(
+            formats.iter().all(|f| f.largeur < 80.0 && f.hauteur < 45.0),
+            "{formats:?}"
+        );
+        assert!(
+            textes(&serre)
+                .iter()
+                .zip(["R 1", "R 2", "R 3"])
+                .all(|(texte, attendu)| texte.contains(attendu))
+        );
+    }
+
+    #[test]
+    fn trouve_les_bords_du_contenu() {
+        // « R 1 » en 24 points, à 72 points du bord gauche, ligne de base à 720 points du bas.
+        let bords = bords_du_contenu(Arc::new(pdf_herite(1, "R")), "a.pdf", 0)
+            .unwrap()
+            .unwrap();
+        assert!(bords.x > 0.08 && bords.x < 0.13, "{bords:?}");
+        assert!(bords.y > 0.11 && bords.y < 0.15, "{bords:?}");
+        assert!(bords.largeur < 0.15 && bords.hauteur < 0.06, "{bords:?}");
+        // Une page blanche n'a pas de bords.
+        let mut blanc = Vec::new();
+        image::RgbImage::from_pixel(100, 100, image::Rgb([255, 255, 255]))
+            .write_to(
+                &mut std::io::Cursor::new(&mut blanc),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+        let source = ImageSource {
+            nom: "blanc.png".into(),
+            octets: &blanc,
+            rotation: 0,
+            ppp: None,
+        };
+        let options = OptionsImages {
+            format: FormatFeuille::A4,
+            marge_mm: 0.0,
+        };
+        let page_blanche = images::images_en_pdf(&[source], options).unwrap();
+        assert!(
+            bords_du_contenu(Arc::new(page_blanche), "b.pdf", 0)
+                .unwrap()
+                .is_none()
         );
     }
 

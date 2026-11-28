@@ -22,7 +22,7 @@ use crate::police;
 use crate::rendu;
 
 /// Zone à noircir, en fractions de la page affichée, depuis son coin en haut à gauche.
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Zone {
     pub x: f64,

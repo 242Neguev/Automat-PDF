@@ -135,6 +135,24 @@ pub async fn enregistrer_zone_pdf(
     en_arriere_plan(move || operations::enregistrer_zone_pdf(&chemin, page, zone, &sortie)).await
 }
 
+/// Recadre les pages choisies (vide : toutes) sur la zone (sans zone : chacune sur son contenu),
+/// en un nouveau PDF.
+#[tauri::command]
+pub async fn recadrer_pdf(
+    chemin: String,
+    pages: Vec<usize>,
+    zone: Option<Zone>,
+    sortie: String,
+) -> Result<crate::capture::Recadrage, Erreur> {
+    en_arriere_plan(move || operations::recadrer_pdf(&chemin, &pages, zone, &sortie)).await
+}
+
+/// Le cadre de ce qui est dessiné sur une page (pour en retirer les marges) ; rien : page blanche.
+#[tauri::command]
+pub async fn bords_du_contenu(chemin: String, page: usize) -> Result<Option<Zone>, Erreur> {
+    en_arriere_plan(move || operations::bords_du_contenu(&chemin, page)).await
+}
+
 /// La place des images d'une page (lecteur : le clic droit sur une photo).
 #[tauri::command]
 pub async fn places_images(chemin: String, page: usize) -> Result<Vec<PlaceImage>, Erreur> {

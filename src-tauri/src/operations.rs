@@ -165,6 +165,24 @@ pub fn enregistrer_zone_pdf(
     Ok(en_image)
 }
 
+/// Recadre les pages choisies (vide : toutes) sur la zone (sans zone : chacune sur son contenu),
+/// et enregistre le PDF dans `sortie` ; ce qui est hors du cadre est retiré (Recadrer les pages).
+pub fn recadrer_pdf(
+    chemin: &str,
+    pages: &[usize],
+    zone: Option<Zone>,
+    sortie: &str,
+) -> Result<capture::Recadrage, Erreur> {
+    let (pdf, bilan) = capture::recadrer(memoire::pdf(chemin)?, &nom_de(chemin), pages, zone)?;
+    fichiers::enregistrer(sortie, &pdf)?;
+    Ok(bilan)
+}
+
+/// Le cadre de ce qui est dessiné sur une page, pour en retirer les marges ; `None` : page blanche.
+pub fn bords_du_contenu(chemin: &str, page: usize) -> Result<Option<Zone>, Erreur> {
+    capture::bords_du_contenu(memoire::pdf(chemin)?, &nom_de(chemin), page)
+}
+
 /// La place des images d'une page (lecteur : le clic droit sur une photo).
 pub fn places_images(chemin: &str, page: usize) -> Result<Vec<PlaceImage>, Erreur> {
     images_pdf::places(memoire::pdf(chemin)?, &nom_de(chemin), page)

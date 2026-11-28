@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import {
   IconArrowsExchange,
   IconArrowsMinimize,
+  IconCrop,
   IconEyeOff,
   IconFeather,
   IconFileExport,
@@ -45,6 +46,7 @@ import IntercalerPdf from "./pages/intercaler/IntercalerPdf";
 import MiseEnPage from "./pages/mise-en-page/MiseEnPage";
 import Compresser from "./pages/optimiser/Compresser";
 import OrganiserPdf from "./pages/organiser/OrganiserPdf";
+import RecadrerPages from "./pages/organiser/RecadrerPages";
 import MotDePasse from "./pages/securite/MotDePasse";
 import ExtrairePages from "./pages/separation/ExtrairePages";
 import SeparationParPersonne from "./pages/separation/SeparationParPersonne";
@@ -76,6 +78,7 @@ export const GROUPES: Groupe[] = [
     icone: IconLayoutGrid,
     outils: [
       { cle: "organiser", icone: IconLayoutGrid, page: OrganiserPdf, accepte: ["pdf"] },
+      { cle: "recadrer", icone: IconCrop, page: RecadrerPages, accepte: ["pdf"] },
       { cle: "miseEnPage", icone: IconLayoutColumns, page: MiseEnPage, accepte: ["pdf"] },
     ],
   },

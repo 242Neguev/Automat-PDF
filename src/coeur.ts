@@ -70,6 +70,16 @@ export const enregistrerZoneImage = (chemin: string, page: number, zone: ZoneFra
 export const enregistrerZonePdf = (chemin: string, page: number, zone: ZoneFractions, sortie: string) =>
   invoke<boolean>("enregistrer_zone_pdf", { chemin, page, zone, sortie });
 
+/**
+ * Recadre les pages choisies (vide : toutes) sur la zone (fractions de chaque page) ; sans zone, chaque
+ * page sur son contenu. Ce qui est hors du cadre est retiré ; les pages blanches restent telles quelles.
+ */
+export const recadrerPdf = (chemin: string, pages: number[], zone: ZoneFractions | null, sortie: string) =>
+  invoke<{ pagesCachees: number[]; pagesBlanches: number[] }>("recadrer_pdf", { chemin, pages, zone, sortie });
+
+/** Le cadre de ce qui est dessiné sur une page (pour en retirer les marges) ; null : page blanche. */
+export const bordsDuContenu = (chemin: string, page: number) => invoke<ZoneFractions | null>("bords_du_contenu", { chemin, page });
+
 /** Copie un texte dans le presse-papiers du système. */
 export const copierTexte = (texte: string) => invoke<void>("copier_texte", { texte });
 
