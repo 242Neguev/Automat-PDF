@@ -56,10 +56,24 @@ pub struct ImagePlacee {
     pub haut: f64,
     pub largeur: f64,
     pub hauteur: f64,
+    /// Ses octets (vides quand seules les places sont relevées : `Images::Places`).
     pub octets: Arc<Vec<u8>>,
     pub format: Format,
     /// Même image ailleurs dans le document : même clé.
     pub cle: u128,
+    /// Sa définition d'origine, en pixels (largeur, hauteur).
+    pub pixels: (u32, u32),
+}
+
+/// Ce que le relevé fait des images.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Images {
+    /// PDF en Word : les images à la taille affichée (300 ppp au plus), et le texte.
+    Affichees,
+    /// Leur place seulement, sans les lire (le clic droit du lecteur sur une photo).
+    Places,
+    /// Dans leur définition d'origine (Enregistrer l'image, Extraire les images).
+    Origine,
 }
 
 /// Une page : son format affiché (points), ses caractères et ses images.
@@ -138,6 +152,7 @@ struct Releve<'e> {
     /// Police des caractères dont hayro ne connaît pas le nom (polices Type 1), d'après la page.
     par_defaut: Arc<Police>,
     encodees: &'e mut Encodees,
+    images: Images,
 }
 
 fn encoder_png(donnees: ImageData, alpha: Option<LumaData>) -> Option<Vec<u8>> {
@@ -180,21 +195,28 @@ fn encoder_png(donnees: ImageData, alpha: Option<LumaData>) -> Option<Vec<u8>> {
     Some(octets)
 }
 
-/// Les octets d'une image : le JPEG d'origine s'il se lit tel quel (couleurs d'écran, sans
-/// transparence), sinon un PNG, à `cible` pixels au plus si l'image est plus fine.
-fn encoder(image: &RasterImage<'_>, cible: (u32, u32)) -> Option<(Arc<Vec<u8>>, Format)> {
-    let flux = image.stream();
-    let dictionnaire = flux.dict();
+/// L'image est un JPEG qui se reprend tel quel : un seul filtre, celui du JPEG (les octets bruts
+/// sont un fichier JPEG), couleurs d'écran, sans transparence ni inversion.
+fn jpeg_tel_quel(image: &RasterImage<'_>) -> bool {
+    let dictionnaire = image.stream().dict();
     let couleurs_ecran = dictionnaire
         .get::<Name<'_>>(b"ColorSpace")
         .is_some_and(|espace| matches!(espace.deref(), b"DeviceRGB" | b"DeviceGray"));
     let opaque = !dictionnaire.contains_key(b"SMask") && !dictionnaire.contains_key(b"Mask");
-    // Un seul filtre, celui du JPEG : les octets bruts sont un fichier JPEG.
     let jpeg = dictionnaire
         .get::<Name<'_>>(b"Filter")
         .is_some_and(|filtre| matches!(filtre.deref(), b"DCTDecode" | b"DCT"));
-    if couleurs_ecran && opaque && jpeg && !dictionnaire.contains_key(b"Decode") {
-        return Some((Arc::new(flux.raw_data().into_owned()), Format::Jpeg));
+    couleurs_ecran && opaque && jpeg && !dictionnaire.contains_key(b"Decode")
+}
+
+/// Les octets d'une image : le JPEG d'origine s'il se lit tel quel (couleurs d'écran, sans
+/// transparence), sinon un PNG, à `cible` pixels au plus si l'image est plus fine.
+fn encoder(image: &RasterImage<'_>, cible: (u32, u32)) -> Option<(Arc<Vec<u8>>, Format)> {
+    if jpeg_tel_quel(image) {
+        return Some((
+            Arc::new(image.stream().raw_data().into_owned()),
+            Format::Jpeg,
+        ));
     }
     let mut png = None;
     image.with_rgba(
@@ -214,6 +236,10 @@ impl<'a> Device<'a> for Releve<'_> {
     fn pop_transparency_group(&mut self) {}
 
     fn draw_glyph_run(&mut self, suite: &GlyphRun<'_, 'a>, props: DrawProps<'a>, mode: &DrawMode) {
+        // Les images seules : le texte n'est pas relevé.
+        if self.images != Images::Affichees {
+            return;
+        }
         let invisible = matches!(mode, DrawMode::Invisible);
         for glyphe in suite.glyphs() {
             self.relever(
@@ -253,27 +279,46 @@ impl<'a> Device<'a> for Releve<'_> {
                 .ceil()
                 .clamp(1.0, source.max(1.0)) as u32
         };
-        let cible = (
-            pixels(droite - gauche, largeur),
-            pixels(bas - haut, hauteur),
-        );
         let cle = image.cache_key();
-        let encodee = self
-            .encodees
-            .entry(cle)
-            .or_insert_with(|| encoder(&image, cible))
-            .clone();
-        if let Some((octets, format)) = encodee {
-            self.page.images.push(ImagePlacee {
-                gauche,
-                haut,
-                largeur: droite - gauche,
-                hauteur: bas - haut,
-                octets,
-                format,
-                cle,
-            });
-        }
+        let (octets, format) = match self.images {
+            Images::Places => (
+                Arc::new(Vec::new()),
+                if jpeg_tel_quel(&image) {
+                    Format::Jpeg
+                } else {
+                    Format::Png
+                },
+            ),
+            Images::Affichees | Images::Origine => {
+                let cible = if self.images == Images::Origine {
+                    (image.width(), image.height())
+                } else {
+                    (
+                        pixels(droite - gauche, largeur),
+                        pixels(bas - haut, hauteur),
+                    )
+                };
+                let encodee = self
+                    .encodees
+                    .entry(cle)
+                    .or_insert_with(|| encoder(&image, cible))
+                    .clone();
+                let Some(encodee) = encodee else {
+                    return;
+                };
+                encodee
+            }
+        };
+        self.page.images.push(ImagePlacee {
+            gauche,
+            haut,
+            largeur: droite - gauche,
+            hauteur: bas - haut,
+            octets,
+            format,
+            cle,
+            pixels: (image.width(), image.height()),
+        });
     }
 }
 
@@ -409,13 +454,60 @@ fn polices_par_defaut(octets: &[u8], nom: &str, pages: usize) -> Vec<Arc<Police>
 
 /// Le contenu de chaque page.
 pub fn lire(octets: Arc<Vec<u8>>, nom: &str) -> Result<Vec<Page>, Erreur> {
+    relever(octets, nom, None, Images::Affichees)
+}
+
+/// Les pages choisies (`None` : toutes), dans l'ordre donné : leurs images, comme `images` le dit,
+/// et leurs caractères pour PDF en Word.
+pub fn relever(
+    octets: Arc<Vec<u8>>,
+    nom: &str,
+    choisies: Option<&[usize]>,
+    images: Images,
+) -> Result<Vec<Page>, Erreur> {
+    let mut pages = Vec::new();
+    relever_une_a_une(octets, nom, choisies, images, |_, page| {
+        pages.push(page);
+        Ok(())
+    })?;
+    Ok(pages)
+}
+
+/// Comme `relever`, page après page : `traiter(numéro, page)` reçoit chacune dès qu'elle est
+/// relevée. En `Images::Origine`, une image déjà donnée ne revient pas sur les pages suivantes, et
+/// ses octets ne restent pas en mémoire : tout un catalogue de photos tient en mémoire.
+pub fn relever_une_a_une(
+    octets: Arc<Vec<u8>>,
+    nom: &str,
+    choisies: Option<&[usize]>,
+    images: Images,
+    mut traiter: impl FnMut(usize, Page) -> Result<(), Erreur>,
+) -> Result<(), Erreur> {
     let pdf = ouvrir(octets.clone(), nom)?;
-    let par_defaut = polices_par_defaut(&octets, nom, pdf.pages().len());
+    let toutes = pdf.pages();
+    let numeros: Vec<usize> = match choisies {
+        Some(choisies) => choisies.to_vec(),
+        None => (0..toutes.len()).collect(),
+    };
+    if let Some(&absente) = numeros.iter().find(|&&page| page >= toutes.len()) {
+        return Err(Erreur::simple(format!(
+            "La page {} n'existe pas : le PDF en compte {}.",
+            absente + 1,
+            toutes.len()
+        )));
+    }
+    // Les noms des polices ne servent qu'au texte.
+    let par_defaut = if images == Images::Affichees {
+        polices_par_defaut(&octets, nom, toutes.len())
+    } else {
+        let arial = Arc::new(police_nommee("Arial"));
+        vec![arial; toutes.len()]
+    };
     let cache = InterpreterCache::new();
     let reglages = InterpreterSettings::default();
     let mut encodees = Encodees::new();
-    let mut pages = Vec::new();
-    for (page, par_defaut) in pdf.pages().iter().zip(par_defaut) {
+    for numero in numeros {
+        let (page, par_defaut) = (&toutes[numero], par_defaut[numero].clone());
         let (largeur, hauteur) = page.render_dimensions();
         let (largeur, hauteur) = (f64::from(largeur), f64::from(hauteur));
         let mut contexte = Context::new(
@@ -434,11 +526,17 @@ pub fn lire(octets: Arc<Vec<u8>>, nom: &str) -> Result<Vec<Page>, Erreur> {
             polices: HashMap::new(),
             par_defaut,
             encodees: &mut encodees,
+            images,
         };
         interpret_page(page, &mut contexte, &mut releve);
-        pages.push(releve.page);
+        let page = releve.page;
+        if images == Images::Origine {
+            // Les images données sont oubliées ; leur clé reste, pour ne pas les redonner.
+            encodees.values_mut().for_each(|encodee| *encodee = None);
+        }
+        traiter(numero, page)?;
     }
-    Ok(pages)
+    Ok(())
 }
 
 #[cfg(test)]

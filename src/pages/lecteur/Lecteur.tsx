@@ -3,13 +3,15 @@
 // Les pages sont les images que dessine le cœur (hayro), comme les vignettes : demandées quand elles
 // approchent, à la largeur affichée. Par-dessus, une couche de texte invisible, placée mot par mot,
 // permet de sélectionner et de copier le texte, et porte les surlignages de la recherche.
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ActionIcon, Alert, Badge, Box, Button, Center, CloseButton, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Text, TextInput, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { ActionIcon, Alert, Badge, Box, Button, Center, CloseButton, Group, Loader, Menu, Modal, NumberInput, SegmentedControl, Stack, Text, TextInput, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   IconBook2,
   IconChevronDown,
   IconChevronUp,
   IconCircleCheck,
+  IconCopy,
+  IconDeviceFloppy,
   IconExternalLink,
   IconFileText,
   IconFolder,
@@ -30,8 +32,10 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   annoterPdf,
   AVANCEMENT_IMPRESSION,
+  copierImagePdf,
   copierTexte,
   copierZone,
+  enregistrerImagePdf,
   enErreur,
   enregistrerZoneImage,
   enregistrerZonePdf,
@@ -60,10 +64,11 @@ import {
   type AvancementImpression,
   type NavigationPdf,
   type OptionsImpression,
+  type PlaceImage,
   type BilanReconnaissance,
   type SignaturePdf,
 } from "../../coeur";
-import { echelleAjustee, hautAffiche, premiereDeRangee, rangees, tourner, transformation, type Disposition, type Rotation } from "../../donnees/affichage";
+import { echelleAjustee, hautAffiche, premiereDeRangee, rangees, tourner, transformation, versLaPage, type Disposition, type Rotation } from "../../donnees/affichage";
 import {
   annuler,
   appliquer,
@@ -115,7 +120,7 @@ import FenetreImpression from "./Impression";
 import { PropositionLecteurParDefaut } from "./LecteurParDefaut";
 import PleinEcran from "./PleinEcran";
 import { MAC } from "../../systeme";
-import { motsDe, oublierTextes, textesDe } from "./textes";
+import { imagesDe, motsDe, oublierTextes, textesDe } from "./textes";
 import { useReconnaissance } from "../commun/reconnaissance";
 
 const t = textes.lecteur;
@@ -256,7 +261,9 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
   const [texteCapture, setTexteCapture] = useState<{ texte: string; mots: number } | null>(null);
   const [qualiteCapture, setQualiteCapture] = useState<QualiteCapture>("300");
   const [travailCapture, setTravailCapture] = useState<TravailCapture>(null);
-  const [captureEnregistree, setCaptureEnregistree] = useState<{ chemin: string; enImage: boolean } | null>(null);
+  const [captureEnregistree, setCaptureEnregistree] = useState<{ chemin: string; titre: string; detail: string; enImage: boolean } | null>(null);
+  /** Clic droit sur une image : son menu, à la place du pointeur. */
+  const [menuImage, setMenuImage] = useState<{ page: number; image: PlaceImage; x: number; y: number } | null>(null);
   /** Le PDF annoté (ou le formulaire rempli) qui vient d'être enregistré, et qui s'affiche. */
   const [enregistre, setEnregistre] = useState<string | null>(null);
   const [sorteEnregistree, setSorteEnregistree] = useState<"annote" | "rempli" | "signe">("annote");
@@ -918,11 +925,41 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
       let enImage = false;
       if (enPdf) enImage = await enregistrerZonePdf(cible.chemin, cible.page, cible.zone, sortie);
       else await enregistrerZoneImage(cible.chemin, cible.page, cible.zone, Number(qualiteCapture), sortie);
-      setCaptureEnregistree({ chemin: sortie, enImage });
+      setCaptureEnregistree({ chemin: sortie, titre: t.capture.enregistree, detail: t.capture.enregistreeDetail(nomDe(sortie)), enImage });
     } catch (e) {
       signalerErreur(e);
     } finally {
       setTravailCapture(null);
+    }
+  }
+
+  /** Enregistre l'image désignée d'un clic droit, dans sa qualité d'origine. */
+  async function enregistrerImage(cible: { page: number; image: PlaceImage }) {
+    if (!chemin) return;
+    const base = nomDe(chemin).replace(/\.pdf$/i, "");
+    const jpg = { name: t.capture.filtreJpg, extensions: ["jpg", "jpeg"] };
+    const png = { name: t.capture.filtrePng, extensions: ["png"] };
+    const sortie = await save({
+      defaultPath: aCote(chemin, t.image.nom(base, cible.page + 1, cible.image.format === "jpeg" ? "jpg" : "png")),
+      filters: cible.image.format === "jpeg" ? [jpg, png] : [png, jpg],
+    });
+    if (!sortie) return;
+    try {
+      await enregistrerImagePdf(chemin, cible.page, cible.image.cle, sortie);
+      setCaptureEnregistree({ chemin: sortie, titre: t.image.enregistree, detail: t.image.enregistreeDetail(nomDe(sortie)), enImage: false });
+    } catch (e) {
+      signalerErreur(e);
+    }
+  }
+
+  /** Copie l'image désignée d'un clic droit, dans sa qualité d'origine. */
+  async function copierImage(cible: { page: number; image: PlaceImage }) {
+    if (!chemin) return;
+    try {
+      await copierImagePdf(chemin, cible.page, cible.image.cle);
+      notifications.show({ color: "teal", title: t.capture.imageCopiee, message: t.capture.imageCopieeDetail, autoClose: 6000 });
+    } catch (e) {
+      signalerErreur(e);
     }
   }
 
@@ -1267,10 +1304,10 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
         />
       )}
       {captureEnregistree && (
-        <Alert color="teal" icon={<IconCircleCheck size={20} />} title={t.capture.enregistree} withCloseButton onClose={() => setCaptureEnregistree(null)} py={8} data-capture-enregistree>
+        <Alert color="teal" icon={<IconCircleCheck size={20} />} title={captureEnregistree.titre} withCloseButton onClose={() => setCaptureEnregistree(null)} py={8} data-capture-enregistree>
           <Group justify="space-between" gap="sm" wrap="wrap">
             <Stack gap={2}>
-              <Text size="sm">{t.capture.enregistreeDetail(nomDe(captureEnregistree.chemin))}</Text>
+              <Text size="sm">{captureEnregistree.detail}</Text>
               {captureEnregistree.enImage && <Text size="sm">{t.capture.enImage}</Text>}
             </Stack>
             <Group gap="xs">
@@ -1407,6 +1444,30 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
         />
       )}
 
+      <Menu
+        opened={menuImage !== null}
+        onChange={(ouvert) => {
+          if (!ouvert) setMenuImage(null);
+        }}
+        position="bottom-start"
+        offset={2}
+        shadow="md"
+        withinPortal
+      >
+        <Menu.Target>
+          <div style={{ position: "fixed", left: menuImage?.x ?? 0, top: menuImage?.y ?? 0, width: 1, height: 1, pointerEvents: "none" }} />
+        </Menu.Target>
+        <Menu.Dropdown data-menu-image>
+          {menuImage && <Menu.Label>{t.image.titre(menuImage.image.pixels[0], menuImage.image.pixels[1])}</Menu.Label>}
+          <Menu.Item leftSection={<IconDeviceFloppy size={16} />} onClick={() => menuImage && void enregistrerImage(menuImage)} data-enregistrer-image-pdf>
+            {t.image.enregistrer}
+          </Menu.Item>
+          <Menu.Item leftSection={<IconCopy size={16} />} onClick={() => menuImage && void copierImage(menuImage)} data-copier-image-pdf>
+            {t.image.copier}
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+
       <Modal opened={lienExterne !== null} onClose={() => setLienExterne(null)} title={t.lienExterne.titre} centered>
         <Stack gap="sm">
           <Text size="sm">{t.lienExterne.texte}</Text>
@@ -1517,6 +1578,8 @@ export default function Lecteur({ chemin, actif, outils, onOutil, onChoisir, ouv
                       refPage={(element) => {
                         pages.current[index] = element;
                       }}
+                      onMenuImage={annoter || capturer ? undefined : (image, point) => setMenuImage({ page: index, image, ...point })}
+                      imageMontree={menuImage?.page === index ? menuImage.image : null}
                       coucheCapture={
                         capturer ? (
                           <CoucheCapture
@@ -1708,6 +1771,10 @@ interface PropsPage {
   coucheSignatures?: ReactNode;
   /** Capturer une zone : la couche où se trace le cadre, au-dessus de tout le reste. */
   coucheCapture?: ReactNode;
+  /** Clic droit sur une image de la page (en lecture) : l'image et la place du pointeur. */
+  onMenuImage?: (image: PlaceImage, point: { x: number; y: number }) => void;
+  /** L'image dont le menu est ouvert : encadrée. */
+  imageMontree?: PlaceImage | null;
 }
 
 /**
@@ -1715,12 +1782,15 @@ interface PropsPage {
  * de l'écran. Les mots, invisibles, se sélectionnent et se copient ; ceux que la recherche trouve sont
  * surlignés.
  */
-function PageLecteur({ chemin, index, format, echelle, rotation, version, racine, requete, rangActuel, refPage, couche, liens, onLien, formulaire, coucheSignatures, coucheCapture }: PropsPage) {
+function PageLecteur({ chemin, index, format, echelle, rotation, version, racine, requete, rangActuel, refPage, couche, liens, onLien, formulaire, coucheSignatures, coucheCapture, onMenuImage, imageMontree }: PropsPage) {
   const boite = useRef<HTMLDivElement | null>(null);
   const [proche, setProche] = useState(false);
   /** L'image affichée, et la version du PDF qu'elle montre. */
   const [image, setImage] = useState<{ adresse: string; version: number } | null>(null);
   const [mots, setMots] = useState<Mot[] | null>(null);
+  /** Les images de la page et leur place, pour le clic droit (null : pas encore lues). */
+  const [images, setImages] = useState<PlaceImage[] | null>(null);
+  const menuImages = onMenuImage !== undefined;
   const largeur = Math.round(format.largeur * echelle);
   const hauteur = Math.round(format.hauteur * echelle);
   // Image un peu plus large que la page affichée (écran haute définition), par paliers de 200 pixels
@@ -1747,8 +1817,35 @@ function PageLecteur({ chemin, index, format, echelle, rotation, version, racine
     };
   }, [proche, chemin, index, demandee, version]);
 
-  // Le PDF relu (texte reconnu, retouches) : ses mots sont redemandés.
-  useEffect(() => setMots(null), [version]);
+  // Le PDF relu (texte reconnu, retouches) : ses mots et ses images sont redemandés.
+  useEffect(() => {
+    setMots(null);
+    setImages(null);
+  }, [version]);
+  useEffect(() => {
+    if (!proche || images || !menuImages) return;
+    let actuelle = true;
+    imagesDe(chemin, index).then(
+      (lues) => actuelle && setImages(lues),
+      () => undefined,
+    );
+    return () => {
+      actuelle = false;
+    };
+  }, [proche, chemin, index, images, menuImages]);
+
+  /** Clic droit : l'image sous le pointeur (la plus haute), sauf pendant une sélection de texte. */
+  function clicDroit(evenement: ReactMouseEvent<HTMLDivElement>) {
+    if (!onMenuImage || !images?.length || (window.getSelection()?.toString() ?? "") !== "") return;
+    const element = evenement.currentTarget;
+    const rect = element.getBoundingClientRect();
+    const ici = versLaPage(evenement.clientX - rect.left, evenement.clientY - rect.top, element.offsetWidth, element.offsetHeight, rotation);
+    const [x, y] = [ici.x / echelle, ici.y / echelle];
+    const touchee = [...images].reverse().find((image) => x >= image.x && x <= image.x + image.largeur && y >= image.y && y <= image.y + image.hauteur);
+    if (!touchee) return;
+    evenement.preventDefault();
+    onMenuImage(touchee, { x: evenement.clientX, y: evenement.clientY });
+  }
   useEffect(() => {
     if (!proche || mots) return;
     let actuelle = true;
@@ -1777,7 +1874,7 @@ function PageLecteur({ chemin, index, format, echelle, rotation, version, racine
       data-page={index + 1}
       data-rotation={rotation || undefined}
     >
-      <div className="page-droite" style={{ width: largeur, height: hauteur, transform: transformation(rotation, largeur, hauteur) }}>
+      <div className="page-droite" style={{ width: largeur, height: hauteur, transform: transformation(rotation, largeur, hauteur) }} onContextMenu={menuImages ? clicDroit : undefined}>
         {image ? (
           <img src={image.adresse} alt={t.alt(index + 1)} draggable={false} style={{ width: "100%", height: "100%", display: "block", userSelect: "none" }} />
         ) : (
@@ -1824,6 +1921,13 @@ function PageLecteur({ chemin, index, format, echelle, rotation, version, racine
         {formulaire?.(image?.version ?? -1)}
         {coucheSignatures}
         {couche?.(mots)}
+        {imageMontree && (
+          <div
+            className="cadre-image"
+            data-image-montree
+            style={{ left: imageMontree.x * echelle, top: imageMontree.y * echelle, width: imageMontree.largeur * echelle, height: imageMontree.hauteur * echelle }}
+          />
+        )}
         {coucheCapture}
       </div>
     </Box>

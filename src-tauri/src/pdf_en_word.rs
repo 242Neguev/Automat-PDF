@@ -1101,6 +1101,7 @@ mod tests {
             octets: Arc::new(vec![1, 2, 3]),
             format: Format::Jpeg,
             cle,
+            pixels: (300, 150),
         };
         let arial = police("Arial", false);
         let mut logo = page(ecrire("Courrier", 72.0, 200.0, 12.0, &arial));

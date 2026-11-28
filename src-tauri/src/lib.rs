@@ -19,6 +19,7 @@ mod fichiers;
 mod formulaires;
 mod geometrie;
 mod images;
+mod images_pdf;
 mod imposition;
 mod impression;
 mod lecteur_defaut;
@@ -231,6 +232,10 @@ pub fn run() {
             commandes::enregistrer_zone_image,
             commandes::enregistrer_zone_pdf,
             commandes::copier_texte,
+            commandes::places_images,
+            commandes::enregistrer_image_pdf,
+            commandes::copier_image_pdf,
+            commandes::extraire_images,
             commandes::vignette_image,
             commandes::lire_image,
             commandes::images_en_pdf,

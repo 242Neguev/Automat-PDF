@@ -73,6 +73,34 @@ export const enregistrerZonePdf = (chemin: string, page: number, zone: ZoneFract
 /** Copie un texte dans le presse-papiers du système. */
 export const copierTexte = (texte: string) => invoke<void>("copier_texte", { texte });
 
+/**
+ * Une image d'une page : sa place sur la page affichée (points, depuis le coin haut gauche), sa clé
+ * (la même image, ailleurs, a la même), son format et sa définition en pixels.
+ */
+export interface PlaceImage {
+  cle: string;
+  x: number;
+  y: number;
+  largeur: number;
+  hauteur: number;
+  format: "jpeg" | "png";
+  pixels: [number, number];
+}
+
+/** La place des images de la page `page` (à partir de 0) ; la dernière est dessinée au-dessus. */
+export const placesImages = (chemin: string, page: number) => invoke<PlaceImage[]>("places_images", { chemin, page });
+
+/** Enregistre une image d'une page dans sa qualité d'origine (JPG ou PNG, d'après l'extension de `sortie`). */
+export const enregistrerImagePdf = (chemin: string, page: number, cle: string, sortie: string) =>
+  invoke<void>("enregistrer_image_pdf", { chemin, page, cle, sortie });
+
+/** Copie dans le presse-papiers une image d'une page, dans sa qualité d'origine. */
+export const copierImagePdf = (chemin: string, page: number, cle: string) => invoke<void>("copier_image_pdf", { chemin, page, cle });
+
+/** Les images de chaque PDF dans un dossier « … - images extraites » de `dossier` ; avancement par « progression-conversion ». */
+export const extraireImages = (fichiers: string[], dossier: string, ignorerPetites: boolean) =>
+  invoke<Conversions>("extraire_images", { fichiers, dossier, ignorerPetites });
+
 /** Vignette JPEG d'une image (redressée), large de `largeur` pixels au plus. */
 export const vignetteImage = (chemin: string, largeur: number) => invoke<ArrayBuffer>("vignette_image", { chemin, largeur });
 

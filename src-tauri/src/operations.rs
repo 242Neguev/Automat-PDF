@@ -19,6 +19,7 @@ use crate::erreur::Erreur;
 use crate::fichiers::{self, FichierAEcrire, Nature};
 use crate::formulaires::{self, Formulaire};
 use crate::images::{self, ImageSource, OptionsImages};
+use crate::images_pdf::{self, PlaceImage};
 use crate::imposition::{self, Disposition};
 use crate::impression::{self, Feuille, Imprimante, OptionsImpression, Reglages};
 use crate::lecteur_defaut::{self, Demande, EtatLecteur};
@@ -52,7 +53,7 @@ pub fn nom_de(chemin: &str) -> String {
 }
 
 /// Nom d'un fichier sans son extension « .pdf ».
-fn sans_extension(nom: &str) -> &str {
+pub(crate) fn sans_extension(nom: &str) -> &str {
     nom.strip_suffix(".pdf")
         .or_else(|| nom.strip_suffix(".PDF"))
         .unwrap_or(nom)
@@ -162,6 +163,34 @@ pub fn enregistrer_zone_pdf(
     let (pdf, en_image) = capture::pdf_zone(memoire::pdf(chemin)?, &nom_de(chemin), page, zone)?;
     fichiers::enregistrer(sortie, &pdf)?;
     Ok(en_image)
+}
+
+/// La place des images d'une page (lecteur : le clic droit sur une photo).
+pub fn places_images(chemin: &str, page: usize) -> Result<Vec<PlaceImage>, Erreur> {
+    images_pdf::places(memoire::pdf(chemin)?, &nom_de(chemin), page)
+}
+
+/// Enregistre une image d'une page dans sa définition d'origine, en JPG ou en PNG d'après
+/// l'extension de `sortie` (convertie si ce n'est pas son format).
+pub fn enregistrer_image_pdf(
+    chemin: &str,
+    page: usize,
+    cle: &str,
+    sortie: &str,
+) -> Result<(), Erreur> {
+    let image = images_pdf::image(memoire::pdf(chemin)?, &nom_de(chemin), page, cle)?;
+    let octets = images_pdf::octets_en(&image, images_pdf::format_du_fichier(sortie))?;
+    fichiers::enregistrer(sortie, &octets)
+}
+
+/// Copie dans le presse-papiers une image d'une page, dans sa définition d'origine.
+pub fn copier_image_pdf(chemin: &str, page: usize, cle: &str) -> Result<(), Erreur> {
+    images_pdf::copier(&images_pdf::image(
+        memoire::pdf(chemin)?,
+        &nom_de(chemin),
+        page,
+        cle,
+    )?)
 }
 
 /// Une page choisie dans l'organiseur : un PDF, sa page (à partir de 0) et la rotation ajoutée

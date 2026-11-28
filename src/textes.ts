@@ -348,6 +348,14 @@ export const textes = {
     resultat: (actuel: number, total: number) => `${actuel} sur ${total}`,
     aucunResultat: "Aucun résultat",
     vignettes: "Afficher ou masquer les vignettes des pages",
+    image: {
+      titre: (largeur: number, hauteur: number) => `Image de ${largeur} × ${hauteur} pixels`,
+      enregistrer: "Enregistrer l'image…",
+      copier: "Copier l'image",
+      enregistree: "Image enregistrée",
+      enregistreeDetail: (nom: string) => `« ${nom} », dans sa qualité d'origine. Le PDF n'est pas modifié.`,
+      nom: (base: string, page: number, extension: string) => `${base} - image de la page ${page}.${extension}`,
+    },
     capture: {
       bouton: "Capturer",
       aide: "Prendre une partie d'une page (une photo, un tableau, une photo et son texte) : la copier, ou l'enregistrer en image ou en PDF",
@@ -562,6 +570,12 @@ export const textes = {
       description: "Une image par page",
       sousTitre: "Enregistrer les pages d'un PDF en images PNG ou JPG, pour les publier ou les envoyer.",
       motsCles: "image images photo png jpg jpeg convertir transformer exporter capture",
+    },
+    extraireImages: {
+      titre: "Extraire les images",
+      description: "Les photos d'un PDF, telles quelles",
+      sousTitre: "Enregistrer les photos et les images d'un ou de plusieurs PDF, chacune dans son fichier, dans sa qualité d'origine.",
+      motsCles: "extraire images image photos photo récupérer enregistrer sortir garder jpg jpeg png logo illustration qualité origine",
     },
     intercaler: {
       titre: "Rectos et versos",
@@ -1214,6 +1228,18 @@ export const textes = {
       echecs: (n: number) => `${n} PDF sans fichier texte :`,
       progression: (fichier: number, fichiers: number, page: number, pages: number) =>
         fichiers > 1 ? `Fichier ${fichier} sur ${fichiers} · reconnaissance du texte, page ${page} sur ${pages}` : `Reconnaissance du texte : page ${page} sur ${pages}`,
+    },
+    images: {
+      deposer: "Glissez vos PDF ici",
+      deposerDetail: "Les images de chacun seront enregistrées dans un dossier « … - images extraites ».",
+      aide: "Chaque image est enregistrée une seule fois, dans sa qualité d'origine, nommée d'après sa page (« page 03 - image 2.jpg ») : les photos JPEG telles quelles, les autres images en PNG. Les PDF ne sont pas modifiés.",
+      petites: "Laisser les petites images",
+      petitesAide: "Puces, filets, icônes : moins de 32 pixels de côté.",
+      bouton: "Extraire les images…",
+      choisirDossier: "Dossier où mettre les images",
+      cree: (n: number) => (n > 1 ? `Images extraites de ${n} PDF` : "Images extraites"),
+      aucun: "Aucune image n'a été extraite",
+      echecs: (n: number) => `${n} PDF sans image extraite :`,
     },
     ocr: {
       deposer: "Glissez vos PDF numérisés ici",

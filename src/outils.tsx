@@ -17,6 +17,7 @@ import {
   IconNumbers,
   IconPencil,
   IconPhoto,
+  IconPhotoDown,
   IconPhotoPlus,
   IconScan,
   IconScissors,
@@ -31,6 +32,7 @@ import Caviarder from "./pages/annoter/Caviarder";
 import NumerosTampon from "./pages/annoter/NumerosTampon";
 import SignatureCachet from "./pages/annoter/SignatureCachet";
 import type { SorteFichier } from "./pages/commun/reception";
+import ExtraireImages from "./pages/convertir/ExtraireImages";
 import Numeriser from "./pages/convertir/Numeriser";
 import OfficeEnPdf from "./pages/convertir/OfficeEnPdf";
 import PdfEnTexte from "./pages/convertir/PdfEnTexte";
@@ -122,6 +124,7 @@ export const GROUPES: Groupe[] = [
     icone: IconArrowsExchange,
     outils: [
       { cle: "enImages", icone: IconPhoto, page: PdfEnImages, accepte: ["pdf"] },
+      { cle: "extraireImages", icone: IconPhotoDown, page: ExtraireImages, accepte: ["pdf"] },
       { cle: "officeEnPdf", icone: IconFileTypePdf, page: OfficeEnPdf, accepte: ["office"] },
       { cle: "pdfEnWord", icone: IconFileTypeDocx, page: PdfEnWord, accepte: ["pdf"] },
       { cle: "pdfEnTexte", icone: IconFileTypeTxt, page: PdfEnTexte, accepte: ["pdf"] },

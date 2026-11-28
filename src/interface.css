@@ -1171,3 +1171,12 @@ textarea.champ-pdf__saisie {
 .barre-capture {
   background-color: var(--automat-encart);
 }
+
+/* Lecteur : l'image dont le menu du clic droit est ouvert. */
+.cadre-image {
+  position: absolute;
+  outline: 3px solid var(--mantine-color-eau-5);
+  outline-offset: 1px;
+  background: rgba(30, 110, 114, 0.12);
+  pointer-events: none;
+}

@@ -16,6 +16,7 @@ use crate::envoi::{BilanEnvoi, Message};
 use crate::erreur::Erreur;
 use crate::formulaires::Formulaire;
 use crate::images::OptionsImages;
+use crate::images_pdf::PlaceImage;
 use crate::imposition::Disposition;
 use crate::impression::{Feuille, Imprimante, OptionsImpression, Reglages};
 use crate::lecteur_defaut::{Demande, EtatLecteur};
@@ -132,6 +133,46 @@ pub async fn enregistrer_zone_pdf(
     sortie: String,
 ) -> Result<bool, Erreur> {
     en_arriere_plan(move || operations::enregistrer_zone_pdf(&chemin, page, zone, &sortie)).await
+}
+
+/// La place des images d'une page (lecteur : le clic droit sur une photo).
+#[tauri::command]
+pub async fn places_images(chemin: String, page: usize) -> Result<Vec<PlaceImage>, Erreur> {
+    en_arriere_plan(move || operations::places_images(&chemin, page)).await
+}
+
+/// Enregistre une image d'une page dans sa définition d'origine (JPG ou PNG, d'après l'extension).
+#[tauri::command]
+pub async fn enregistrer_image_pdf(
+    chemin: String,
+    page: usize,
+    cle: String,
+    sortie: String,
+) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::enregistrer_image_pdf(&chemin, page, &cle, &sortie)).await
+}
+
+/// Copie dans le presse-papiers une image d'une page, dans sa définition d'origine.
+#[tauri::command]
+pub async fn copier_image_pdf(chemin: String, page: usize, cle: String) -> Result<(), Erreur> {
+    en_arriere_plan(move || operations::copier_image_pdf(&chemin, page, &cle)).await
+}
+
+/// Les images de chaque PDF, dans un dossier « nom - images extraites » créé dans `dossier`.
+/// L'avancement est annoncé par l'événement `progression-conversion` : fichiers faits, fichiers.
+#[tauri::command]
+pub async fn extraire_images<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    fichiers: Vec<String>,
+    dossier: String,
+    ignorer_petites: bool,
+) -> Result<Conversions, Erreur> {
+    en_arriere_plan(move || {
+        crate::images_pdf::extraire(&fichiers, &dossier, ignorer_petites, |fait, total| {
+            let _ = app.emit("progression-conversion", (fait, total));
+        })
+    })
+    .await
 }
 
 /// Copie un texte dans le presse-papiers (le texte d'une zone capturée).

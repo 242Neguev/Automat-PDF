@@ -161,6 +161,11 @@ pub fn copier_image((largeur, hauteur, rvb): (u32, u32, Vec<u8>)) -> Result<(), 
         .iter()
         .flat_map(|&[rouge, vert, bleu]| [rouge, vert, bleu, 255])
         .collect();
+    copier_pixels(largeur, hauteur, rvba)
+}
+
+/// Met une image (pixels rouge, vert, bleu, transparence) dans le presse-papiers.
+pub fn copier_pixels(largeur: u32, hauteur: u32, rvba: Vec<u8>) -> Result<(), Erreur> {
     let image = arboard::ImageData {
         width: largeur as usize,
         height: hauteur as usize,
